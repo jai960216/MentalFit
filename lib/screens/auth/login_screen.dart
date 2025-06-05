@@ -1,24 +1,45 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/config/app_colors.dart';
 import '../../core/config/app_routes.dart';
+import '../../core/network/error_handler.dart';
 import '../../shared/widgets/custom_button.dart';
 import '../../shared/widgets/custom_text_field.dart';
+import '../../shared/services/auth_service.dart';
+import '../../shared/services/social_auth_service.dart';
+import '../../providers/auth_provider.dart';
 
-class LoginScreen extends StatefulWidget {
+class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+
   bool _isLoading = false;
   bool _rememberMe = false;
+  bool _obscurePassword = true;
+
+  late AuthService _authService;
+  late SocialAuthService _socialAuthService;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeServices();
+  }
+
+  Future<void> _initializeServices() async {
+    _authService = await AuthService.getInstance();
+    _socialAuthService = await SocialAuthService.getInstance();
+  }
 
   @override
   void dispose() {
@@ -27,6 +48,7 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
+  // === 유효성 검사 ===
   String? _validateEmail(String? value) {
     if (value == null || value.isEmpty) {
       return '이메일을 입력해주세요';
@@ -47,38 +69,160 @@ class _LoginScreenState extends State<LoginScreen> {
     return null;
   }
 
+  // === 로그인 처리 ===
   Future<void> _handleLogin() async {
     if (!_formKey.currentState!.validate()) return;
 
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _isLoading = true);
 
-    // 로그인 API 호출 시뮬레이션
-    await Future.delayed(const Duration(seconds: 2));
+    try {
+      final result = await _authService.login(
+        email: _emailController.text.trim(),
+        password: _passwordController.text,
+      );
 
-    setState(() {
-      _isLoading = false;
-    });
+      if (result.success && result.user != null) {
+        // AuthProvider 상태 업데이트
+        ref.read(authProvider.notifier).updateUser(result.user!);
 
-    if (mounted) {
-      // 로그인 성공 시 온보딩으로 이동 (실제로는 사용자 상태에 따라 분기)
-      context.go(AppRoutes.onboardingBasicInfo);
+        if (mounted) {
+          // 온보딩 완료 여부에 따라 라우팅
+          if (result.user!.isOnboardingCompleted) {
+            context.go(AppRoutes.home);
+          } else {
+            context.go(AppRoutes.onboardingBasicInfo);
+          }
+        }
+      } else {
+        if (mounted) {
+          GlobalErrorHandler.showErrorSnackBar(
+            context,
+            result.error ?? '로그인에 실패했습니다.',
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        GlobalErrorHandler.showErrorSnackBar(context, e);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
-  Future<void> _handleGoogleLogin() async {
-    // Google 로그인 로직
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Google 로그인 기능 준비중입니다')));
+  // === 소셜 로그인 처리 ===
+  Future<void> _handleSocialLogin(SocialLoginType type) async {
+    setState(() => _isLoading = true);
+
+    try {
+      AuthResult result;
+
+      switch (type) {
+        case SocialLoginType.google:
+          result = await _socialAuthService.signInWithGoogle();
+          break;
+        case SocialLoginType.kakao:
+          result = await _socialAuthService.signInWithKakao();
+          break;
+      }
+
+      if (result.success && result.user != null) {
+        // AuthProvider 상태 업데이트
+        ref.read(authProvider.notifier).updateUser(result.user!);
+
+        if (mounted) {
+          // 온보딩 완료 여부에 따라 라우팅
+          if (result.user!.isOnboardingCompleted) {
+            context.go(AppRoutes.home);
+          } else {
+            context.go(AppRoutes.onboardingBasicInfo);
+          }
+        }
+      } else {
+        if (mounted) {
+          GlobalErrorHandler.showErrorSnackBar(
+            context,
+            result.error ?? '소셜 로그인에 실패했습니다.',
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        GlobalErrorHandler.showErrorSnackBar(context, e);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
   }
 
-  Future<void> _handleKakaoLogin() async {
-    // Kakao 로그인 로직
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('카카오 로그인 기능 준비중입니다')));
+  // === 비밀번호 찾기 ===
+  Future<void> _handleForgotPassword() async {
+    final emailController = TextEditingController();
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('비밀번호 찾기'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('등록하신 이메일 주소를 입력해주세요.\n비밀번호 재설정 링크를 보내드립니다.'),
+                const SizedBox(height: 16),
+                CustomTextField(
+                  controller: emailController,
+                  labelText: '이메일',
+                  hintText: '이메일 주소를 입력하세요',
+                  keyboardType: TextInputType.emailAddress,
+                  prefixIcon: Icons.email_outlined,
+                  validator: _validateEmail,
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('취소'),
+              ),
+              TextButton(
+                onPressed: () async {
+                  if (emailController.text.isNotEmpty) {
+                    final success = await _authService.requestPasswordReset(
+                      emailController.text.trim(),
+                    );
+
+                    if (mounted) {
+                      Navigator.of(context).pop(success);
+
+                      if (success) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('비밀번호 재설정 이메일을 발송했습니다.'),
+                            backgroundColor: AppColors.success,
+                          ),
+                        );
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('이메일 발송에 실패했습니다.'),
+                            backgroundColor: AppColors.error,
+                          ),
+                        );
+                      }
+                    }
+                  }
+                },
+                child: const Text('발송'),
+              ),
+            ],
+          ),
+    );
+
+    emailController.dispose();
   }
 
   @override
@@ -95,166 +239,42 @@ class _LoginScreenState extends State<LoginScreen> {
               children: [
                 SizedBox(height: 60.h),
 
-                // 앱 로고 및 제목
-                Text(
-                  'MentalFit',
-                  style: TextStyle(
-                    fontSize: 32.sp,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
+                // === 앱 로고 및 제목 ===
+                _buildHeader(),
 
                 SizedBox(height: 60.h),
 
-                // 이메일 입력
-                CustomTextField(
-                  labelText: '이메일',
-                  hintText: '이메일 주소를 입력하세요',
-                  controller: _emailController,
-                  keyboardType: TextInputType.emailAddress,
-                  prefixIcon: Icons.email_outlined,
-                  validator: _validateEmail,
-                ),
-
-                SizedBox(height: 20.h),
-
-                // 비밀번호 입력
-                CustomTextField(
-                  labelText: '비밀번호',
-                  hintText: '비밀번호를 입력하세요',
-                  controller: _passwordController,
-                  obscureText: true,
-                  prefixIcon: Icons.lock_outline,
-                  validator: _validatePassword,
-                ),
+                // === 로그인 폼 ===
+                _buildLoginForm(),
 
                 SizedBox(height: 16.h),
 
-                // 로그인 상태 유지 & 비밀번호 찾기
-                Row(
-                  children: [
-                    Checkbox(
-                      value: _rememberMe,
-                      onChanged: (value) {
-                        setState(() {
-                          _rememberMe = value ?? false;
-                        });
-                      },
-                      activeColor: AppColors.primary,
-                    ),
-                    Text(
-                      '로그인 상태 유지',
-                      style: TextStyle(
-                        fontSize: 14.sp,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                    const Spacer(),
-                    TextButton(
-                      onPressed: () {
-                        // 비밀번호 찾기 기능
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('비밀번호 찾기 기능 준비중입니다')),
-                        );
-                      },
-                      child: Text(
-                        '비밀번호 찾기',
-                        style: TextStyle(
-                          fontSize: 14.sp,
-                          color: AppColors.primary,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+                // === 로그인 상태 유지 & 비밀번호 찾기 ===
+                _buildRememberAndForgot(),
 
                 SizedBox(height: 32.h),
 
-                // 로그인 버튼
+                // === 로그인 버튼 ===
                 CustomButton(
                   text: '로그인',
-                  onPressed: _handleLogin,
+                  onPressed: _isLoading ? null : _handleLogin,
                   isLoading: _isLoading,
                 ),
 
                 SizedBox(height: 32.h),
 
-                // 소셜 로그인 구분선
-                Row(
-                  children: [
-                    const Expanded(child: Divider()),
-                    Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 16.w),
-                      child: Text(
-                        '또는 소셜 계정으로 로그인',
-                        style: TextStyle(
-                          fontSize: 14.sp,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                    ),
-                    const Expanded(child: Divider()),
-                  ],
-                ),
+                // === 소셜 로그인 구분선 ===
+                _buildSocialDivider(),
 
                 SizedBox(height: 24.h),
 
-                // 소셜 로그인 버튼들
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    // Google 로그인
-                    _SocialLoginButton(
-                      onPressed: _handleGoogleLogin,
-                      icon: Icons.g_mobiledata, // 실제로는 Google 아이콘 사용
-                      backgroundColor: AppColors.white,
-                      iconColor: AppColors.error,
-                    ),
-
-                    SizedBox(width: 16.w),
-
-                    // 카카오 로그인
-                    _SocialLoginButton(
-                      onPressed: _handleKakaoLogin,
-                      icon: Icons.chat_bubble, // 실제로는 카카오 아이콘 사용
-                      backgroundColor: const Color(0xFFFEE500),
-                      iconColor: AppColors.black,
-                    ),
-                  ],
-                ),
+                // === 소셜 로그인 버튼들 ===
+                _buildSocialButtons(),
 
                 SizedBox(height: 40.h),
 
-                // 회원가입 링크
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      '계정이 없으신가요? ',
-                      style: TextStyle(
-                        fontSize: 14.sp,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: () {
-                        // 회원가입 화면으로 이동
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('회원가입 기능 준비중입니다')),
-                        );
-                      },
-                      child: Text(
-                        '회원가입',
-                        style: TextStyle(
-                          fontSize: 14.sp,
-                          color: AppColors.primary,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+                // === 회원가입 링크 ===
+                _buildSignupLink(),
 
                 SizedBox(height: 40.h),
               ],
@@ -264,26 +284,213 @@ class _LoginScreenState extends State<LoginScreen> {
       ),
     );
   }
+
+  // === UI 구성 요소들 ===
+
+  Widget _buildHeader() {
+    return Column(
+      children: [
+        Container(
+          width: 80.w,
+          height: 80.w,
+          decoration: BoxDecoration(
+            color: AppColors.white,
+            borderRadius: BorderRadius.circular(20.r),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.primary.withOpacity(0.2),
+                blurRadius: 20,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          child: Icon(Icons.psychology, size: 40.sp, color: AppColors.primary),
+        ),
+        SizedBox(height: 24.h),
+        Text(
+          'MentalFit',
+          style: TextStyle(
+            fontSize: 32.sp,
+            fontWeight: FontWeight.bold,
+            color: AppColors.textPrimary,
+          ),
+        ),
+        SizedBox(height: 8.h),
+        Text(
+          '스포츠 심리 상담 플랫폼',
+          style: TextStyle(fontSize: 16.sp, color: AppColors.textSecondary),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLoginForm() {
+    return Column(
+      children: [
+        // 이메일 입력
+        CustomTextField(
+          labelText: '이메일',
+          hintText: '이메일 주소를 입력하세요',
+          controller: _emailController,
+          keyboardType: TextInputType.emailAddress,
+          prefixIcon: Icons.email_outlined,
+          validator: _validateEmail,
+          enabled: !_isLoading,
+        ),
+
+        SizedBox(height: 20.h),
+
+        // 비밀번호 입력
+        CustomTextField(
+          labelText: '비밀번호',
+          hintText: '비밀번호를 입력하세요',
+          controller: _passwordController,
+          obscureText: _obscurePassword,
+          prefixIcon: Icons.lock_outline,
+          suffixIcon:
+              _obscurePassword ? Icons.visibility : Icons.visibility_off,
+          onSuffixIconPressed: () {
+            setState(() {
+              _obscurePassword = !_obscurePassword;
+            });
+          },
+          validator: _validatePassword,
+          enabled: !_isLoading,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRememberAndForgot() {
+    return Row(
+      children: [
+        Checkbox(
+          value: _rememberMe,
+          onChanged:
+              _isLoading
+                  ? null
+                  : (value) {
+                    setState(() {
+                      _rememberMe = value ?? false;
+                    });
+                  },
+          activeColor: AppColors.primary,
+        ),
+        Text(
+          '로그인 상태 유지',
+          style: TextStyle(fontSize: 14.sp, color: AppColors.textSecondary),
+        ),
+        const Spacer(),
+        TextButton(
+          onPressed: _isLoading ? null : _handleForgotPassword,
+          child: Text(
+            '비밀번호 찾기',
+            style: TextStyle(fontSize: 14.sp, color: AppColors.primary),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSocialDivider() {
+    return Row(
+      children: [
+        const Expanded(child: Divider()),
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16.w),
+          child: Text(
+            '또는 소셜 계정으로 로그인',
+            style: TextStyle(fontSize: 14.sp, color: AppColors.textSecondary),
+          ),
+        ),
+        const Expanded(child: Divider()),
+      ],
+    );
+  }
+
+  Widget _buildSocialButtons() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        // Google 로그인
+        _SocialLoginButton(
+          onPressed:
+              _isLoading
+                  ? null
+                  : () => _handleSocialLogin(SocialLoginType.google),
+          icon: Icons.g_mobiledata, // 실제로는 Google 아이콘 사용
+          backgroundColor: AppColors.white,
+          iconColor: AppColors.error,
+          label: 'Google',
+        ),
+
+        SizedBox(width: 16.w),
+
+        // 카카오 로그인
+        _SocialLoginButton(
+          onPressed:
+              _isLoading
+                  ? null
+                  : () => _handleSocialLogin(SocialLoginType.kakao),
+          icon: Icons.chat_bubble, // 실제로는 카카오 아이콘 사용
+          backgroundColor: const Color(0xFFFEE500),
+          iconColor: AppColors.black,
+          label: 'Kakao',
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSignupLink() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Text(
+          '계정이 없으신가요? ',
+          style: TextStyle(fontSize: 14.sp, color: AppColors.textSecondary),
+        ),
+        TextButton(
+          onPressed:
+              _isLoading
+                  ? null
+                  : () {
+                    context.push(AppRoutes.signup);
+                  },
+          child: Text(
+            '회원가입',
+            style: TextStyle(
+              fontSize: 14.sp,
+              color: AppColors.primary,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 }
 
+// === 소셜 로그인 버튼 위젯 ===
 class _SocialLoginButton extends StatelessWidget {
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
   final IconData icon;
   final Color backgroundColor;
   final Color iconColor;
+  final String label;
 
   const _SocialLoginButton({
     required this.onPressed,
     required this.icon,
     required this.backgroundColor,
     required this.iconColor,
+    required this.label,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 56.w,
-      height: 56.w,
+      width: 140.w,
+      height: 56.h,
       decoration: BoxDecoration(
         color: backgroundColor,
         borderRadius: BorderRadius.circular(12.r),
@@ -296,9 +503,27 @@ class _SocialLoginButton extends StatelessWidget {
           ),
         ],
       ),
-      child: IconButton(
-        onPressed: onPressed,
-        icon: Icon(icon, color: iconColor, size: 24.sp),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(12.r),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, color: iconColor, size: 20.sp),
+              SizedBox(width: 8.w),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 14.sp,
+                  fontWeight: FontWeight.w500,
+                  color: iconColor,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

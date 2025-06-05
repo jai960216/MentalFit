@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'app_routes.dart';
 import '../../screens/auth/login_screen.dart';
+import '../../screens/auth/signup_screen.dart'; // 새로 추가
 import '../../screens/auth/splash_screen.dart';
 import '../../screens/onboarding/onboarding_basic_info_screen.dart';
 import '../../screens/onboarding/onboarding_mental_check_screen.dart';
@@ -26,6 +27,12 @@ class AppRouter {
         path: AppRoutes.login,
         name: 'login',
         builder: (context, state) => const LoginScreen(),
+      ),
+      GoRoute(
+        // 새로 추가
+        path: AppRoutes.signup,
+        name: 'signup',
+        builder: (context, state) => const SignupScreen(),
       ),
 
       // Onboarding Routes

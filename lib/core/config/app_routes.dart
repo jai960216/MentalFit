@@ -2,7 +2,7 @@ class AppRoutes {
   // Auth Routes
   static const String splash = '/';
   static const String login = '/login';
-  static const String signup = '/signup';
+  static const String signup = '/signup'; // 새로 추가
   static const String userTypeSelection = '/user-type';
 
   // Onboarding Routes
