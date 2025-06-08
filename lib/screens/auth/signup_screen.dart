@@ -329,34 +329,47 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
             borderRadius: BorderRadius.circular(12.r),
           ),
           child: Row(
-            children: UserType.values.map((type) {
-              final isSelected = _selectedUserType == type;
-              return Expanded(
-                child: GestureDetector(
-                  onTap: _isLoading ? null : () {
-                    setState(() {
-                      _selectedUserType = type;
-                    });
-                  },
-                  child: Container(
-                    padding: EdgeInsets.symmetric(vertical: 12.h),
-                    decoration: BoxDecoration(
-                      color: isSelected ? AppColors.primary : Colors.transparent,
-                      borderRadius: BorderRadius.circular(8.r),
-                    ),
-                    child: Text(
-                      type.displayName,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 14.sp,
-                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                        color: isSelected ? AppColors.white : AppColors.textSecondary,
+            children:
+                UserType.values.map((type) {
+                  final isSelected = _selectedUserType == type;
+                  return Expanded(
+                    child: GestureDetector(
+                      onTap:
+                          _isLoading
+                              ? null
+                              : () {
+                                setState(() {
+                                  _selectedUserType = type;
+                                });
+                              },
+                      child: Container(
+                        padding: EdgeInsets.symmetric(vertical: 12.h),
+                        decoration: BoxDecoration(
+                          color:
+                              isSelected
+                                  ? AppColors.primary
+                                  : Colors.transparent,
+                          borderRadius: BorderRadius.circular(8.r),
+                        ),
+                        child: Text(
+                          type.displayName,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 14.sp,
+                            fontWeight:
+                                isSelected
+                                    ? FontWeight.w600
+                                    : FontWeight.normal,
+                            color:
+                                isSelected
+                                    ? AppColors.white
+                                    : AppColors.textSecondary,
+                          ),
+                        ),
                       ),
                     ),
-                  ),
-                ),
-              );
-            }).toList(),
+                  );
+                }).toList(),
           ),
         ),
       ],
@@ -398,7 +411,8 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
           controller: _passwordController,
           obscureText: _obscurePassword,
           prefixIcon: Icons.lock_outline,
-          suffixIcon: _obscurePassword ? Icons.visibility : Icons.visibility_off,
+          suffixIcon:
+              _obscurePassword ? Icons.visibility : Icons.visibility_off,
           onSuffixIconPressed: () {
             setState(() {
               _obscurePassword = !_obscurePassword;
@@ -417,7 +431,8 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
           controller: _passwordConfirmController,
           obscureText: _obscurePasswordConfirm,
           prefixIcon: Icons.lock_outline,
-          suffixIcon: _obscurePasswordConfirm ? Icons.visibility : Icons.visibility_off,
+          suffixIcon:
+              _obscurePasswordConfirm ? Icons.visibility : Icons.visibility_off,
           onSuffixIconPressed: () {
             setState(() {
               _obscurePasswordConfirm = !_obscurePasswordConfirm;
@@ -438,20 +453,26 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
           children: [
             Checkbox(
               value: _agreeToTerms,
-              onChanged: _isLoading ? null : (value) {
-                setState(() {
-                  _agreeToTerms = value ?? false;
-                });
-              },
+              onChanged:
+                  _isLoading
+                      ? null
+                      : (value) {
+                        setState(() {
+                          _agreeToTerms = value ?? false;
+                        });
+                      },
               activeColor: AppColors.primary,
             ),
             Expanded(
               child: GestureDetector(
-                onTap: _isLoading ? null : () {
-                  setState(() {
-                    _agreeToTerms = !_agreeToTerms;
-                  });
-                },
+                onTap:
+                    _isLoading
+                        ? null
+                        : () {
+                          setState(() {
+                            _agreeToTerms = !_agreeToTerms;
+                          });
+                        },
                 child: Row(
                   children: [
                     Text(
@@ -463,26 +484,23 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                     ),
                     Text(
                       '(필수)',
-                      style: TextStyle(
-                        fontSize: 14.sp,
-                        color: AppColors.error,
-                      ),
+                      style: TextStyle(fontSize: 14.sp, color: AppColors.error),
                     ),
                   ],
                 ),
               ),
             ),
             TextButton(
-              onPressed: _isLoading ? null : () {
-                // 이용약관 상세 보기
-                _showTermsDialog();
-              },
+              onPressed:
+                  _isLoading
+                      ? null
+                      : () {
+                        // 이용약관 상세 보기
+                        _showTermsDialog();
+                      },
               child: Text(
                 '보기',
-                style: TextStyle(
-                  fontSize: 14.sp,
-                  color: AppColors.primary,
-                ),
+                style: TextStyle(fontSize: 14.sp, color: AppColors.primary),
               ),
             ),
           ],
@@ -493,20 +511,26 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
           children: [
             Checkbox(
               value: _agreeToPrivacy,
-              onChanged: _isLoading ? null : (value) {
-                setState(() {
-                  _agreeToPrivacy = value ?? false;
-                });
-              },
+              onChanged:
+                  _isLoading
+                      ? null
+                      : (value) {
+                        setState(() {
+                          _agreeToPrivacy = value ?? false;
+                        });
+                      },
               activeColor: AppColors.primary,
             ),
             Expanded(
               child: GestureDetector(
-                onTap: _isLoading ? null : () {
-                  setState(() {
-                    _agreeToPrivacy = !_agreeToPrivacy;
-                  });
-                },
+                onTap:
+                    _isLoading
+                        ? null
+                        : () {
+                          setState(() {
+                            _agreeToPrivacy = !_agreeToPrivacy;
+                          });
+                        },
                 child: Row(
                   children: [
                     Text(
@@ -518,26 +542,23 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                     ),
                     Text(
                       '(필수)',
-                      style: TextStyle(
-                        fontSize: 14.sp,
-                        color: AppColors.error,
-                      ),
+                      style: TextStyle(fontSize: 14.sp, color: AppColors.error),
                     ),
                   ],
                 ),
               ),
             ),
             TextButton(
-              onPressed: _isLoading ? null : () {
-                // 개인정보처리방침 상세 보기
-                _showPrivacyDialog();
-              },
+              onPressed:
+                  _isLoading
+                      ? null
+                      : () {
+                        // 개인정보처리방침 상세 보기
+                        _showPrivacyDialog();
+                      },
               child: Text(
                 '보기',
-                style: TextStyle(
-                  fontSize: 14.sp,
-                  color: AppColors.primary,
-                ),
+                style: TextStyle(fontSize: 14.sp, color: AppColors.primary),
               ),
             ),
           ],
@@ -554,10 +575,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
           padding: EdgeInsets.symmetric(horizontal: 16.w),
           child: Text(
             '또는 소셜 계정으로 가입',
-            style: TextStyle(
-              fontSize: 14.sp,
-              color: AppColors.textSecondary,
-            ),
+            style: TextStyle(fontSize: 14.sp, color: AppColors.textSecondary),
           ),
         ),
         const Expanded(child: Divider()),
@@ -571,7 +589,10 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
         // Google 회원가입
         Expanded(
           child: _SocialSignupButton(
-            onPressed: _isLoading ? null : () => _handleSocialSignup(SocialLoginType.google),
+            onPressed:
+                _isLoading
+                    ? null
+                    : () => _handleSocialSignup(SocialLoginType.google),
             icon: Icons.g_mobiledata, // 실제로는 Google 아이콘 사용
             backgroundColor: AppColors.white,
             iconColor: AppColors.error,
@@ -584,7 +605,10 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
         // 카카오 회원가입
         Expanded(
           child: _SocialSignupButton(
-            onPressed: _isLoading ? null : () => _handleSocialSignup(SocialLoginType.kakao),
+            onPressed:
+                _isLoading
+                    ? null
+                    : () => _handleSocialSignup(SocialLoginType.kakao),
             icon: Icons.chat_bubble, // 실제로는 카카오 아이콘 사용
             backgroundColor: const Color(0xFFFEE500),
             iconColor: AppColors.black,
@@ -601,15 +625,15 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
       children: [
         Text(
           '이미 계정이 있으신가요? ',
-          style: TextStyle(
-            fontSize: 14.sp,
-            color: AppColors.textSecondary,
-          ),
+          style: TextStyle(fontSize: 14.sp, color: AppColors.textSecondary),
         ),
         TextButton(
-          onPressed: _isLoading ? null : () {
-            context.pop(); // 로그인 화면으로 돌아가기
-          },
+          onPressed:
+              _isLoading
+                  ? null
+                  : () {
+                    context.pop(); // 로그인 화면으로 돌아가기
+                  },
           child: Text(
             '로그인',
             style: TextStyle(
@@ -628,14 +652,15 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
   void _showTermsDialog() {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('이용약관'),
-        content: SizedBox(
-          width: double.maxFinite,
-          height: 300.h,
-          child: SingleChildScrollView(
-            child: Text(
-              '''제1조 (목적)
+      builder:
+          (context) => AlertDialog(
+            title: const Text('이용약관'),
+            content: SizedBox(
+              width: double.maxFinite,
+              height: 300.h,
+              child: SingleChildScrollView(
+                child: Text(
+                  '''제1조 (목적)
 이 약관은 MentalFit(이하 "회사")이 제공하는 스포츠 심리 상담 서비스(이하 "서비스")의 이용조건 및 절차, 회사와 이용자의 권리, 의무, 책임사항과 기타 필요한 사항을 규정함을 목적으로 합니다.
 
 제2조 (정의)
@@ -662,31 +687,32 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
 - 회사 및 제3자의 저작권 등 지적재산권에 대한 침해
 
 이용약관에 대한 자세한 내용은 서비스 내에서 확인하실 수 있습니다.''',
-              style: TextStyle(fontSize: 12.sp, height: 1.4),
+                  style: TextStyle(fontSize: 12.sp, height: 1.4),
+                ),
+              ),
             ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('확인'),
+              ),
+            ],
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('확인'),
-          ),
-        ],
-      ),
     );
   }
 
   void _showPrivacyDialog() {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('개인정보처리방침'),
-        content: SizedBox(
-          width: double.maxFinite,
-          height: 300.h,
-          child: SingleChildScrollView(
-            child: Text(
-              '''1. 개인정보의 처리목적
+      builder:
+          (context) => AlertDialog(
+            title: const Text('개인정보처리방침'),
+            content: SizedBox(
+              width: double.maxFinite,
+              height: 300.h,
+              child: SingleChildScrollView(
+                child: Text(
+                  '''1. 개인정보의 처리목적
 MentalFit(이하 "회사")는 다음의 목적을 위하여 개인정보를 처리합니다:
 - 회원 가입 및 관리
 - 서비스 제공 및 계약의 이행
@@ -715,17 +741,17 @@ MentalFit(이하 "회사")는 다음의 목적을 위하여 개인정보를 처�
 - 개인정보 처리정지 요구권
 
 자세한 개인정보처리방침은 서비스 내에서 확인하실 수 있습니다.''',
-              style: TextStyle(fontSize: 12.sp, height: 1.4),
+                  style: TextStyle(fontSize: 12.sp, height: 1.4),
+                ),
+              ),
             ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('확인'),
+              ),
+            ],
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('확인'),
-          ),
-        ],
-      ),
     );
   }
 }
@@ -786,3 +812,4 @@ class _SocialSignupButton extends StatelessWidget {
       ),
     );
   }
+}
