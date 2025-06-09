@@ -7,6 +7,8 @@ import 'app_routes.dart';
 import '../../screens/auth/login_screen.dart';
 import '../../screens/auth/signup_screen.dart';
 import '../../screens/auth/splash_screen.dart';
+import '../../screens/auth/user_type_selection_screen.dart';
+import '../../screens/auth/forgot_password_screen.dart';
 
 // Onboarding
 import '../../screens/onboarding/onboarding_basic_info_screen.dart';
@@ -17,8 +19,8 @@ import '../../screens/onboarding/onboarding_complete_screen.dart';
 // Main
 import '../../screens/home/home_screen.dart';
 
-// AI Counseling (placeholder - will be implemented later)
-// import '../../screens/ai_counseling/ai_counseling_screen.dart';
+// AI Counseling
+import '../../screens/ai_counseling/ai_counseling_screen.dart';
 
 // Chat
 import '../../screens/chat/chat_list_screen.dart';
@@ -27,22 +29,6 @@ import '../../screens/chat/chat_room_screen.dart';
 // Counselor
 import '../../screens/counselor/counselor_list_screen.dart';
 import '../../screens/counselor/counselor_detail_screen.dart';
-
-// Booking (placeholder screens - will be implemented later)
-// import '../../screens/booking/booking_list_screen.dart';
-// import '../../screens/booking/booking_detail_screen.dart';
-
-// Records (placeholder screens - will be implemented later)
-// import '../../screens/records/records_list_screen.dart';
-// import '../../screens/records/record_detail_screen.dart';
-
-// Self Check (placeholder screens - will be implemented later)
-// import '../../screens/self_check/self_check_list_screen.dart';
-// import '../../screens/self_check/self_check_test_screen.dart';
-
-// Profile (placeholder screens - will be implemented later)
-// import '../../screens/profile/profile_screen.dart';
-// import '../../screens/profile/edit_profile_screen.dart';
 
 class AppRouter {
   static final GoRouter router = GoRouter(
@@ -65,6 +51,16 @@ class AppRouter {
         path: AppRoutes.signup,
         name: 'signup',
         builder: (context, state) => const SignupScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.userTypeSelection,
+        name: 'user-type-selection',
+        builder: (context, state) => const UserTypeSelectionScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.forgotPassword,
+        name: 'forgot-password',
+        builder: (context, state) => const ForgotPasswordScreen(),
       ),
 
       // === Onboarding Routes ===
@@ -96,11 +92,11 @@ class AppRouter {
         builder: (context, state) => const HomeScreen(),
       ),
 
-      // === AI Counseling Routes (Placeholder) ===
+      // === AI Counseling Routes ===
       GoRoute(
         path: AppRoutes.aiCounseling,
         name: 'ai-counseling',
-        builder: (context, state) => const PlaceholderScreen(title: 'AI 상담'),
+        builder: (context, state) => const AiCounselingScreen(),
       ),
 
       // === Chat Routes ===
@@ -206,25 +202,16 @@ class AppRouter {
       ),
     ],
 
-    // === 에러 처리 ===
     errorBuilder:
         (context, state) =>
             ErrorScreen(error: '페이지를 찾을 수 없습니다: ${state.uri.toString()}'),
 
-    // === 리다이렉트 로직 ===
     redirect: (context, state) {
-      // TODO: 인증 상태에 따른 리다이렉트 로직 구현
-      // final authState = ref.read(authProvider);
-      // if (!authState.isAuthenticated && AppRoutes.isAuthRequired(state.uri.toString())) {
-      //   return AppRoutes.login;
-      // }
-
-      return null; // 리다이렉트 없음
+      return null;
     },
   );
 }
 
-// === Placeholder Screen ===
 class PlaceholderScreen extends StatelessWidget {
   final String title;
 
@@ -270,7 +257,6 @@ class PlaceholderScreen extends StatelessWidget {
   }
 }
 
-// === Error Screen ===
 class ErrorScreen extends StatelessWidget {
   final String error;
 

@@ -6,6 +6,7 @@ class AppRoutes {
   // === 인증 ===
   static const String login = '/login';
   static const String signup = '/signup';
+  static const String userTypeSelection = '/user-type-selection';
   static const String forgotPassword = '/forgot-password';
 
   // === 온보딩 ===
@@ -122,6 +123,7 @@ class AppRoutes {
       splash,
       login,
       signup,
+      userTypeSelection,
       forgotPassword,
       onboarding,
       onboardingBasicInfo,
@@ -143,6 +145,8 @@ class AppRoutes {
       onboardingComplete,
       login,
       signup,
+      userTypeSelection,
+      forgotPassword,
       splash,
     ];
 
@@ -209,6 +213,10 @@ class AppRoutes {
 
     const routeTitles = {
       home: '홈',
+      login: '로그인',
+      signup: '회원가입',
+      userTypeSelection: '사용자 유형 선택',
+      forgotPassword: '비밀번호 찾기',
       aiCounseling: 'AI 상담',
       counselorList: '상담사 찾기',
       counselorDetail: '상담사 정보',
