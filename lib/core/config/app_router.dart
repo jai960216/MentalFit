@@ -30,9 +30,14 @@ import '../../screens/chat/chat_room_screen.dart';
 import '../../screens/counselor/counselor_list_screen.dart';
 import '../../screens/counselor/counselor_detail_screen.dart';
 
+// Booking (추가됨)
+import '../../screens/booking/booking_calendar_screen.dart';
+import '../../screens/booking/booking_confirm_screen.dart';
+import '../../screens/booking/booking_list_screen.dart';
+
 class AppRouter {
   static final GoRouter router = GoRouter(
-    initialLocation: AppRoutes.splash,
+    initialLocation: AppRoutes.home,
     routes: [
       // === Splash Screen ===
       GoRoute(
@@ -129,18 +134,27 @@ class AppRouter {
         },
       ),
 
-      // === Booking Routes (Placeholder) ===
+      // === Booking Routes (수정됨) ===
       GoRoute(
         path: AppRoutes.bookingList,
         name: 'booking-list',
-        builder: (context, state) => const PlaceholderScreen(title: '예약 목록'),
+        builder: (context, state) => const BookingListScreen(),
       ),
       GoRoute(
-        path: '${AppRoutes.bookingDetail}/:bookingId',
-        name: 'booking-detail',
+        path:
+            '${AppRoutes.bookingCalendar}/:counselorId', // 수정됨: booking -> bookingCalendar
+        name: 'booking-calendar',
         builder: (context, state) {
-          final bookingId = state.pathParameters['bookingId']!;
-          return PlaceholderScreen(title: '예약 상세 ($bookingId)');
+          final counselorId = state.pathParameters['counselorId']!;
+          return BookingCalendarScreen(counselorId: counselorId);
+        },
+      ),
+      GoRoute(
+        path: '${AppRoutes.bookingConfirm}/:counselorId',
+        name: 'booking-confirm',
+        builder: (context, state) {
+          final counselorId = state.pathParameters['counselorId']!;
+          return BookingConfirmScreen(counselorId: counselorId);
         },
       ),
 
@@ -207,11 +221,13 @@ class AppRouter {
             ErrorScreen(error: '페이지를 찾을 수 없습니다: ${state.uri.toString()}'),
 
     redirect: (context, state) {
+      // 필요시 리다이렉트 로직 추가
       return null;
     },
   );
 }
 
+// === 플레이스홀더 화면 ===
 class PlaceholderScreen extends StatelessWidget {
   final String title;
 
@@ -257,6 +273,7 @@ class PlaceholderScreen extends StatelessWidget {
   }
 }
 
+// === 에러 화면 ===
 class ErrorScreen extends StatelessWidget {
   final String error;
 

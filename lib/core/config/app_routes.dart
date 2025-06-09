@@ -28,8 +28,9 @@ class AppRoutes {
   static const String counselorDetail = '/counselor/detail';
   static const String counselorSearch = '/counselor/search';
 
-  // === 예약/예약 관리 ===
-  static const String booking = '/booking';
+  // === 예약/예약 관리 === (수정됨)
+  static const String bookingCalendar =
+      '/booking/calendar'; // 변경: booking -> bookingCalendar
   static const String bookingList = '/booking/list';
   static const String bookingDetail = '/booking/detail';
   static const String bookingConfirm = '/booking/confirm';
@@ -69,6 +70,14 @@ class AppRoutes {
   // 상담사 상세 페이지 URL 생성
   static String getCounselorDetailRoute(String counselorId) =>
       '$counselorDetail/$counselorId';
+
+  // 예약 캘린더 URL 생성 (수정됨)
+  static String getBookingCalendarRoute(String counselorId) =>
+      '$bookingCalendar/$counselorId';
+
+  // 예약 확정 URL 생성 (추가됨)
+  static String getBookingConfirmRoute(String counselorId) =>
+      '$bookingConfirm/$counselorId';
 
   // 채팅방 URL 생성
   static String getChatRoomRoute(String roomId) => '$chatRoom/$roomId';
@@ -189,11 +198,13 @@ class AppRoutes {
     if (pathSegments.length >= 2) {
       final basePath = '/${pathSegments[0]}/${pathSegments[1]}';
 
-      // 알려진 동적 라우트들
+      // 알려진 동적 라우트들 (수정됨)
       const dynamicRoutes = [
         counselorDetail,
         chatRoom,
         bookingDetail,
+        bookingCalendar, // 추가
+        bookingConfirm, // 추가
         recordDetail,
         selfCheckTest,
         selfCheckResult,
@@ -207,7 +218,7 @@ class AppRoutes {
     return uri.path;
   }
 
-  // 라우트별 타이틀 가져오기
+  // 라우트별 타이틀 가져오기 (수정됨)
   static String getRouteTitle(String route) {
     final routeName = getRouteName(route);
 
@@ -221,7 +232,9 @@ class AppRoutes {
       counselorList: '상담사 찾기',
       counselorDetail: '상담사 정보',
       bookingList: '예약 관리',
-      booking: '예약하기',
+      bookingCalendar: '예약하기', // 수정됨
+      bookingConfirm: '예약 확정', // 추가됨
+      bookingDetail: '예약 상세', // 추가됨
       chatList: '채팅',
       chatRoom: '채팅',
       aiChatRoom: 'AI 채팅',
