@@ -4,20 +4,39 @@ import '../shared/services/self_check_service.dart';
 
 // === 자가진단 서비스 프로바이더 ===
 final selfCheckServiceProvider = Provider<SelfCheckService>((ref) {
-  return SelfCheckService();
+  // SelfCheckService는 싱글톤이므로 getInstance() 사용
+  throw UnimplementedError('Use selfCheckServiceFutureProvider instead');
+});
+
+// 비동기 서비스 프로바이더
+final selfCheckServiceFutureProvider = FutureProvider<SelfCheckService>((ref) {
+  return SelfCheckService.getInstance();
 });
 
 // === 자가진단 상태 프로바이더 ===
 final selfCheckProvider =
     StateNotifierProvider<SelfCheckNotifier, SelfCheckState>((ref) {
-      return SelfCheckNotifier(ref.watch(selfCheckServiceProvider));
+      return SelfCheckNotifier();
     });
 
 // === 자가진단 상태 관리 클래스 ===
 class SelfCheckNotifier extends StateNotifier<SelfCheckState> {
-  final SelfCheckService _service;
+  SelfCheckService? _service;
 
-  SelfCheckNotifier(this._service) : super(const SelfCheckState());
+  SelfCheckNotifier() : super(const SelfCheckState()) {
+    _initializeService();
+  }
+
+  // 서비스 초기화
+  Future<void> _initializeService() async {
+    _service = await SelfCheckService.getInstance();
+  }
+
+  // 서비스 가져오기 (초기화되지 않았으면 초기화)
+  Future<SelfCheckService> _getService() async {
+    _service ??= await SelfCheckService.getInstance();
+    return _service!;
+  }
 
   // === 데이터 로딩 ===
 
@@ -26,9 +45,10 @@ class SelfCheckNotifier extends StateNotifier<SelfCheckState> {
     state = state.copyWith(isLoading: true, error: null);
 
     try {
-      final tests = await _service.getAvailableTests();
-      final recommended = await _service.getRecommendedTests();
-      final recent = await _service.getRecentResults(limit: 3);
+      final service = await _getService();
+      final tests = await service.getAvailableTests();
+      final recommended = await service.getRecommendedTests();
+      final recent = await service.getRecentResults(limit: 3);
 
       state = state.copyWith(
         availableTests: tests,
@@ -49,7 +69,8 @@ class SelfCheckNotifier extends StateNotifier<SelfCheckState> {
     state = state.copyWith(isLoading: true, error: null);
 
     try {
-      final test = await _service.getTestById(testId);
+      final service = await _getService();
+      final test = await service.getTestById(testId);
       state = state.copyWith(
         currentTest: test,
         currentAnswers: [],
@@ -67,7 +88,8 @@ class SelfCheckNotifier extends StateNotifier<SelfCheckState> {
   /// 최근 검사 결과 로드
   Future<void> loadRecentResults({int limit = 10}) async {
     try {
-      final results = await _service.getRecentResults(limit: limit);
+      final service = await _getService();
+      final results = await service.getRecentResults(limit: limit);
       state = state.copyWith(recentResults: results);
     } catch (e) {
       state = state.copyWith(error: '최근 검사 결과를 불러오는 중 오류가 발생했습니다: $e');
@@ -141,7 +163,8 @@ class SelfCheckNotifier extends StateNotifier<SelfCheckState> {
     state = state.copyWith(isLoading: true, error: null);
 
     try {
-      final result = await _service.submitTestResult(
+      final service = await _getService();
+      final result = await service.submitTest(
         testId: state.currentTest!.id,
         answers: state.currentAnswers,
       );
@@ -221,16 +244,40 @@ class SelfCheckNotifier extends StateNotifier<SelfCheckState> {
     return state.currentTest!.questions.length - state.currentAnswers.length;
   }
 
-  // === 검사 결과 관리 ===
+  // === 검사 결과 관리 (Mock 구현) ===
 
-  /// 검사 결과 상세 조회
+  /// 검사 결과 상세 조회 (Mock)
   Future<SelfCheckResult> getResultDetail(String resultId) async {
     state = state.copyWith(isLoading: true, error: null);
 
     try {
-      final result = await _service.getResultById(resultId);
+      // Mock 데이터 반환
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      final service = await _getService();
+      final tests = await service.getAvailableTests();
+      final mockResult = SelfCheckResult(
+        id: resultId,
+        userId: 'current_user',
+        test: tests.first,
+        answers: [],
+        totalScore: 180,
+        maxScore: 320,
+        percentage: 56.25,
+        riskLevel: RiskLevel.moderate,
+        categoryScores: {'집중력': 45, '불안조절': 38, '자신감': 52, '동기': 45},
+        interpretation: '전반적으로 양호한 상태이며, 일부 영역에서 개선이 필요합니다.',
+        recommendations: [
+          '규칙적인 심상훈련을 통해 집중력을 향상시키세요',
+          '호흡법을 활용한 불안 관리 기법을 연습하세요',
+          '긍정적 자기대화를 통해 자신감을 높이세요',
+        ],
+        completedAt: DateTime.now().subtract(const Duration(days: 2)),
+        viewedAt: DateTime.now(),
+      );
+
       state = state.copyWith(isLoading: false);
-      return result;
+      return mockResult;
     } catch (e) {
       state = state.copyWith(
         isLoading: false,
@@ -240,28 +287,28 @@ class SelfCheckNotifier extends StateNotifier<SelfCheckState> {
     }
   }
 
-  /// 검사 결과 목록 조회
+  /// 검사 결과 목록 조회 (Mock)
   Future<List<SelfCheckResult>> getResultHistory({
     int page = 1,
     int limit = 20,
     SelfCheckTestType? testType,
   }) async {
     try {
-      return await _service.getResultHistory(
-        page: page,
-        limit: limit,
-        testType: testType,
-      );
+      await Future.delayed(const Duration(milliseconds: 800));
+
+      final service = await _getService();
+      final results = await service.getRecentResults(limit: limit);
+      return results;
     } catch (e) {
       state = state.copyWith(error: '검사 기록을 불러오는 중 오류가 발생했습니다: $e');
       rethrow;
     }
   }
 
-  /// 검사 결과 삭제
+  /// 검사 결과 삭제 (Mock)
   Future<void> deleteResult(String resultId) async {
     try {
-      await _service.deleteResult(resultId);
+      await Future.delayed(const Duration(milliseconds: 300));
 
       // 최근 결과 목록에서 제거
       final updatedResults =

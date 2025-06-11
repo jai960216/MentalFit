@@ -3,11 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/config/app_colors.dart';
-import '../../core/network/error_handler.dart';
-import '../../shared/services/chat_service.dart';
+import '../../shared/widgets/loading_widget.dart';
 import '../../shared/models/chat_room_model.dart';
 import '../../shared/models/message_model.dart';
-import '../../shared/models/user_model.dart'; // User 모델 import 추가
+import '../../shared/services/chat_service.dart';
 import '../../providers/chat_provider.dart';
 import '../../providers/auth_provider.dart';
 
@@ -22,76 +21,61 @@ class ChatRoomScreen extends ConsumerStatefulWidget {
 
 class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen>
     with TickerProviderStateMixin {
-  final TextEditingController _messageController = TextEditingController();
-  final ScrollController _scrollController = ScrollController();
-  final FocusNode _messageFocusNode = FocusNode();
+  // === 컨트롤러들 ===
+  late TextEditingController _messageController;
+  late ScrollController _scrollController;
+  late AnimationController _typingAnimationController;
 
-  late ChatService _chatService;
-  late AnimationController _sendButtonController;
-  late Animation<double> _sendButtonAnimation;
-
+  // === 상태 변수들 ===
   ChatRoom? _chatRoom;
   bool _isLoading = true;
-  bool _isSending = false;
-  bool _isTyping = false;
+  bool _isInitialized = false;
+  String? _error;
+
+  // === 서비스들 ===
+  late ChatService _chatService;
 
   @override
   void initState() {
     super.initState();
-    _setupAnimations();
-    _initializeChat();
-    _setupMessageListener();
+    _initializeControllers();
+    _initializeServices();
   }
 
-  void _setupAnimations() {
-    _sendButtonController = AnimationController(
-      duration: const Duration(milliseconds: 200),
+  void _initializeControllers() {
+    _messageController = TextEditingController();
+    _scrollController = ScrollController();
+    _typingAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 1500),
       vsync: this,
     );
-
-    _sendButtonAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _sendButtonController, curve: Curves.easeOut),
-    );
-
-    _messageController.addListener(() {
-      final hasText = _messageController.text.trim().isNotEmpty;
-      if (hasText && !_sendButtonController.isCompleted) {
-        _sendButtonController.forward();
-      } else if (!hasText && _sendButtonController.isCompleted) {
-        _sendButtonController.reverse();
-      }
-
-      // 타이핑 상태 업데이트
-      _updateTypingStatus(hasText);
-    });
   }
 
-  Future<void> _initializeChat() async {
-    _chatService = await ChatService.getInstance();
-    await _loadChatRoomInfo();
-    await _loadMessages();
-    setState(() => _isLoading = false);
-  }
-
-  Future<void> _loadChatRoomInfo() async {
+  Future<void> _initializeServices() async {
     try {
-      final chatRooms = await _chatService.getChatRooms();
-      _chatRoom = chatRooms.firstWhere(
-        (room) => room.id == widget.chatRoomId,
-        orElse:
-            () => ChatRoom(
-              id: widget.chatRoomId,
-              title: 'AI 상담',
-              type: ChatRoomType.ai,
-              participantIds: ['current_user', 'ai'],
-              unreadCount: 0,
-              status: ChatRoomStatus.active,
-              createdAt: DateTime.now(),
-              updatedAt: DateTime.now(),
-            ),
-      );
+      _chatService = await ChatService.getInstance();
+      await _loadChatRoomData();
+      await _loadMessages();
+      setState(() {
+        _isLoading = false;
+        _isInitialized = true;
+      });
     } catch (e) {
-      debugPrint('채팅방 정보 로드 오류: $e');
+      setState(() {
+        _isLoading = false;
+        _error = '채팅방을 불러오는 중 오류가 발생했습니다.';
+      });
+    }
+  }
+
+  Future<void> _loadChatRoomData() async {
+    try {
+      _chatRoom = await _chatService.getChatRoom(widget.chatRoomId);
+      if (_chatRoom == null) {
+        throw Exception('채팅방을 찾을 수 없습니다.');
+      }
+    } catch (e) {
+      throw Exception('채팅방 정보를 불러올 수 없습니다.');
     }
   }
 
@@ -101,26 +85,8 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen>
           .read(chatMessagesProvider(widget.chatRoomId).notifier)
           .loadMessages();
     } catch (e) {
-      if (mounted) {
-        GlobalErrorHandler.showErrorSnackBar(context, e);
-      }
-    }
-  }
-
-  void _setupMessageListener() {
-    // 새 메시지 스트림 구독
-    _chatService.getNewMessageStream(widget.chatRoomId).listen((message) {
-      _scrollToBottom();
-    });
-  }
-
-  void _updateTypingStatus(bool isTyping) {
-    if (_isTyping != isTyping) {
-      _isTyping = isTyping;
-      final user = ref.read(userProvider);
-      if (user != null) {
-        _chatService.updateTypingStatus(widget.chatRoomId, user.id, isTyping);
-      }
+      // 메시지 로딩 실패는 치명적이지 않음
+      debugPrint('메시지 로딩 실패: $e');
     }
   }
 
@@ -128,600 +94,479 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen>
   void dispose() {
     _messageController.dispose();
     _scrollController.dispose();
-    _messageFocusNode.dispose();
-    _sendButtonController.dispose();
+    _typingAnimationController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final messagesState = ref.watch(chatMessagesProvider(widget.chatRoomId));
-    final user = ref.watch(userProvider);
-
     if (_isLoading) {
       return _buildLoadingScreen();
+    }
+
+    if (_error != null) {
+      return _buildErrorScreen();
+    }
+
+    if (!_isInitialized || _chatRoom == null) {
+      return _buildErrorScreen();
     }
 
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: _buildAppBar(),
-      body: Column(
-        children: [
-          // === 메시지 목록 ===
-          Expanded(child: _buildMessagesList(messagesState, user)),
+      body: SafeArea(
+        child: Column(
+          children: [
+            // === 메시지 목록 ===
+            Expanded(child: _buildMessagesList()),
 
-          // === 타이핑 상태 표시 ===
-          _buildTypingIndicator(),
-
-          // === 메시지 입력 영역 ===
-          _buildMessageInput(),
-        ],
+            // === 메시지 입력 영역 ===
+            _buildMessageInputArea(),
+          ],
+        ),
       ),
     );
   }
 
   // === UI 구성 요소들 ===
 
+  Widget _buildLoadingScreen() {
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        title: const Text('채팅'),
+        backgroundColor: AppColors.white,
+        foregroundColor: AppColors.textPrimary,
+        elevation: 0,
+      ),
+      body: const LoadingWidget(message: '채팅방을 불러오는 중...'),
+    );
+  }
+
+  Widget _buildErrorScreen() {
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        title: const Text('오류'),
+        backgroundColor: AppColors.white,
+        foregroundColor: AppColors.textPrimary,
+        elevation: 0,
+      ),
+      body: Center(
+        child: Padding(
+          padding: EdgeInsets.all(24.w),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.error_outline, size: 64.sp, color: AppColors.error),
+              SizedBox(height: 16.h),
+              Text(
+                _error ?? '채팅방을 불러올 수 없습니다',
+                style: TextStyle(
+                  fontSize: 16.sp,
+                  color: AppColors.textPrimary,
+                  fontWeight: FontWeight.w600,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              SizedBox(height: 24.h),
+              ElevatedButton(
+                onPressed: () => context.pop(),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: AppColors.white,
+                ),
+                child: const Text('뒤로 가기'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   PreferredSizeWidget _buildAppBar() {
     return AppBar(
       backgroundColor: AppColors.white,
-      leading: IconButton(
-        icon: const Icon(Icons.arrow_back),
-        onPressed: () => context.pop(),
-      ),
-      title: Row(
+      foregroundColor: AppColors.textPrimary,
+      elevation: 0,
+      title: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // === 채팅방 아바타 ===
-          Container(
-            width: 32.w,
-            height: 32.w,
-            decoration: BoxDecoration(
-              color: _getChatRoomColor().withOpacity(0.1),
-              borderRadius: BorderRadius.circular(16.r),
-            ),
-            child: Icon(
-              _getChatRoomIcon(),
-              color: _getChatRoomColor(),
-              size: 18.sp,
+          Text(
+            _chatRoom!.title,
+            style: TextStyle(
+              fontSize: 16.sp,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textPrimary,
             ),
           ),
-
-          SizedBox(width: 12.w),
-
-          // === 채팅방 정보 ===
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _chatRoom?.title ?? '채팅',
-                  style: TextStyle(
-                    fontSize: 16.sp,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-                if (_chatRoom?.isAIChat == true)
-                  Text(
-                    '24시간 상담 가능',
-                    style: TextStyle(
-                      fontSize: 11.sp,
-                      color: AppColors.textSecondary,
-                    ),
-                  )
-                else if (_chatRoom?.counselorName != null)
-                  Text(
-                    '전문 상담사',
-                    style: TextStyle(
-                      fontSize: 11.sp,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-              ],
+          if (_chatRoom!.type == ChatRoomType.ai)
+            Text(
+              'AI 상담',
+              style: TextStyle(fontSize: 12.sp, color: AppColors.textSecondary),
+            )
+          else if (_chatRoom!.type == ChatRoomType.counselor)
+            Text(
+              '전문 상담사',
+              style: TextStyle(fontSize: 12.sp, color: AppColors.textSecondary),
             ),
-          ),
         ],
       ),
       actions: [
-        if (_chatRoom?.isAIChat != true)
-          IconButton(
-            icon: const Icon(Icons.videocam),
-            onPressed: () {
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(const SnackBar(content: Text('화상 통화 기능 준비중입니다')));
-            },
-          ),
-        PopupMenuButton<String>(
-          onSelected: _handleMenuAction,
-          itemBuilder:
-              (context) => [
-                const PopupMenuItem(
-                  value: 'clear_history',
-                  child: Row(
-                    children: [
-                      Icon(Icons.clear_all, size: 16),
-                      SizedBox(width: 8),
-                      Text('대화 내용 지우기'),
-                    ],
-                  ),
-                ),
-                const PopupMenuItem(
-                  value: 'report',
-                  child: Row(
-                    children: [
-                      Icon(Icons.report, size: 16),
-                      SizedBox(width: 8),
-                      Text('신고하기'),
-                    ],
-                  ),
-                ),
-                const PopupMenuItem(
-                  value: 'settings',
-                  child: Row(
-                    children: [
-                      Icon(Icons.settings, size: 16),
-                      SizedBox(width: 8),
-                      Text('설정'),
-                    ],
-                  ),
-                ),
-              ],
+        IconButton(
+          icon: const Icon(Icons.more_vert),
+          onPressed: _showChatOptions,
         ),
       ],
     );
   }
 
-  Widget _buildLoadingScreen() {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(backgroundColor: AppColors.white, title: const Text('채팅')),
-      body: const Center(child: CircularProgressIndicator()),
+  Widget _buildMessagesList() {
+    return Consumer(
+      builder: (context, ref, child) {
+        final messagesState = ref.watch(
+          chatMessagesProvider(widget.chatRoomId),
+        );
+        final currentUser = ref.watch(
+          userProvider,
+        ); // 수정: currentUserProvider → userProvider
+
+        if (messagesState.isLoading && messagesState.messages.isEmpty) {
+          return const LoadingWidget(message: '메시지를 불러오는 중...');
+        }
+
+        if (messagesState.error != null && messagesState.messages.isEmpty) {
+          return _buildMessagesErrorState(messagesState.error!);
+        }
+
+        if (messagesState.messages.isEmpty) {
+          return _buildEmptyMessagesState();
+        }
+
+        return ListView.builder(
+          controller: _scrollController,
+          padding: EdgeInsets.all(16.w),
+          itemCount: messagesState.messages.length,
+          itemBuilder: (context, index) {
+            final message = messagesState.messages[index];
+            final isCurrentUser = message.senderId == currentUser?.id;
+
+            return _buildMessageBubble(message, isCurrentUser);
+          },
+        );
+      },
     );
   }
 
-  Widget _buildMessagesList(ChatMessagesState state, User? user) {
-    if (state.isLoading && state.messages.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    if (state.error != null) {
-      return Center(
+  Widget _buildMessagesErrorState(String error) {
+    return Center(
+      child: Padding(
+        padding: EdgeInsets.all(24.w),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.error_outline, size: 64.sp, color: AppColors.error),
+            Icon(Icons.error_outline, size: 48.sp, color: AppColors.error),
             SizedBox(height: 16.h),
             Text(
               '메시지를 불러올 수 없습니다',
-              style: TextStyle(fontSize: 16.sp, color: AppColors.textSecondary),
+              style: TextStyle(
+                fontSize: 16.sp,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textPrimary,
+              ),
             ),
-            SizedBox(height: 16.h),
+            SizedBox(height: 8.h),
+            Text(
+              error,
+              style: TextStyle(fontSize: 14.sp, color: AppColors.textSecondary),
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: 24.h),
             ElevatedButton(
               onPressed: _loadMessages,
               child: const Text('다시 시도'),
             ),
           ],
         ),
-      );
-    }
-
-    return ListView.builder(
-      controller: _scrollController,
-      padding: EdgeInsets.all(16.w),
-      reverse: false,
-      itemCount: state.messages.length,
-      itemBuilder: (context, index) {
-        final message = state.messages[index];
-        final isMyMessage = message.isMine(user?.id ?? '');
-        final showDateDivider = _shouldShowDateDivider(state.messages, index);
-
-        return Column(
-          children: [
-            if (showDateDivider) _buildDateDivider(message.timestamp),
-            _buildMessageBubble(message, isMyMessage),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _buildDateDivider(DateTime date) {
-    return Container(
-      margin: EdgeInsets.symmetric(vertical: 16.h),
-      child: Row(
-        children: [
-          const Expanded(child: Divider()),
-          Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16.w),
-            child: Container(
-              padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 4.h),
-              decoration: BoxDecoration(
-                color: AppColors.grey200,
-                borderRadius: BorderRadius.circular(12.r),
-              ),
-              child: Text(
-                _formatDate(date),
-                style: TextStyle(
-                  fontSize: 11.sp,
-                  color: AppColors.textSecondary,
-                ),
-              ),
-            ),
-          ),
-          const Expanded(child: Divider()),
-        ],
       ),
     );
   }
 
-  Widget _buildMessageBubble(Message message, bool isMyMessage) {
+  Widget _buildEmptyMessagesState() {
+    return Center(
+      child: Padding(
+        padding: EdgeInsets.all(24.w),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              _chatRoom!.isAIChat ? Icons.smart_toy : Icons.person,
+              size: 64.sp,
+              color: AppColors.grey400,
+            ),
+            SizedBox(height: 16.h),
+            Text(
+              _chatRoom!.isAIChat ? 'AI 상담사와 대화를 시작해보세요' : '상담사와 대화를 시작해보세요',
+              style: TextStyle(
+                fontSize: 16.sp,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textSecondary,
+              ),
+            ),
+            SizedBox(height: 8.h),
+            Text(
+              '첫 메시지를 보내보세요!',
+              style: TextStyle(fontSize: 14.sp, color: AppColors.textSecondary),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMessageBubble(Message message, bool isCurrentUser) {
     return Container(
-      margin: EdgeInsets.only(bottom: 8.h),
+      margin: EdgeInsets.only(bottom: 12.h),
       child: Row(
         mainAxisAlignment:
-            isMyMessage ? MainAxisAlignment.end : MainAxisAlignment.start,
+            isCurrentUser ? MainAxisAlignment.end : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          if (!isMyMessage) ...[
-            _buildMessageAvatar(message),
+          if (!isCurrentUser) ...[
+            _buildSenderAvatar(message),
             SizedBox(width: 8.w),
           ],
 
           Flexible(
-            child: Column(
-              crossAxisAlignment:
-                  isMyMessage
-                      ? CrossAxisAlignment.end
-                      : CrossAxisAlignment.start,
-              children: [
-                if (!isMyMessage && message.senderName != null)
-                  Padding(
-                    padding: EdgeInsets.only(bottom: 4.h),
-                    child: Text(
-                      message.senderName!,
-                      style: TextStyle(
-                        fontSize: 11.sp,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
+            child: Container(
+              padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
+              decoration: BoxDecoration(
+                color: isCurrentUser ? AppColors.primary : AppColors.white,
+                borderRadius: BorderRadius.circular(18.r),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.grey400.withValues(
+                      alpha: 0.1,
+                    ), // 수정: withOpacity → withValues
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
                   ),
-
-                Container(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: 16.w,
-                    vertical: 12.h,
-                  ),
-                  decoration: BoxDecoration(
-                    color: isMyMessage ? AppColors.primary : AppColors.white,
-                    borderRadius: BorderRadius.only(
-                      topLeft: Radius.circular(18.r),
-                      topRight: Radius.circular(18.r),
-                      bottomLeft: Radius.circular(isMyMessage ? 18.r : 4.r),
-                      bottomRight: Radius.circular(isMyMessage ? 4.r : 18.r),
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColors.grey400.withOpacity(0.1),
-                        blurRadius: 4,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        message.content,
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (!isCurrentUser && message.senderName != null)
+                    Padding(
+                      padding: EdgeInsets.only(bottom: 4.h),
+                      child: Text(
+                        message.senderName!,
                         style: TextStyle(
-                          fontSize: 14.sp,
-                          color:
-                              isMyMessage
-                                  ? AppColors.white
-                                  : AppColors.textPrimary,
-                          height: 1.4,
+                          fontSize: 12.sp,
+                          fontWeight: FontWeight.w500,
+                          color: AppColors.textSecondary,
                         ),
                       ),
+                    ),
 
-                      SizedBox(height: 4.h),
-
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            _formatMessageTime(message.timestamp),
-                            style: TextStyle(
-                              fontSize: 10.sp,
-                              color:
-                                  isMyMessage
-                                      ? AppColors.white.withOpacity(0.7)
-                                      : AppColors.textSecondary,
-                            ),
-                          ),
-
-                          if (isMyMessage) ...[
-                            SizedBox(width: 4.w),
-                            Icon(
-                              message.isRead ? Icons.done_all : Icons.done,
-                              size: 12.sp,
-                              color:
-                                  message.isRead
-                                      ? AppColors.accent
-                                      : AppColors.white.withOpacity(0.7),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ],
+                  Text(
+                    message.content,
+                    style: TextStyle(
+                      fontSize: 14.sp,
+                      color:
+                          isCurrentUser
+                              ? AppColors.white
+                              : AppColors.textPrimary,
+                      height: 1.3,
+                    ),
                   ),
-                ),
-              ],
+
+                  SizedBox(height: 4.h),
+
+                  Text(
+                    _formatMessageTime(
+                      message.timestamp,
+                    ), // 수정: createdAt → timestamp
+                    style: TextStyle(
+                      fontSize: 11.sp,
+                      color:
+                          isCurrentUser
+                              ? AppColors.white.withValues(
+                                alpha: 0.8,
+                              ) // 수정: withOpacity → withValues
+                              : AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
 
-          if (isMyMessage) ...[
+          if (isCurrentUser) ...[
             SizedBox(width: 8.w),
-            _buildMessageAvatar(message),
+            _buildSenderAvatar(message),
           ],
         ],
       ),
     );
   }
 
-  Widget _buildMessageAvatar(Message message) {
+  Widget _buildSenderAvatar(Message message) {
     if (message.isFromAI) {
       return Container(
-        width: 28.w,
-        height: 28.w,
+        width: 32.w,
+        height: 32.w,
         decoration: BoxDecoration(
-          color: AppColors.primary.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(14.r),
+          color: AppColors.primary.withValues(
+            alpha: 0.1,
+          ), // 수정: withOpacity → withValues
+          borderRadius: BorderRadius.circular(16.r),
         ),
-        child: Icon(Icons.smart_toy, color: AppColors.primary, size: 16.sp),
+        child: Icon(Icons.smart_toy, size: 18.sp, color: AppColors.primary),
       );
     } else {
       return CircleAvatar(
-        radius: 14.r,
-        backgroundColor: AppColors.secondary.withOpacity(0.1),
-        child: Icon(Icons.person, color: AppColors.secondary, size: 16.sp),
+        radius: 16.r,
+        backgroundColor: AppColors.grey300,
+        child: Icon(Icons.person, size: 18.sp, color: AppColors.white),
       );
     }
   }
 
-  Widget _buildTypingIndicator() {
-    return StreamBuilder<Map<String, bool>>(
-      stream: _chatService.getTypingStream(widget.chatRoomId),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) return const SizedBox.shrink();
-
-        final typingUsers =
-            snapshot.data!.entries
-                .where(
-                  (entry) =>
-                      entry.value && entry.key != ref.read(userProvider)?.id,
-                )
-                .map((entry) => entry.key)
-                .toList();
-
-        if (typingUsers.isEmpty) return const SizedBox.shrink();
+  Widget _buildMessageInputArea() {
+    return Consumer(
+      builder: (context, ref, child) {
+        final messagesState = ref.watch(
+          chatMessagesProvider(widget.chatRoomId),
+        );
+        final currentUser = ref.watch(
+          userProvider,
+        ); // 수정: currentUserProvider → userProvider
 
         return Container(
-          padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
-          child: Row(
-            children: [
-              Container(
-                width: 28.w,
-                height: 28.w,
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(14.r),
-                ),
-                child: Icon(
-                  Icons.smart_toy,
-                  color: AppColors.primary,
-                  size: 16.sp,
-                ),
+          padding: EdgeInsets.all(16.w),
+          decoration: BoxDecoration(
+            color: AppColors.white,
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.grey400.withValues(
+                  alpha: 0.1,
+                ), // 수정: withOpacity → withValues
+                blurRadius: 4,
+                offset: const Offset(0, -2),
               ),
-              SizedBox(width: 8.w),
-              _buildTypingAnimation(),
             ],
           ),
-        );
-      },
-    );
-  }
-
-  Widget _buildTypingAnimation() {
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(18.r),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.grey400.withOpacity(0.1),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _buildTypingDot(0),
-          SizedBox(width: 3.w),
-          _buildTypingDot(1),
-          SizedBox(width: 3.w),
-          _buildTypingDot(2),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTypingDot(int index) {
-    return TweenAnimationBuilder<double>(
-      duration: const Duration(milliseconds: 600),
-      tween: Tween(begin: 0.4, end: 1.0),
-      builder: (context, value, child) {
-        return Container(
-          width: 6.w,
-          height: 6.w,
-          decoration: BoxDecoration(
-            color: AppColors.textSecondary.withOpacity(value),
-            shape: BoxShape.circle,
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildMessageInput() {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.grey400.withOpacity(0.1),
-            blurRadius: 4,
-            offset: const Offset(0, -2),
-          ),
-        ],
-      ),
-      child: SafeArea(
-        child: Padding(
-          padding: EdgeInsets.all(16.w),
           child: Row(
             children: [
-              // === 첨부 버튼 ===
-              GestureDetector(
-                onTap: _showAttachmentOptions,
-                child: Container(
-                  width: 40.w,
-                  height: 40.w,
-                  decoration: BoxDecoration(
-                    color: AppColors.grey200,
-                    borderRadius: BorderRadius.circular(20.r),
-                  ),
-                  child: Icon(
-                    Icons.add,
-                    color: AppColors.textSecondary,
-                    size: 20.sp,
-                  ),
-                ),
-              ),
-
-              SizedBox(width: 12.w),
-
-              // === 메시지 입력 필드 ===
               Expanded(
                 child: Container(
-                  padding: EdgeInsets.symmetric(horizontal: 16.w),
                   decoration: BoxDecoration(
-                    color: AppColors.grey100,
-                    borderRadius: BorderRadius.circular(20.r),
+                    color: AppColors.background,
+                    borderRadius: BorderRadius.circular(24.r),
+                    border: Border.all(color: AppColors.grey300),
                   ),
                   child: TextField(
                     controller: _messageController,
-                    focusNode: _messageFocusNode,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       hintText: '메시지를 입력하세요...',
+                      hintStyle: TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 14.sp,
+                      ),
                       border: InputBorder.none,
-                      contentPadding: EdgeInsets.symmetric(vertical: 12),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 20.w,
+                        vertical: 12.h,
+                      ),
                     ),
                     maxLines: null,
-                    textInputAction: TextInputAction.send,
-                    onSubmitted: (_) => _sendMessage(),
-                    enabled: !_isSending,
+                    enabled: !messagesState.isSending,
                   ),
                 ),
               ),
 
               SizedBox(width: 12.w),
 
-              // === 전송 버튼 ===
-              ScaleTransition(
-                scale: _sendButtonAnimation,
-                child: GestureDetector(
-                  onTap: _isSending ? null : _sendMessage,
-                  child: Container(
-                    width: 40.w,
-                    height: 40.w,
-                    decoration: BoxDecoration(
-                      color: _isSending ? AppColors.grey400 : AppColors.primary,
-                      borderRadius: BorderRadius.circular(20.r),
-                    ),
-                    child:
-                        _isSending
-                            ? SizedBox(
-                              width: 16.w,
-                              height: 16.w,
-                              child: const CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(
-                                  AppColors.white,
-                                ),
+              Container(
+                width: 48.w,
+                height: 48.w,
+                decoration: BoxDecoration(
+                  color: AppColors.primary,
+                  borderRadius: BorderRadius.circular(24.r),
+                ),
+                child: IconButton(
+                  icon:
+                      messagesState.isSending
+                          ? SizedBox(
+                            width: 20.w,
+                            height: 20.w,
+                            child: const CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                AppColors.white,
                               ),
-                            )
-                            : Icon(
-                              Icons.send,
-                              color: AppColors.white,
-                              size: 18.sp,
                             ),
-                  ),
+                          )
+                          : Icon(
+                            Icons.send,
+                            color: AppColors.white,
+                            size: 20.sp,
+                          ),
+                  onPressed: messagesState.isSending ? null : _sendMessage,
                 ),
               ),
             ],
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
   // === 액션 핸들러들 ===
 
   Future<void> _sendMessage() async {
-    final text = _messageController.text.trim();
-    if (text.isEmpty || _isSending) return;
+    final content = _messageController.text.trim();
+    if (content.isEmpty) return;
 
-    final user = ref.read(userProvider);
-    if (user == null) return;
+    final currentUser = ref.read(
+      userProvider,
+    ); // 수정: currentUserProvider → userProvider
+    if (currentUser == null) {
+      _showErrorSnackBar('로그인이 필요합니다.');
+      return;
+    }
 
-    setState(() => _isSending = true);
+    // 텍스트 필드 즉시 클리어
     _messageController.clear();
-    _messageFocusNode.unfocus();
 
     try {
       await ref
           .read(chatMessagesProvider(widget.chatRoomId).notifier)
-          .sendMessage(content: text, senderId: user.id);
+          .sendMessage(content: content, senderId: currentUser.id);
 
+      // 메시지 전송 후 스크롤을 맨 아래로
       _scrollToBottom();
     } catch (e) {
-      if (mounted) {
-        GlobalErrorHandler.showErrorSnackBar(context, e);
-        // 전송 실패 시 텍스트 복원
-        _messageController.text = text;
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isSending = false);
-      }
+      _showErrorSnackBar('메시지 전송에 실패했습니다.');
+      // 실패 시 텍스트 복원
+      _messageController.text = content;
     }
   }
 
   void _scrollToBottom() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients) {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOut,
-        );
-      }
-    });
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
+    }
   }
 
-  void _showAttachmentOptions() {
+  void _showChatOptions() {
     showModalBottomSheet(
       context: context,
       builder:
@@ -730,54 +575,35 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen>
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  '첨부하기',
-                  style: TextStyle(
-                    fontSize: 18.sp,
-                    fontWeight: FontWeight.bold,
-                  ),
+                ListTile(
+                  leading: const Icon(Icons.info_outline),
+                  title: const Text('채팅방 정보'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _showChatRoomInfo();
+                  },
                 ),
-                SizedBox(height: 20.h),
-                GridView.count(
-                  shrinkWrap: true,
-                  crossAxisCount: 3,
-                  crossAxisSpacing: 16.w,
-                  mainAxisSpacing: 16.h,
-                  children: [
-                    _buildAttachmentOption(
-                      icon: Icons.photo,
-                      label: '사진',
-                      color: AppColors.info,
-                      onTap: () {
-                        Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('사진 첨부 기능 준비중입니다')),
-                        );
-                      },
-                    ),
-                    _buildAttachmentOption(
-                      icon: Icons.videocam,
-                      label: '동영상',
-                      color: AppColors.error,
-                      onTap: () {
-                        Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('동영상 첨부 기능 준비중입니다')),
-                        );
-                      },
-                    ),
-                    _buildAttachmentOption(
-                      icon: Icons.insert_drive_file,
-                      label: '파일',
-                      color: AppColors.warning,
-                      onTap: () {
-                        Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('파일 첨부 기능 준비중입니다')),
-                        );
-                      },
-                    ),
-                  ],
+                ListTile(
+                  leading: const Icon(Icons.clear_all),
+                  title: const Text('대화 내용 지우기'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _confirmClearMessages();
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(
+                    Icons.exit_to_app,
+                    color: AppColors.error,
+                  ),
+                  title: const Text(
+                    '채팅방 나가기',
+                    style: TextStyle(color: AppColors.error),
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _confirmLeaveChatRoom();
+                  },
                 ),
               ],
             ),
@@ -785,60 +611,44 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen>
     );
   }
 
-  Widget _buildAttachmentOption({
-    required IconData icon,
-    required String label,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Column(
-        children: [
-          Container(
-            width: 56.w,
-            height: 56.w,
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(16.r),
+  void _showChatRoomInfo() {
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('채팅방 정보'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('제목: ${_chatRoom!.title}'),
+                const SizedBox(height: 8),
+                Text('유형: ${_getChatRoomTypeText(_chatRoom!.type)}'),
+                const SizedBox(height: 8),
+                Text('생성일: ${_formatDate(_chatRoom!.createdAt)}'),
+                if (_chatRoom!.topic != null) ...[
+                  const SizedBox(height: 8),
+                  Text('주제: ${_chatRoom!.topic}'),
+                ],
+              ],
             ),
-            child: Icon(icon, color: color, size: 24.sp),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('확인'),
+              ),
+            ],
           ),
-          SizedBox(height: 8.h),
-          Text(
-            label,
-            style: TextStyle(fontSize: 12.sp, color: AppColors.textSecondary),
-          ),
-        ],
-      ),
     );
   }
 
-  void _handleMenuAction(String action) {
-    switch (action) {
-      case 'clear_history':
-        _showClearHistoryDialog();
-        break;
-      case 'report':
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('신고 기능 준비중입니다')));
-        break;
-      case 'settings':
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('채팅 설정 기능 준비중입니다')));
-        break;
-    }
-  }
-
-  void _showClearHistoryDialog() {
+  void _confirmClearMessages() {
     showDialog(
       context: context,
       builder:
           (context) => AlertDialog(
             title: const Text('대화 내용 지우기'),
-            content: const Text('모든 대화 내용이 삭제되며 복구할 수 없습니다.\n계속하시겠습니까?'),
+            content: const Text('모든 대화 내용이 삭제됩니다. 계속하시겠습니까?'),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context),
@@ -847,12 +657,7 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen>
               TextButton(
                 onPressed: () {
                   Navigator.pop(context);
-                  ref
-                      .read(chatMessagesProvider(widget.chatRoomId).notifier)
-                      .clearMessages();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('대화 내용이 삭제되었습니다')),
-                  );
+                  _clearMessages();
                 },
                 child: const Text(
                   '삭제',
@@ -864,65 +669,79 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen>
     );
   }
 
+  void _confirmLeaveChatRoom() {
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('채팅방 나가기'),
+            content: const Text('정말로 이 채팅방을 나가시겠습니까?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('취소'),
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  context.pop();
+                },
+                child: const Text(
+                  '나가기',
+                  style: TextStyle(color: AppColors.error),
+                ),
+              ),
+            ],
+          ),
+    );
+  }
+
+  void _clearMessages() {
+    ref.read(chatMessagesProvider(widget.chatRoomId).notifier).clearMessages();
+    _showSuccessSnackBar('대화 내용이 삭제되었습니다.');
+  }
+
+  void _showErrorSnackBar(String message) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message), backgroundColor: AppColors.error),
+      );
+    }
+  }
+
+  void _showSuccessSnackBar(String message) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message), backgroundColor: AppColors.success),
+      );
+    }
+  }
+
   // === 헬퍼 메서드들 ===
 
-  bool _shouldShowDateDivider(List<Message> messages, int index) {
-    if (index == 0) return true;
-
-    final currentMessage = messages[index];
-    final previousMessage = messages[index - 1];
-
-    final currentDate = DateTime(
-      currentMessage.timestamp.year,
-      currentMessage.timestamp.month,
-      currentMessage.timestamp.day,
-    );
-
-    final previousDate = DateTime(
-      previousMessage.timestamp.year,
-      previousMessage.timestamp.month,
-      previousMessage.timestamp.day,
-    );
-
-    return currentDate != previousDate;
-  }
-
-  String _formatDate(DateTime date) {
+  String _formatMessageTime(DateTime dateTime) {
     final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final yesterday = today.subtract(const Duration(days: 1));
-    final messageDate = DateTime(date.year, date.month, date.day);
+    final difference = now.difference(dateTime);
 
-    if (messageDate == today) {
-      return '오늘';
-    } else if (messageDate == yesterday) {
-      return '어제';
+    if (difference.inDays > 0) {
+      return '${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
     } else {
-      return '${date.month}월 ${date.day}일';
+      return '${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
     }
   }
 
-  String _formatMessageTime(DateTime time) {
-    return '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+  String _formatDate(DateTime dateTime) {
+    return '${dateTime.year}-${dateTime.month.toString().padLeft(2, '0')}-${dateTime.day.toString().padLeft(2, '0')}';
   }
 
-  Color _getChatRoomColor() {
-    if (_chatRoom?.isAIChat == true) {
-      return AppColors.primary;
-    } else if (_chatRoom?.type == ChatRoomType.counselor) {
-      return AppColors.secondary;
-    } else {
-      return AppColors.accent;
-    }
-  }
-
-  IconData _getChatRoomIcon() {
-    if (_chatRoom?.isAIChat == true) {
-      return Icons.smart_toy;
-    } else if (_chatRoom?.type == ChatRoomType.counselor) {
-      return Icons.person;
-    } else {
-      return Icons.group;
+  String _getChatRoomTypeText(ChatRoomType type) {
+    switch (type) {
+      case ChatRoomType.ai:
+        return 'AI 상담';
+      case ChatRoomType.counselor:
+        return '전문 상담사';
+      case ChatRoomType.group:
+        return '그룹 상담';
     }
   }
 }

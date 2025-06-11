@@ -30,10 +30,15 @@ import '../../screens/chat/chat_room_screen.dart';
 import '../../screens/counselor/counselor_list_screen.dart';
 import '../../screens/counselor/counselor_detail_screen.dart';
 
-// Booking (추가됨)
+// Booking
 import '../../screens/booking/booking_calendar_screen.dart';
 import '../../screens/booking/booking_confirm_screen.dart';
 import '../../screens/booking/booking_list_screen.dart';
+
+// Self Check
+import '../../screens/self_check/self_check_list_screen.dart';
+import '../../screens/self_check/self_check_test_screen.dart';
+import '../../screens/self_check/self_check_result_screen.dart';
 
 class AppRouter {
   static final GoRouter router = GoRouter(
@@ -134,15 +139,14 @@ class AppRouter {
         },
       ),
 
-      // === Booking Routes (수정됨) ===
+      // === Booking Routes ===
       GoRoute(
         path: AppRoutes.bookingList,
         name: 'booking-list',
         builder: (context, state) => const BookingListScreen(),
       ),
       GoRoute(
-        path:
-            '${AppRoutes.bookingCalendar}/:counselorId', // 수정됨: booking -> bookingCalendar
+        path: '${AppRoutes.bookingCalendar}/:counselorId',
         name: 'booking-calendar',
         builder: (context, state) {
           final counselorId = state.pathParameters['counselorId']!;
@@ -158,7 +162,7 @@ class AppRouter {
         },
       ),
 
-      // === Records Routes (Placeholder) ===
+      // === Records Routes ===
       GoRoute(
         path: AppRoutes.recordsList,
         name: 'records-list',
@@ -173,22 +177,35 @@ class AppRouter {
         },
       ),
 
-      // === Self Check Routes (Placeholder) ===
+      // === Self Check Routes ===
       GoRoute(
         path: AppRoutes.selfCheckList,
         name: 'self-check-list',
-        builder: (context, state) => const PlaceholderScreen(title: '자가진단'),
+        builder: (context, state) => const SelfCheckListScreen(),
       ),
       GoRoute(
         path: '${AppRoutes.selfCheckTest}/:testId',
         name: 'self-check-test',
         builder: (context, state) {
           final testId = state.pathParameters['testId']!;
-          return PlaceholderScreen(title: '자가진단 테스트 ($testId)');
+          return SelfCheckTestScreen(testId: testId);
         },
       ),
+      GoRoute(
+        path: '${AppRoutes.selfCheckResult}/:resultId',
+        name: 'self-check-result',
+        builder: (context, state) {
+          final resultId = state.pathParameters['resultId']!;
+          return SelfCheckResultScreen(resultId: resultId);
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.selfCheckHistory,
+        name: 'self-check-history',
+        builder: (context, state) => const PlaceholderScreen(title: '자가진단 기록'),
+      ),
 
-      // === Profile Routes (Placeholder) ===
+      // === Profile Routes ===
       GoRoute(
         path: AppRoutes.profile,
         name: 'profile',

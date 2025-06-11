@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 import '../../core/config/app_colors.dart';
 import '../../core/config/app_routes.dart';
 import '../../providers/auth_provider.dart';
-import '../../providers/chat_provider.dart';
 import '../../shared/models/user_model.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
@@ -56,8 +55,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   }
 
   Future<void> _loadInitialData() async {
-    // 채팅방 목록 로드
-    ref.read(chatRoomsProvider.notifier).loadChatRooms();
+    // 홈 화면에서는 채팅방 로딩하지 않음 - 채팅 목록 화면에서만 로딩
+    debugPrint('홈 화면 초기화 완료');
   }
 
   @override
@@ -70,8 +69,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(userProvider);
-    final chatRoomsState = ref.watch(chatRoomsProvider);
-    final unreadCount = ref.watch(totalUnreadCountProvider);
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -103,7 +100,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                       // === 빠른 액션 버튼들 ===
                       FadeTransition(
                         opacity: _cardAnimation,
-                        child: _buildQuickActions(unreadCount),
+                        child: _buildQuickActions(),
                       ),
 
                       SizedBox(height: 24.h),
@@ -112,22 +109,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                       FadeTransition(
                         opacity: _cardAnimation,
                         child: _buildTodayMentalCheck(),
-                      ),
-
-                      SizedBox(height: 24.h),
-
-                      // === 최근 활동 ===
-                      FadeTransition(
-                        opacity: _cardAnimation,
-                        child: _buildRecentActivity(chatRoomsState),
-                      ),
-
-                      SizedBox(height: 24.h),
-
-                      // === 추천 컨텐츠 ===
-                      FadeTransition(
-                        opacity: _cardAnimation,
-                        child: _buildRecommendedContent(),
                       ),
 
                       SizedBox(height: 32.h),
@@ -163,7 +144,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                 onTap: () => context.push(AppRoutes.profile),
                 child: CircleAvatar(
                   radius: 24.r,
-                  backgroundColor: AppColors.white.withOpacity(0.2),
+                  backgroundColor: AppColors.white.withValues(alpha: 0.2),
                   backgroundImage:
                       user?.profileImageUrl != null
                           ? NetworkImage(user!.profileImageUrl!)
@@ -199,7 +180,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                       user?.userType.displayName ?? '',
                       style: TextStyle(
                         fontSize: 14.sp,
-                        color: AppColors.white.withOpacity(0.8),
+                        color: AppColors.white.withValues(alpha: 0.8),
                       ),
                     ),
                   ],
@@ -267,7 +248,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         borderRadius: BorderRadius.circular(16.r),
         boxShadow: [
           BoxShadow(
-            color: AppColors.grey400.withOpacity(0.1),
+            color: AppColors.grey400.withValues(alpha: 0.1),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -304,29 +285,28 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     );
   }
 
-  Widget _buildQuickActions(int unreadCount) {
+  Widget _buildQuickActions() {
     final actions = [
       QuickAction(
         title: 'AI 상담',
         subtitle: '24시간 언제든지',
         icon: Icons.smart_toy,
         color: AppColors.primary,
-        onTap: () => context.push(AppRoutes.aiCounseling),
+        onTap: () => _handleAiCounselingTap(),
       ),
       QuickAction(
-        title: '전문 상담사',
-        subtitle: '예약 상담',
-        icon: Icons.people,
+        title: '상담사 찾기',
+        subtitle: '전문가와 연결',
+        icon: Icons.person_search,
         color: AppColors.secondary,
         onTap: () => context.push(AppRoutes.counselorList),
       ),
       QuickAction(
         title: '채팅',
-        subtitle: unreadCount > 0 ? '$unreadCount개 미읽음' : '대화 목록',
+        subtitle: '대화 목록',
         icon: Icons.chat_bubble_outline,
         color: AppColors.accent,
-        badge: unreadCount,
-        onTap: () => context.push(AppRoutes.chatList),
+        onTap: () => _handleChatListTap(),
       ),
       QuickAction(
         title: '자가진단',
@@ -377,7 +357,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           borderRadius: BorderRadius.circular(16.r),
           boxShadow: [
             BoxShadow(
-              color: AppColors.grey400.withOpacity(0.1),
+              color: AppColors.grey400.withValues(alpha: 0.1),
               blurRadius: 8,
               offset: const Offset(0, 2),
             ),
@@ -386,40 +366,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Stack(
-              children: [
-                Container(
-                  padding: EdgeInsets.all(12.w),
-                  decoration: BoxDecoration(
-                    color: action.color.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12.r),
-                  ),
-                  child: Icon(action.icon, color: action.color, size: 24.sp),
-                ),
-                if (action.badge != null && action.badge! > 0)
-                  Positioned(
-                    right: 0,
-                    top: 0,
-                    child: Container(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: 6.w,
-                        vertical: 2.h,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.error,
-                        borderRadius: BorderRadius.circular(10.r),
-                      ),
-                      child: Text(
-                        action.badge.toString(),
-                        style: TextStyle(
-                          fontSize: 10.sp,
-                          color: AppColors.white,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
+            Container(
+              padding: EdgeInsets.all(12.w),
+              decoration: BoxDecoration(
+                color: action.color.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12.r),
+              ),
+              child: Icon(action.icon, color: action.color, size: 24.sp),
             ),
             SizedBox(height: 12.h),
             Text(
@@ -450,7 +403,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         borderRadius: BorderRadius.circular(16.r),
         boxShadow: [
           BoxShadow(
-            color: AppColors.grey400.withOpacity(0.1),
+            color: AppColors.grey400.withValues(alpha: 0.1),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -535,310 +488,33 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     );
   }
 
-  Widget _buildRecentActivity(ChatRoomsState chatRoomsState) {
-    return Container(
-      padding: EdgeInsets.all(20.w),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(16.r),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.grey400.withOpacity(0.1),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.history, color: AppColors.info, size: 20.sp),
-              SizedBox(width: 8.w),
-              Text(
-                '최근 활동',
-                style: TextStyle(
-                  fontSize: 16.sp,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-              const Spacer(),
-              TextButton(
-                onPressed: () => context.push(AppRoutes.recordsList),
-                child: Text(
-                  '전체보기',
-                  style: TextStyle(fontSize: 12.sp, color: AppColors.primary),
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: 16.h),
+  // === 액션 핸들러들 ===
 
-          if (chatRoomsState.isLoading)
-            const Center(child: CircularProgressIndicator())
-          else if (chatRoomsState.chatRooms.isEmpty)
-            _buildEmptyState()
-          else
-            ...chatRoomsState.chatRooms
-                .take(3)
-                .map(
-                  (chatRoom) => _buildActivityItem(
-                    title: chatRoom.title,
-                    subtitle: chatRoom.lastMessage?.content ?? '',
-                    time: _formatTime(chatRoom.updatedAt),
-                    icon: chatRoom.isAIChat ? Icons.smart_toy : Icons.person,
-                    onTap:
-                        () => context.push(
-                          '${AppRoutes.chatRoom}/${chatRoom.id}',
-                        ),
-                  ),
-                ),
-        ],
-      ),
-    );
+  Future<void> _handleAiCounselingTap() async {
+    try {
+      // AI 상담 페이지로 바로 이동
+      context.push(AppRoutes.aiCounseling);
+    } catch (e) {
+      _showErrorSnackBar('AI 상담을 시작할 수 없습니다.');
+    }
   }
 
-  Widget _buildActivityItem({
-    required String title,
-    required String subtitle,
-    required String time,
-    required IconData icon,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: EdgeInsets.symmetric(vertical: 8.h),
-        child: Row(
-          children: [
-            Container(
-              padding: EdgeInsets.all(8.w),
-              decoration: BoxDecoration(
-                color: AppColors.grey100,
-                borderRadius: BorderRadius.circular(8.r),
-              ),
-              child: Icon(icon, size: 16.sp, color: AppColors.textSecondary),
-            ),
-            SizedBox(width: 12.w),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: 13.sp,
-                      fontWeight: FontWeight.w500,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                  SizedBox(height: 2.h),
-                  Text(
-                    subtitle,
-                    style: TextStyle(
-                      fontSize: 11.sp,
-                      color: AppColors.textSecondary,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
-            ),
-            Text(
-              time,
-              style: TextStyle(fontSize: 10.sp, color: AppColors.textSecondary),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildEmptyState() {
-    return Container(
-      padding: EdgeInsets.all(20.w),
-      child: Column(
-        children: [
-          Icon(
-            Icons.chat_bubble_outline,
-            size: 40.sp,
-            color: AppColors.grey400,
-          ),
-          SizedBox(height: 12.h),
-          Text(
-            '아직 상담 기록이 없습니다',
-            style: TextStyle(fontSize: 14.sp, color: AppColors.textSecondary),
-          ),
-          SizedBox(height: 8.h),
-          GestureDetector(
-            onTap: () => context.push(AppRoutes.aiCounseling),
-            child: Text(
-              'AI 상담으로 시작해보세요',
-              style: TextStyle(
-                fontSize: 12.sp,
-                color: AppColors.primary,
-                decoration: TextDecoration.underline,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildRecommendedContent() {
-    final recommendations = [
-      RecommendedItem(
-        title: '스트레스 관리법',
-        subtitle: '경기 전 긴장감 해소하기',
-        type: '기법',
-        color: AppColors.error,
-        onTap: () {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('컨텐츠 준비중입니다')));
-        },
-      ),
-      RecommendedItem(
-        title: '집중력 향상',
-        subtitle: '몰입도를 높이는 방법',
-        type: '훈련',
-        color: AppColors.info,
-        onTap: () {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('컨텐츠 준비중입니다')));
-        },
-      ),
-    ];
-
-    return Container(
-      padding: EdgeInsets.all(20.w),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(16.r),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.grey400.withOpacity(0.1),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.recommend, color: AppColors.accent, size: 20.sp),
-              SizedBox(width: 8.w),
-              Text(
-                '추천 컨텐츠',
-                style: TextStyle(
-                  fontSize: 16.sp,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: 16.h),
-
-          ...recommendations
-              .map((item) => _buildRecommendedCard(item))
-              .toList(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildRecommendedCard(RecommendedItem item) {
-    return GestureDetector(
-      onTap: item.onTap,
-      child: Container(
-        margin: EdgeInsets.only(bottom: 12.h),
-        padding: EdgeInsets.all(12.w),
-        decoration: BoxDecoration(
-          color: item.color.withOpacity(0.05),
-          borderRadius: BorderRadius.circular(8.r),
-          border: Border.all(color: item.color.withOpacity(0.2)),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: EdgeInsets.all(6.w),
-              decoration: BoxDecoration(
-                color: item.color.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(6.r),
-              ),
-              child: Text(
-                item.type,
-                style: TextStyle(
-                  fontSize: 10.sp,
-                  fontWeight: FontWeight.w600,
-                  color: item.color,
-                ),
-              ),
-            ),
-            SizedBox(width: 12.w),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    item.title,
-                    style: TextStyle(
-                      fontSize: 13.sp,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                  SizedBox(height: 2.h),
-                  Text(
-                    item.subtitle,
-                    style: TextStyle(
-                      fontSize: 11.sp,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Icon(
-              Icons.arrow_forward_ios,
-              size: 12.sp,
-              color: AppColors.textSecondary,
-            ),
-          ],
-        ),
-      ),
-    );
+  Future<void> _handleChatListTap() async {
+    try {
+      // 채팅방 목록으로 이동
+      context.push(AppRoutes.chatList);
+    } catch (e) {
+      _showErrorSnackBar('채팅 목록을 불러올 수 없습니다.');
+    }
   }
 
   // === 헬퍼 메서드들 ===
 
   Future<void> _handleRefresh() async {
-    await Future.wait([
-      ref.read(chatRoomsProvider.notifier).loadChatRooms(),
-      ref.read(authProvider.notifier).refreshUser(),
-    ]);
-  }
-
-  String _formatTime(DateTime dateTime) {
-    final now = DateTime.now();
-    final difference = now.difference(dateTime);
-
-    if (difference.inDays > 0) {
-      return '${difference.inDays}일 전';
-    } else if (difference.inHours > 0) {
-      return '${difference.inHours}시간 전';
-    } else if (difference.inMinutes > 0) {
-      return '${difference.inMinutes}분 전';
-    } else {
-      return '방금 전';
+    try {
+      await ref.read(authProvider.notifier).refreshUser();
+    } catch (e) {
+      _showErrorSnackBar('새로고침에 실패했습니다.');
     }
   }
 
@@ -865,6 +541,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           ),
     );
   }
+
+  void _showErrorSnackBar(String message) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: AppColors.error,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
+  }
 }
 
 // === 데이터 클래스들 ===
@@ -875,29 +563,11 @@ class QuickAction {
   final IconData icon;
   final Color color;
   final VoidCallback onTap;
-  final int? badge;
 
   const QuickAction({
     required this.title,
     required this.subtitle,
     required this.icon,
-    required this.color,
-    required this.onTap,
-    this.badge,
-  });
-}
-
-class RecommendedItem {
-  final String title;
-  final String subtitle;
-  final String type;
-  final Color color;
-  final VoidCallback onTap;
-
-  const RecommendedItem({
-    required this.title,
-    required this.subtitle,
-    required this.type,
     required this.color,
     required this.onTap,
   });
