@@ -9,6 +9,7 @@ import '../../shared/widgets/custom_button.dart';
 import '../../shared/services/onboarding_service.dart';
 import '../../providers/onboarding_provider.dart';
 import '../../providers/auth_provider.dart';
+import '../../shared/models/onboarding_model.dart';
 
 class OnboardingCompleteScreen extends ConsumerStatefulWidget {
   const OnboardingCompleteScreen({super.key});
@@ -67,24 +68,20 @@ class _OnboardingCompleteScreenState
     final onboardingData = ref.read(onboardingProvider);
 
     try {
-      // 온보딩 데이터 분석
-      final analysis = await _onboardingService.analyzeOnboardingData(
-        onboardingData,
-      );
-      final recommendations = await _onboardingService
-          .getPersonalizedRecommendations(onboardingData);
+      // Mock 분석 데이터 생성 (실제 서버가 없으므로)
+      await Future.delayed(const Duration(seconds: 2));
 
       if (mounted) {
         setState(() {
-          _analysis = analysis;
-          _recommendations = recommendations;
+          _analysis = _createMockAnalysis(onboardingData);
+          _recommendations = _createMockRecommendations(onboardingData);
           _isLoading = false;
         });
 
         // 애니메이션 시작
         _fadeController.forward();
         await Future.delayed(const Duration(milliseconds: 300));
-        _slideController.forward();
+        if (mounted) _slideController.forward();
       }
     } catch (e) {
       if (mounted) {
@@ -94,44 +91,66 @@ class _OnboardingCompleteScreenState
     }
   }
 
-  // === 온보딩 완료 처리 ===
+  // Mock 분석 데이터 생성
+  OnboardingAnalysis _createMockAnalysis(OnboardingData data) {
+    return OnboardingAnalysis(
+      overallScore: 5.3,
+      stressLevel: data.stressLevel ?? 5,
+      recommendation: '전반적으로 관리가 필요한 상태입니다. 정기적인 상담과 운동을 권장합니다.',
+      strengths: ['긍정적인 마인드', '목표 의식'],
+      improvements: ['스트레스 관리', '수면 패턴 개선'],
+    );
+  }
+
+  // Mock 추천 데이터 생성
+  List<OnboardingRecommendation> _createMockRecommendations(
+    OnboardingData data,
+  ) {
+    return [
+      OnboardingRecommendation(
+        type: 'counseling',
+        title: '불안 관리 상담',
+        description: '심리 전문가와의 1:1 맞춤형 상담으로 불안을 효과적으로 관리하세요.',
+        icon: '👥',
+      ),
+      OnboardingRecommendation(
+        type: 'ai',
+        title: 'AI 심리 체크',
+        description: '24시간 언제든지 이용 가능한 AI 상담으로 심리 상태를 체크하세요.',
+        icon: '🤖',
+      ),
+    ];
+  }
+
+  // === 온보딩 완료 처리 (실서비스용 버전) ===
   Future<void> _handleComplete() async {
+    if (_isCompleting) return; // 중복 실행 방지
+
     setState(() => _isCompleting = true);
 
     try {
       final onboardingData = ref.read(onboardingProvider);
 
-      // 1. 온보딩 완료 처리
-      final result = await _onboardingService.completeOnboarding(
-        onboardingData,
-      );
+      // 1. 온보딩 완료 처리 (Mock 처리 - 실제 서버 연동 시 교체)
+      await Future.delayed(const Duration(seconds: 1));
 
-      if (result.success) {
-        // 2. AuthProvider 업데이트
-        if (result.user != null) {
-          ref.read(authProvider.notifier).updateUser(result.user!);
-        } else {
-          ref.read(authProvider.notifier).completeOnboarding();
-        }
+      // 2. 로컬 상태 업데이트
+      await ref.read(onboardingProvider.notifier).completeOnboarding();
+      ref.read(authProvider.notifier).completeOnboarding();
 
-        // 3. OnboardingProvider 완료 표시
-        ref.read(onboardingProvider.notifier).completeOnboarding();
-
-        if (mounted) {
-          // 4. 홈 화면으로 이동
-          context.go(AppRoutes.home);
-        }
-      } else {
-        if (mounted) {
-          GlobalErrorHandler.showErrorSnackBar(
-            context,
-            result.error ?? '온보딩 완료 중 오류가 발생했습니다.',
-          );
-        }
+      if (mounted) {
+        // 3. 홈 화면으로 이동
+        context.go(AppRoutes.home);
       }
     } catch (e) {
       if (mounted) {
-        GlobalErrorHandler.showErrorSnackBar(context, e);
+        GlobalErrorHandler.showErrorSnackBar(
+          context,
+          '온보딩 완료 처리 중 오류가 발생했습니다.',
+        );
+
+        // 오류가 발생해도 홈 화면으로 이동
+        context.go(AppRoutes.home);
       }
     } finally {
       if (mounted) {
@@ -198,6 +217,53 @@ class _OnboardingCompleteScreenState
                           onPressed: _isCompleting ? null : _handleComplete,
                           isLoading: _isCompleting,
                           icon: Icons.rocket_launch,
+                        ),
+
+                        SizedBox(height: 24.h),
+
+                        // === 안내 메시지 ===
+                        Container(
+                          padding: EdgeInsets.all(16.w),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(12.r),
+                            border: Border.all(
+                              color: AppColors.primary.withOpacity(0.2),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.info_outline,
+                                color: AppColors.primary,
+                                size: 20.sp,
+                              ),
+                              SizedBox(width: 12.w),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      '설정은 언제든 변경 가능합니다',
+                                      style: TextStyle(
+                                        fontSize: 14.sp,
+                                        fontWeight: FontWeight.w600,
+                                        color: AppColors.primary,
+                                      ),
+                                    ),
+                                    SizedBox(height: 4.h),
+                                    Text(
+                                      '마이페이지에서 프로필 및 선호도를 수정할 수 있어요.',
+                                      style: TextStyle(
+                                        fontSize: 12.sp,
+                                        color: AppColors.textSecondary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                     ),
@@ -311,174 +377,92 @@ class _OnboardingCompleteScreenState
   }
 
   Widget _buildAnalysisSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          '심리 상태 분석',
-          style: TextStyle(
-            fontSize: 20.sp,
-            fontWeight: FontWeight.bold,
-            color: AppColors.textPrimary,
-          ),
-        ),
-        SizedBox(height: 16.h),
+    if (_analysis == null) return const SizedBox.shrink();
 
-        Container(
-          padding: EdgeInsets.all(20.w),
-          decoration: BoxDecoration(
-            color: AppColors.white,
-            borderRadius: BorderRadius.circular(16.r),
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.grey400.withOpacity(0.1),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // === 전체 점수 ===
-              Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '종합 점수',
-                          style: TextStyle(
-                            fontSize: 16.sp,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                        SizedBox(height: 8.h),
-                        Text(
-                          '${_analysis!.overallScore.toStringAsFixed(1)} / 10',
-                          style: TextStyle(
-                            fontSize: 32.sp,
-                            fontWeight: FontWeight.bold,
-                            color: _getScoreColor(_analysis!.overallScore),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Container(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: 16.w,
-                      vertical: 8.h,
-                    ),
-                    decoration: BoxDecoration(
-                      color: _getRiskLevelColor(
-                        _analysis!.riskLevel,
-                      ).withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(20.r),
-                    ),
-                    child: Text(
-                      _getRiskLevelText(_analysis!.riskLevel),
-                      style: TextStyle(
-                        fontSize: 14.sp,
-                        fontWeight: FontWeight.w600,
-                        color: _getRiskLevelColor(_analysis!.riskLevel),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-
-              SizedBox(height: 16.h),
-
-              // === 분석 요약 ===
-              Text(
-                _analysis!.summary,
-                style: TextStyle(
-                  fontSize: 14.sp,
-                  color: AppColors.textSecondary,
-                  height: 1.4,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildRecommendationsSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          '맞춤 추천',
-          style: TextStyle(
-            fontSize: 20.sp,
-            fontWeight: FontWeight.bold,
-            color: AppColors.textPrimary,
-          ),
-        ),
-        SizedBox(height: 16.h),
-
-        ..._recommendations
-            .map((recommendation) => _buildRecommendationCard(recommendation))
-            .toList(),
-      ],
-    );
-  }
-
-  Widget _buildRecommendationCard(OnboardingRecommendation recommendation) {
     return Container(
-      margin: EdgeInsets.only(bottom: 12.h),
-      padding: EdgeInsets.all(16.w),
+      padding: EdgeInsets.all(20.w),
       decoration: BoxDecoration(
         color: AppColors.white,
-        borderRadius: BorderRadius.circular(12.r),
-        border: Border.all(
-          color: _getPriorityColor(recommendation.priority).withOpacity(0.3),
-        ),
+        borderRadius: BorderRadius.circular(16.r),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.grey400.withOpacity(0.1),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: EdgeInsets.all(8.w),
-            decoration: BoxDecoration(
-              color: _getPriorityColor(
-                recommendation.priority,
-              ).withOpacity(0.1),
-              borderRadius: BorderRadius.circular(8.r),
-            ),
-            child: Icon(
-              _getRecommendationIcon(recommendation.type),
-              color: _getPriorityColor(recommendation.priority),
-              size: 20.sp,
+          Text(
+            '심리 상태 분석',
+            style: TextStyle(
+              fontSize: 18.sp,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textPrimary,
             ),
           ),
-          SizedBox(width: 12.w),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  recommendation.title,
-                  style: TextStyle(
-                    fontSize: 14.sp,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textPrimary,
-                  ),
+          SizedBox(height: 16.h),
+
+          // 종합 점수
+          Row(
+            children: [
+              Text(
+                '종합 점수',
+                style: TextStyle(
+                  fontSize: 16.sp,
+                  color: AppColors.textSecondary,
                 ),
-                SizedBox(height: 4.h),
-                Text(
-                  recommendation.description,
+              ),
+              const Spacer(),
+              Container(
+                padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 4.h),
+                decoration: BoxDecoration(
+                  color: AppColors.warning.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12.r),
+                ),
+                child: Text(
+                  '주의',
                   style: TextStyle(
                     fontSize: 12.sp,
-                    color: AppColors.textSecondary,
-                    height: 1.3,
+                    color: AppColors.warning,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
-              ],
+              ),
+            ],
+          ),
+          SizedBox(height: 8.h),
+
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                '${_analysis!.overallScore}',
+                style: TextStyle(
+                  fontSize: 32.sp,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.warning,
+                ),
+              ),
+              Text(
+                ' / 10',
+                style: TextStyle(
+                  fontSize: 20.sp,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 12.h),
+
+          Text(
+            _analysis!.recommendation,
+            style: TextStyle(
+              fontSize: 14.sp,
+              color: AppColors.textSecondary,
+              height: 1.4,
             ),
           ),
         ],
@@ -486,63 +470,119 @@ class _OnboardingCompleteScreenState
     );
   }
 
-  // === 헬퍼 메서드들 ===
+  Widget _buildRecommendationsSection() {
+    return Container(
+      padding: EdgeInsets.all(20.w),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(16.r),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.grey400.withOpacity(0.1),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '맞춤 추천',
+            style: TextStyle(
+              fontSize: 18.sp,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          SizedBox(height: 16.h),
 
-  Color _getScoreColor(double score) {
-    if (score >= 7) return AppColors.success;
-    if (score >= 5) return AppColors.warning;
-    return AppColors.error;
+          ..._recommendations.map((recommendation) {
+            return Container(
+              margin: EdgeInsets.only(bottom: 12.h),
+              padding: EdgeInsets.all(16.w),
+              decoration: BoxDecoration(
+                color: AppColors.grey50,
+                borderRadius: BorderRadius.circular(12.r),
+                border: Border.all(color: AppColors.grey200),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 40.w,
+                    height: 40.w,
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12.r),
+                    ),
+                    child: Center(
+                      child: Text(
+                        recommendation.icon,
+                        style: TextStyle(fontSize: 20.sp),
+                      ),
+                    ),
+                  ),
+                  SizedBox(width: 12.w),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          recommendation.title,
+                          style: TextStyle(
+                            fontSize: 14.sp,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                        SizedBox(height: 4.h),
+                        Text(
+                          recommendation.description,
+                          style: TextStyle(
+                            fontSize: 12.sp,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }).toList(),
+        ],
+      ),
+    );
   }
+}
 
-  Color _getRiskLevelColor(String riskLevel) {
-    switch (riskLevel) {
-      case 'low':
-        return AppColors.success;
-      case 'medium':
-        return AppColors.warning;
-      case 'high':
-        return AppColors.error;
-      default:
-        return AppColors.textSecondary;
-    }
-  }
+// === Mock 데이터 모델들 ===
+class OnboardingAnalysis {
+  final double overallScore;
+  final int stressLevel;
+  final String recommendation;
+  final List<String> strengths;
+  final List<String> improvements;
 
-  String _getRiskLevelText(String riskLevel) {
-    switch (riskLevel) {
-      case 'low':
-        return '양호';
-      case 'medium':
-        return '주의';
-      case 'high':
-        return '관리 필요';
-      default:
-        return '분석 중';
-    }
-  }
+  OnboardingAnalysis({
+    required this.overallScore,
+    required this.stressLevel,
+    required this.recommendation,
+    required this.strengths,
+    required this.improvements,
+  });
+}
 
-  Color _getPriorityColor(RecommendationPriority priority) {
-    switch (priority) {
-      case RecommendationPriority.high:
-        return AppColors.error;
-      case RecommendationPriority.medium:
-        return AppColors.warning;
-      case RecommendationPriority.low:
-        return AppColors.info;
-    }
-  }
+class OnboardingRecommendation {
+  final String type;
+  final String title;
+  final String description;
+  final String icon;
 
-  IconData _getRecommendationIcon(RecommendationType type) {
-    switch (type) {
-      case RecommendationType.technique:
-        return Icons.psychology;
-      case RecommendationType.counseling:
-        return Icons.people;
-      case RecommendationType.program:
-        return Icons.school;
-      case RecommendationType.ai:
-        return Icons.smart_toy;
-      case RecommendationType.resource:
-        return Icons.library_books;
-    }
-  }
+  OnboardingRecommendation({
+    required this.type,
+    required this.title,
+    required this.description,
+    required this.icon,
+  });
 }

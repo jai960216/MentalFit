@@ -1,273 +1,243 @@
-// 기본 API 응답 래퍼
 class ApiResponse<T> {
   final bool success;
   final T? data;
-  final String? message;
   final String? error;
   final int? statusCode;
-  final Map<String, dynamic>? meta;
+  final Map<String, dynamic>? metadata;
 
-  const ApiResponse({
+  const ApiResponse._({
     required this.success,
     this.data,
-    this.message,
     this.error,
     this.statusCode,
-    this.meta,
+    this.metadata,
   });
 
   // 성공 응답 생성
-  factory ApiResponse.success({
-    required T data,
-    String? message,
+  factory ApiResponse.success(
+    T data, {
     int? statusCode,
-    Map<String, dynamic>? meta,
+    Map<String, dynamic>? metadata,
   }) {
-    return ApiResponse<T>(
+    return ApiResponse._(
       success: true,
       data: data,
-      message: message,
-      statusCode: statusCode,
-      meta: meta,
+      statusCode: statusCode ?? 200,
+      metadata: metadata,
     );
   }
 
-  // 실패 응답 생성
-  factory ApiResponse.error({
-    required String error,
-    String? message,
+  // 에러 응답 생성
+  factory ApiResponse.error(
+    String error, {
     int? statusCode,
-    Map<String, dynamic>? meta,
+    Map<String, dynamic>? metadata,
   }) {
-    return ApiResponse<T>(
+    return ApiResponse._(
       success: false,
       error: error,
-      message: message,
       statusCode: statusCode,
-      meta: meta,
+      metadata: metadata,
     );
   }
 
-  // JSON에서 변환
-  factory ApiResponse.fromJson(
-    Map<String, dynamic> json,
-    T Function(Map<String, dynamic>)? fromJsonT,
-  ) {
-    try {
-      final success = json['success'] as bool? ?? false;
+  // 로딩 상태 (선택적)
+  factory ApiResponse.loading() {
+    return const ApiResponse._(success: false);
+  }
 
-      T? data;
-      if (success && json['data'] != null && fromJsonT != null) {
-        if (json['data'] is List) {
-          // 리스트 데이터 처리
-          final List<dynamic> dataList = json['data'] as List<dynamic>;
-          data =
-              dataList
-                      .map((item) => fromJsonT(item as Map<String, dynamic>))
-                      .toList()
-                  as T;
-        } else if (json['data'] is Map<String, dynamic>) {
-          // 단일 객체 데이터 처리
-          data = fromJsonT(json['data'] as Map<String, dynamic>);
-        } else {
-          // 기본 타입 (String, int, bool 등)
-          data = json['data'] as T?;
-        }
-      } else {
-        data = json['data'] as T?;
+  // 응답 데이터 변환
+  ApiResponse<R> map<R>(R Function(T) mapper) {
+    if (success && data != null) {
+      try {
+        final mappedData = mapper(data!);
+        return ApiResponse.success(
+          mappedData,
+          statusCode: statusCode,
+          metadata: metadata,
+        );
+      } catch (e) {
+        return ApiResponse.error(
+          '데이터 변환 중 오류가 발생했습니다: $e',
+          statusCode: statusCode,
+          metadata: metadata,
+        );
       }
-
-      return ApiResponse<T>(
-        success: success,
-        data: data,
-        message: json['message'] as String?,
-        error: json['error'] as String?,
-        statusCode: json['statusCode'] as int?,
-        meta: json['meta'] as Map<String, dynamic>?,
+    } else {
+      return ApiResponse.error(
+        error ?? '데이터가 없습니다.',
+        statusCode: statusCode,
+        metadata: metadata,
       );
-    } catch (e) {
-      return ApiResponse.error(error: 'JSON 파싱 오류: $e', statusCode: -1);
     }
   }
 
-  // JSON으로 변환
-  Map<String, dynamic> toJson() {
-    return {
-      'success': success,
-      'data': data,
-      'message': message,
-      'error': error,
-      'statusCode': statusCode,
-      'meta': meta,
-    };
+  // 조건부 실행
+  ApiResponse<T> when({
+    required Function(T data) onSuccess,
+    required Function(String error) onError,
+  }) {
+    if (success && data != null) {
+      onSuccess(data!);
+    } else {
+      onError(error ?? '알 수 없는 오류가 발생했습니다.');
+    }
+    return this;
   }
+
+  // 데이터 존재 여부 확인
+  bool get hasData => success && data != null;
+
+  // 에러 존재 여부 확인
+  bool get hasError => !success && error != null;
+
+  // 성공 여부와 데이터 존재 여부 모두 확인
+  bool get isSuccessful => success && data != null;
 
   @override
   String toString() {
-    return 'ApiResponse(success: $success, message: $message, error: $error)';
+    return 'ApiResponse(success: $success, data: $data, error: $error, statusCode: $statusCode)';
+  }
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is ApiResponse<T> &&
+        other.success == success &&
+        other.data == data &&
+        other.error == error &&
+        other.statusCode == statusCode;
+  }
+
+  @override
+  int get hashCode {
+    return success.hashCode ^
+        data.hashCode ^
+        error.hashCode ^
+        statusCode.hashCode;
   }
 }
 
-// 페이징 처리된 응답
-class PaginatedResponse<T> {
-  final List<T> data;
-  final PaginationMeta pagination;
-
-  const PaginatedResponse({required this.data, required this.pagination});
-
-  factory PaginatedResponse.fromJson(
-    Map<String, dynamic> json,
-    T Function(Map<String, dynamic>) fromJsonT,
-  ) {
-    final List<dynamic> dataList = json['data'] as List<dynamic>;
-    final List<T> data =
-        dataList
-            .map((item) => fromJsonT(item as Map<String, dynamic>))
-            .toList();
-
-    return PaginatedResponse<T>(
-      data: data,
-      pagination: PaginationMeta.fromJson(
-        json['pagination'] as Map<String, dynamic>,
-      ),
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {'data': data, 'pagination': pagination.toJson()};
-  }
-}
-
-// 페이징 메타데이터
-class PaginationMeta {
+// 페이지네이션을 위한 확장 ApiResponse
+class PaginatedApiResponse<T> extends ApiResponse<List<T>> {
   final int currentPage;
   final int totalPages;
   final int totalItems;
-  final int itemsPerPage;
   final bool hasNextPage;
   final bool hasPreviousPage;
 
-  const PaginationMeta({
+  const PaginatedApiResponse._({
+    required bool success,
+    List<T>? data,
+    String? error,
+    int? statusCode,
+    Map<String, dynamic>? metadata,
     required this.currentPage,
     required this.totalPages,
     required this.totalItems,
-    required this.itemsPerPage,
     required this.hasNextPage,
     required this.hasPreviousPage,
-  });
+  }) : super._(
+         success: success,
+         data: data,
+         error: error,
+         statusCode: statusCode,
+         metadata: metadata,
+       );
 
-  factory PaginationMeta.fromJson(Map<String, dynamic> json) {
-    return PaginationMeta(
-      currentPage: json['currentPage'] as int,
-      totalPages: json['totalPages'] as int,
-      totalItems: json['totalItems'] as int,
-      itemsPerPage: json['itemsPerPage'] as int,
-      hasNextPage: json['hasNextPage'] as bool,
-      hasPreviousPage: json['hasPreviousPage'] as bool,
+  factory PaginatedApiResponse.success(
+    List<T> data, {
+    required int currentPage,
+    required int totalPages,
+    required int totalItems,
+    int? statusCode,
+    Map<String, dynamic>? metadata,
+  }) {
+    return PaginatedApiResponse._(
+      success: true,
+      data: data,
+      currentPage: currentPage,
+      totalPages: totalPages,
+      totalItems: totalItems,
+      hasNextPage: currentPage < totalPages,
+      hasPreviousPage: currentPage > 1,
+      statusCode: statusCode ?? 200,
+      metadata: metadata,
     );
   }
 
-  Map<String, dynamic> toJson() {
-    return {
-      'currentPage': currentPage,
-      'totalPages': totalPages,
-      'totalItems': totalItems,
-      'itemsPerPage': itemsPerPage,
-      'hasNextPage': hasNextPage,
-      'hasPreviousPage': hasPreviousPage,
-    };
+  factory PaginatedApiResponse.error(
+    String error, {
+    int? statusCode,
+    Map<String, dynamic>? metadata,
+  }) {
+    return PaginatedApiResponse._(
+      success: false,
+      error: error,
+      currentPage: 0,
+      totalPages: 0,
+      totalItems: 0,
+      hasNextPage: false,
+      hasPreviousPage: false,
+      statusCode: statusCode,
+      metadata: metadata,
+    );
   }
 
   @override
   String toString() {
-    return 'PaginationMeta(page: $currentPage/$totalPages, total: $totalItems)';
+    return 'PaginatedApiResponse(success: $success, data: ${data?.length} items, currentPage: $currentPage, totalPages: $totalPages, totalItems: $totalItems)';
   }
 }
 
-// API 요청 결과 래퍼
-class ApiResult<T> {
-  final T? data;
-  final ApiException? error;
+// API 응답 상태 열거형
+enum ApiResponseStatus { loading, success, error, empty }
 
-  const ApiResult.success(this.data) : error = null;
-  const ApiResult.failure(this.error) : data = null;
-
-  bool get isSuccess => error == null;
-  bool get isFailure => error != null;
-
-  // 성공 시 데이터 반환, 실패 시 예외 발생
-  T get() {
-    if (isSuccess) {
-      return data!;
+// API 응답 결과 확장 메서드
+extension ApiResponseExtensions<T> on ApiResponse<T> {
+  // 상태 확인
+  ApiResponseStatus get status {
+    if (!success) {
+      return ApiResponseStatus.error;
+    } else if (data == null) {
+      return ApiResponseStatus.empty;
     } else {
-      throw error!;
+      return ApiResponseStatus.success;
     }
   }
 
-  // 성공 시 데이터 반환, 실패 시 기본값 반환
-  T getOrElse(T defaultValue) {
-    return isSuccess ? data! : defaultValue;
+  // 데이터 또는 기본값 반환
+  T? dataOrNull() => success ? data : null;
+
+  R? dataOrDefault<R>(R defaultValue) {
+    if (success && data != null && data is R) {
+      return data as R;
+    }
+    return defaultValue;
   }
 
-  // 데이터 변환
-  ApiResult<R> map<R>(R Function(T) mapper) {
-    if (isSuccess) {
+  // 에러 메시지 또는 기본 메시지 반환
+  String get errorMessage => error ?? '알 수 없는 오류가 발생했습니다.';
+
+  // 성공 데이터에 함수 적용
+  ApiResponse<R> fold<R>(
+    R Function(T data) onSuccess,
+    R Function(String error) onError,
+  ) {
+    if (success && data != null) {
       try {
-        return ApiResult.success(mapper(data!));
+        final result = onSuccess(data!);
+        return ApiResponse.success(result);
       } catch (e) {
-        return ApiResult.failure(ApiException.unknown(e.toString()));
+        return ApiResponse.error('처리 중 오류가 발생했습니다: $e');
       }
     } else {
-      return ApiResult.failure(error!);
+      try {
+        final result = onError(error ?? '데이터가 없습니다.');
+        return ApiResponse.success(result);
+      } catch (e) {
+        return ApiResponse.error('오류 처리 중 문제가 발생했습니다: $e');
+      }
     }
-  }
-
-  @override
-  String toString() {
-    return isSuccess ? 'ApiResult.success($data)' : 'ApiResult.failure($error)';
-  }
-}
-
-// API 예외 클래스 (간단한 버전)
-class ApiException implements Exception {
-  final String message;
-  final String? code;
-  final int? statusCode;
-  final Map<String, dynamic>? details;
-
-  const ApiException({
-    required this.message,
-    this.code,
-    this.statusCode,
-    this.details,
-  });
-
-  factory ApiException.network(String message) {
-    return ApiException(message: message, code: 'NETWORK_ERROR');
-  }
-
-  factory ApiException.unauthorized(String message) {
-    return ApiException(
-      message: message,
-      code: 'UNAUTHORIZED',
-      statusCode: 401,
-    );
-  }
-
-  factory ApiException.serverError(String message, int statusCode) {
-    return ApiException(
-      message: message,
-      code: 'SERVER_ERROR',
-      statusCode: statusCode,
-    );
-  }
-
-  factory ApiException.unknown(String message) {
-    return ApiException(message: message, code: 'UNKNOWN_ERROR');
-  }
-
-  @override
-  String toString() {
-    return 'ApiException(code: $code, message: $message, statusCode: $statusCode)';
   }
 }

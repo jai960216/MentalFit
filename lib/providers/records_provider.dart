@@ -417,12 +417,7 @@ final recordsByDateRangeProvider =
       final recordsState = ref.watch(recordsProvider);
 
       return recordsState.records.where((record) {
-        return record.sessionDate.isAfter(
-              dateRange.start.subtract(const Duration(days: 1)),
-            ) &&
-            record.sessionDate.isBefore(
-              dateRange.end.add(const Duration(days: 1)),
-            );
+        return dateRange.contains(record.sessionDate);
       }).toList();
     });
 
@@ -437,78 +432,36 @@ final recordsByRatingProvider = Provider.family<List<CounselingRecord>, double>(
   },
 );
 
-// 상담사별 기록 Provider
-final recordsByCounselorProvider =
-    Provider.family<List<CounselingRecord>, String>((ref, counselorName) {
-      final recordsState = ref.watch(recordsProvider);
-
-      return recordsState.records
-          .where((record) => record.counselorName == counselorName)
-          .toList();
-    });
-
-// 태그별 기록 Provider
-final recordsByTagProvider = Provider.family<List<CounselingRecord>, String>((
-  ref,
-  tag,
-) {
+// 로딩 상태 Provider
+final recordsLoadingProvider = Provider<bool>((ref) {
   final recordsState = ref.watch(recordsProvider);
-
-  return recordsState.records
-      .where((record) => record.tags.contains(tag))
-      .toList();
+  return recordsState.isLoading;
 });
 
-// 진행률 계산 Provider (이번 달 목표 대비)
-final monthlyProgressProvider = Provider<double>((ref) {
+// 에러 상태 Provider
+final recordsErrorProvider = Provider<String?>((ref) {
   final recordsState = ref.watch(recordsProvider);
-  final now = DateTime.now();
-  final thisMonth = DateTime(now.year, now.month);
-  final nextMonth = DateTime(now.year, now.month + 1);
-
-  final thisMonthRecords =
-      recordsState.records.where((record) {
-        return record.sessionDate.isAfter(
-              thisMonth.subtract(const Duration(days: 1)),
-            ) &&
-            record.sessionDate.isBefore(nextMonth);
-      }).length;
-
-  const monthlyGoal = 4; // 월 4회 목표
-  return (thisMonthRecords / monthlyGoal).clamp(0.0, 1.0);
+  return recordsState.error;
 });
 
-// === 헬퍼 클래스들 ===
+// 기록 개수 Provider
+final recordsCountProvider = Provider<int>((ref) {
+  final recordsState = ref.watch(recordsProvider);
+  return recordsState.records.length;
+});
 
-class DateRange {
-  final DateTime start;
-  final DateTime end;
+// 평균 평점 Provider
+final averageRatingProvider = Provider<double>((ref) {
+  final recordsState = ref.watch(recordsProvider);
 
-  const DateRange({required this.start, required this.end});
+  final ratedRecords =
+      recordsState.records.where((record) => record.rating != null).toList();
 
-  // 이번 주
-  factory DateRange.thisWeek() {
-    final now = DateTime.now();
-    final weekStart = now.subtract(Duration(days: now.weekday - 1));
-    final weekEnd = weekStart.add(const Duration(days: 6));
-    return DateRange(start: weekStart, end: weekEnd);
-  }
+  if (ratedRecords.isEmpty) return 0.0;
 
-  // 이번 달
-  factory DateRange.thisMonth() {
-    final now = DateTime.now();
-    final monthStart = DateTime(now.year, now.month);
-    final monthEnd = DateTime(
-      now.year,
-      now.month + 1,
-    ).subtract(const Duration(days: 1));
-    return DateRange(start: monthStart, end: monthEnd);
-  }
+  final totalRating = ratedRecords
+      .map((record) => record.rating!)
+      .reduce((a, b) => a + b);
 
-  // 최근 30일
-  factory DateRange.last30Days() {
-    final now = DateTime.now();
-    final start = now.subtract(const Duration(days: 30));
-    return DateRange(start: start, end: now);
-  }
-}
+  return totalRating / ratedRecords.length;
+});

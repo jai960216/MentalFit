@@ -84,7 +84,8 @@ class CounselingRecord {
       'rating': rating,
       'feedback': feedback,
       'tags': tags,
-      'attachments': attachments.map((a) => a.toJson()).toList(),
+      'attachments':
+          attachments.map((attachment) => attachment.toJson()).toList(),
       'status': status.value,
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
@@ -400,20 +401,77 @@ class RecordStats {
     );
   }
 
-  // 총 상담 시간 텍스트
-  String get totalDurationText {
-    final hours = totalDurationMinutes ~/ 60;
-    final minutes = totalDurationMinutes % 60;
+  Map<String, dynamic> toJson() {
+    return {
+      'totalRecords': totalRecords,
+      'aiRecords': aiRecords,
+      'counselorRecords': counselorRecords,
+      'groupRecords': groupRecords,
+      'selfCheckRecords': selfCheckRecords,
+      'averageRating': averageRating,
+      'totalDurationMinutes': totalDurationMinutes,
+      'lastSessionDate': lastSessionDate?.toIso8601String(),
+    };
+  }
 
-    if (hours > 0) {
-      return '${hours}시간 ${minutes}분';
+  /// 총 상담 시간 (시간 단위)
+  double get totalHours => totalDurationMinutes / 60.0;
+
+  /// 평균 상담 시간 (분)
+  double get averageDurationMinutes {
+    return totalRecords > 0 ? totalDurationMinutes / totalRecords : 0.0;
+  }
+
+  /// 이번 달 활동 여부
+  bool get hasActivityThisMonth {
+    if (lastSessionDate == null) return false;
+    final now = DateTime.now();
+    return lastSessionDate!.year == now.year &&
+        lastSessionDate!.month == now.month;
+  }
+}
+
+// DateRange 클래스 - Provider에서 사용
+class DateRange {
+  final DateTime start;
+  final DateTime end;
+
+  const DateRange({required this.start, required this.end});
+
+  /// 두 날짜 사이의 일수 계산
+  int get daysBetween {
+    return end.difference(start).inDays + 1;
+  }
+
+  /// 기간 텍스트 생성
+  String get displayText {
+    if (start.year == end.year &&
+        start.month == end.month &&
+        start.day == end.day) {
+      // 같은 날
+      return '${start.year}년 ${start.month}월 ${start.day}일';
     } else {
-      return '${minutes}분';
+      // 다른 날
+      return '${start.year}년 ${start.month}월 ${start.day}일 ~ '
+          '${end.year}년 ${end.month}월 ${end.day}일';
     }
   }
 
-  // 평균 평점 텍스트
-  String get averageRatingText {
-    return averageRating > 0 ? averageRating.toStringAsFixed(1) : '-';
+  /// 특정 날짜가 이 범위에 포함되는지 확인
+  bool contains(DateTime date) {
+    return date.isAfter(start.subtract(const Duration(days: 1))) &&
+        date.isBefore(end.add(const Duration(days: 1)));
   }
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is DateRange && other.start == start && other.end == end;
+  }
+
+  @override
+  int get hashCode => start.hashCode ^ end.hashCode;
+
+  @override
+  String toString() => 'DateRange(start: $start, end: $end)';
 }

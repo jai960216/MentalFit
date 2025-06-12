@@ -54,12 +54,19 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Future<void> _initializeServices() async {
     if (_initialized) return;
 
-    _authService = await AuthService.getInstance();
-    _socialAuthService = await SocialAuthService.getInstance();
-    _initialized = true;
+    try {
+      _authService = await AuthService.getInstance();
+      _socialAuthService = await SocialAuthService.getInstance();
+      _initialized = true;
 
-    // 자동 로그인 체크
-    await checkAutoLogin();
+      // 자동 로그인 체크
+      await checkAutoLogin();
+    } catch (e) {
+      state = state.copyWith(
+        error: '서비스 초기화 중 오류가 발생했습니다: $e',
+        status: AuthStatus.error,
+      );
+    }
   }
 
   // === 자동 로그인 체크 ===
@@ -93,12 +100,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
         isLoading: false,
         isLoggedIn: false,
         status: AuthStatus.error,
-        error: e.toString(),
+        error: '자동 로그인 확인 중 오류가 발생했습니다: $e',
       );
     }
   }
 
-  // === 로그인 ===
+  // === 이메일 로그인 ===
   Future<AuthResult> login({
     required String email,
     required String password,
@@ -135,7 +142,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       state = state.copyWith(
         isLoading: false,
         status: AuthStatus.error,
-        error: e.toString(),
+        error: '로그인 중 오류가 발생했습니다: $e',
       );
       return AuthResult.failure(e.toString());
     }
@@ -185,14 +192,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
       state = state.copyWith(
         isLoading: false,
         status: AuthStatus.error,
-        error: e.toString(),
+        error: '회원가입 중 오류가 발생했습니다: $e',
       );
       return AuthResult.failure(e.toString());
     }
   }
 
-  // === 소셜 로그인 ===
-  Future<AuthResult> socialLogin({required SocialLoginType type}) async {
+  // === Google 소셜 로그인 ===
+  Future<AuthResult> signInWithGoogle() async {
     if (!_initialized) await _initializeServices();
 
     state = state.copyWith(
@@ -202,16 +209,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     );
 
     try {
-      AuthResult result;
-
-      switch (type) {
-        case SocialLoginType.google:
-          result = await _socialAuthService.signInWithGoogle();
-          break;
-        case SocialLoginType.kakao:
-          result = await _socialAuthService.signInWithKakao();
-          break;
-      }
+      final result = await _socialAuthService.signInWithGoogle();
 
       if (result.success && result.user != null) {
         state = state.copyWith(
@@ -234,7 +232,47 @@ class AuthNotifier extends StateNotifier<AuthState> {
       state = state.copyWith(
         isLoading: false,
         status: AuthStatus.error,
-        error: e.toString(),
+        error: 'Google 로그인 중 오류가 발생했습니다: $e',
+      );
+      return AuthResult.failure(e.toString());
+    }
+  }
+
+  // === Kakao 소셜 로그인 ===
+  Future<AuthResult> signInWithKakao() async {
+    if (!_initialized) await _initializeServices();
+
+    state = state.copyWith(
+      isLoading: true,
+      error: null,
+      status: AuthStatus.loading,
+    );
+
+    try {
+      final result = await _socialAuthService.signInWithKakao();
+
+      if (result.success && result.user != null) {
+        state = state.copyWith(
+          user: result.user,
+          isLoading: false,
+          isLoggedIn: true,
+          status: AuthStatus.authenticated,
+          error: null,
+        );
+      } else {
+        state = state.copyWith(
+          isLoading: false,
+          status: AuthStatus.error,
+          error: result.error,
+        );
+      }
+
+      return result;
+    } catch (e) {
+      state = state.copyWith(
+        isLoading: false,
+        status: AuthStatus.error,
+        error: 'Kakao 로그인 중 오류가 발생했습니다: $e',
       );
       return AuthResult.failure(e.toString());
     }
@@ -247,25 +285,52 @@ class AuthNotifier extends StateNotifier<AuthState> {
     state = state.copyWith(isLoading: true);
 
     try {
-      await _authService.logout();
+      // 모든 소셜 로그인 로그아웃
       await _socialAuthService.signOutAll();
+
+      // 서버 로그아웃
+      await _authService.logout();
 
       state = const AuthState(
         status: AuthStatus.unauthenticated,
         isLoading: false,
       );
     } catch (e) {
-      state = state.copyWith(isLoading: false, error: e.toString());
+      // 로그아웃은 실패해도 로컬 상태는 초기화
+      state = const AuthState(
+        status: AuthStatus.unauthenticated,
+        isLoading: false,
+      );
+    }
+  }
+
+  // === 비밀번호 재설정 ===
+  Future<bool> resetPassword(String email) async {
+    if (!_initialized) await _initializeServices();
+
+    state = state.copyWith(isLoading: true, error: null);
+
+    try {
+      final success = await _authService.resetPassword(email);
+
+      state = state.copyWith(
+        isLoading: false,
+        error: success ? null : '비밀번호 재설정 요청에 실패했습니다.',
+      );
+
+      return success;
+    } catch (e) {
+      state = state.copyWith(
+        isLoading: false,
+        error: '비밀번호 재설정 중 오류가 발생했습니다: $e',
+      );
+      return false;
     }
   }
 
   // === 사용자 정보 업데이트 ===
   void updateUser(User user) {
-    state = state.copyWith(
-      user: user,
-      isLoggedIn: true,
-      status: AuthStatus.authenticated,
-    );
+    state = state.copyWith(user: user);
   }
 
   // === 프로필 업데이트 ===
@@ -293,7 +358,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       }
       return false;
     } catch (e) {
-      state = state.copyWith(error: e.toString());
+      state = state.copyWith(error: '프로필 업데이트 중 오류가 발생했습니다: $e');
       return false;
     }
   }
@@ -319,7 +384,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         updateUser(user);
       }
     } catch (e) {
-      state = state.copyWith(error: e.toString());
+      state = state.copyWith(error: '사용자 정보 새로고침 중 오류가 발생했습니다: $e');
     }
   }
 
@@ -331,12 +396,18 @@ class AuthNotifier extends StateNotifier<AuthState> {
     if (!_initialized) await _initializeServices();
 
     try {
-      return await _authService.changePassword(
+      final success = await _authService.changePassword(
         currentPassword: currentPassword,
         newPassword: newPassword,
       );
+
+      if (!success) {
+        state = state.copyWith(error: '비밀번호 변경에 실패했습니다.');
+      }
+
+      return success;
     } catch (e) {
-      state = state.copyWith(error: e.toString());
+      state = state.copyWith(error: '비밀번호 변경 중 오류가 발생했습니다: $e');
       return false;
     }
   }
@@ -349,15 +420,20 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final success = await _authService.deleteAccount(password);
 
       if (success) {
+        // 모든 소셜 로그인 연결 해제
+        await _socialAuthService.signOutAll();
+
         state = const AuthState(
           status: AuthStatus.unauthenticated,
           isLoading: false,
         );
+      } else {
+        state = state.copyWith(error: '계정 삭제에 실패했습니다.');
       }
 
       return success;
     } catch (e) {
-      state = state.copyWith(error: e.toString());
+      state = state.copyWith(error: '계정 삭제 중 오류가 발생했습니다: $e');
       return false;
     }
   }
@@ -367,13 +443,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
     state = state.copyWith(error: null);
   }
 
-  // === 로그인 상태 확인 ===
+  // === 상태 확인 메서드들 ===
   bool get isAuthenticated => state.isLoggedIn && state.user != null;
-
-  // === 온보딩 완료 여부 ===
   bool get isOnboardingCompleted => state.user?.isOnboardingCompleted ?? false;
-
-  // === 현재 사용자 ===
   User? get currentUser => state.user;
 }
 
@@ -411,6 +483,25 @@ final isAuthenticatedProvider = Provider<bool>((ref) {
 final isOnboardingCompletedProvider = Provider<bool>((ref) {
   final authNotifier = ref.watch(authProvider.notifier);
   return authNotifier.isOnboardingCompleted;
+});
+
+// 소셜 로그인 가능 여부 확인 Provider들
+final isGoogleAvailableProvider = FutureProvider<bool>((ref) async {
+  try {
+    final socialAuthService = await SocialAuthService.getInstance();
+    return await socialAuthService.isGoogleAvailable();
+  } catch (e) {
+    return false;
+  }
+});
+
+final isKakaoAvailableProvider = FutureProvider<bool>((ref) async {
+  try {
+    final socialAuthService = await SocialAuthService.getInstance();
+    return await socialAuthService.isKakaoAvailable();
+  } catch (e) {
+    return false;
+  }
 });
 
 // AuthService와 SocialAuthService Provider (의존성 주입용)

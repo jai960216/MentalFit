@@ -25,8 +25,8 @@ class AppColors {
   static const Color white = Color(0xFFFFFFFF);
   static const Color black = Color(0xFF000000);
 
-  // Grey Scale (50부터 900까지 추가)
-  static const Color grey50 = Color(0xFFFAFAFA); // 추가
+  // Grey Scale
+  static const Color grey50 = Color(0xFFFAFAFA);
   static const Color grey100 = Color(0xFFF5F5F5);
   static const Color grey200 = Color(0xFFEEEEEE);
   static const Color grey300 = Color(0xFFE0E0E0);
@@ -37,7 +37,7 @@ class AppColors {
   static const Color grey800 = Color(0xFF424242);
   static const Color grey900 = Color(0xFF212121);
 
-  // 추가 색상들 (상담 앱에 필요한)
+  // 추가 색상들
   static const Color lightBlue50 = Color(0xFFE1F5FE);
   static const Color lightBlue100 = Color(0xFFB3E5FC);
   static const Color lightBlue200 = Color(0xFF81D4FA);
@@ -47,6 +47,10 @@ class AppColors {
   static const Color warningLight = Color(0xFFFFF3E0);
   static const Color errorLight = Color(0xFFFFEBEE);
   static const Color infoLight = Color(0xFFE3F2FD);
+
+  // 🔥 누락된 색상들 추가
+  static const Color border = Color(0xFFE0E0E0); // 테두리 색상
+  static const Color shadow = Color(0x1A000000); // 그림자 색상
 
   // Gradient Colors
   static const LinearGradient primaryGradient = LinearGradient(

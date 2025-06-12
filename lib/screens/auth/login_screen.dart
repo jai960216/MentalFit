@@ -7,8 +7,6 @@ import '../../core/config/app_routes.dart';
 import '../../core/network/error_handler.dart';
 import '../../shared/widgets/custom_button.dart';
 import '../../shared/widgets/custom_text_field.dart';
-import '../../shared/services/auth_service.dart';
-import '../../shared/services/social_auth_service.dart';
 import '../../providers/auth_provider.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -26,20 +24,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   bool _isLoading = false;
   bool _rememberMe = false;
   bool _obscurePassword = true;
-
-  late AuthService _authService;
-  late SocialAuthService _socialAuthService;
-
-  @override
-  void initState() {
-    super.initState();
-    _initializeServices();
-  }
-
-  Future<void> _initializeServices() async {
-    _authService = await AuthService.getInstance();
-    _socialAuthService = await SocialAuthService.getInstance();
-  }
 
   @override
   void dispose() {
@@ -76,15 +60,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final result = await _authService.login(
-        email: _emailController.text.trim(),
-        password: _passwordController.text,
-      );
+      final result = await ref
+          .read(authProvider.notifier)
+          .login(
+            email: _emailController.text.trim(),
+            password: _passwordController.text,
+          );
 
       if (result.success && result.user != null) {
-        // AuthProvider 상태 업데이트
-        ref.read(authProvider.notifier).updateUser(result.user!);
-
         if (mounted) {
           // 온보딩 완료 여부에 따라 라우팅
           if (result.user!.isOnboardingCompleted) {
@@ -113,25 +96,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   // === 소셜 로그인 처리 ===
-  Future<void> _handleSocialLogin(SocialLoginType type) async {
+  Future<void> _handleGoogleLogin() async {
     setState(() => _isLoading = true);
 
     try {
-      AuthResult result;
-
-      switch (type) {
-        case SocialLoginType.google:
-          result = await _socialAuthService.signInWithGoogle();
-          break;
-        case SocialLoginType.kakao:
-          result = await _socialAuthService.signInWithKakao();
-          break;
-      }
+      final result = await ref.read(authProvider.notifier).signInWithGoogle();
 
       if (result.success && result.user != null) {
-        // AuthProvider 상태 업데이트
-        ref.read(authProvider.notifier).updateUser(result.user!);
-
         if (mounted) {
           // 온보딩 완료 여부에 따라 라우팅
           if (result.user!.isOnboardingCompleted) {
@@ -144,7 +115,41 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         if (mounted) {
           GlobalErrorHandler.showErrorSnackBar(
             context,
-            result.error ?? '소셜 로그인에 실패했습니다.',
+            result.error ?? 'Google 로그인에 실패했습니다.',
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        GlobalErrorHandler.showErrorSnackBar(context, e);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _handleKakaoLogin() async {
+    setState(() => _isLoading = true);
+
+    try {
+      final result = await ref.read(authProvider.notifier).signInWithKakao();
+
+      if (result.success && result.user != null) {
+        if (mounted) {
+          // 온보딩 완료 여부에 따라 라우팅
+          if (result.user!.isOnboardingCompleted) {
+            context.go(AppRoutes.home);
+          } else {
+            context.go(AppRoutes.onboardingBasicInfo);
+          }
+        }
+      } else {
+        if (mounted) {
+          GlobalErrorHandler.showErrorSnackBar(
+            context,
+            result.error ?? 'Kakao 로그인에 실패했습니다.',
           );
         }
       }
@@ -191,9 +196,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               TextButton(
                 onPressed: () async {
                   if (emailController.text.isNotEmpty) {
-                    final success = await _authService.requestPasswordReset(
-                      emailController.text.trim(),
-                    );
+                    final success = await ref
+                        .read(authProvider.notifier)
+                        .resetPassword(emailController.text.trim());
 
                     if (mounted) {
                       Navigator.of(context).pop(success);
@@ -227,6 +232,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // AuthProvider 상태 감시
+    final authState = ref.watch(authProvider);
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
@@ -257,8 +265,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 // === 로그인 버튼 ===
                 CustomButton(
                   text: '로그인',
-                  onPressed: _isLoading ? null : _handleLogin,
-                  isLoading: _isLoading,
+                  onPressed:
+                      (_isLoading || authState.isLoading) ? null : _handleLogin,
+                  isLoading: _isLoading || authState.isLoading,
                 ),
 
                 SizedBox(height: 32.h),
@@ -298,7 +307,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             borderRadius: BorderRadius.circular(20.r),
             boxShadow: [
               BoxShadow(
-                color: AppColors.primary.withOpacity(0.2),
+                color: AppColors.primary.withValues(alpha: 0.2),
                 blurRadius: 20,
                 offset: const Offset(0, 10),
               ),
@@ -414,10 +423,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       children: [
         // Google 로그인
         _SocialLoginButton(
-          onPressed:
-              _isLoading
-                  ? null
-                  : () => _handleSocialLogin(SocialLoginType.google),
+          onPressed: _isLoading ? null : _handleGoogleLogin,
           icon: Icons.g_mobiledata, // 실제로는 Google 아이콘 사용
           backgroundColor: AppColors.white,
           iconColor: AppColors.error,
@@ -428,10 +434,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
         // 카카오 로그인
         _SocialLoginButton(
-          onPressed:
-              _isLoading
-                  ? null
-                  : () => _handleSocialLogin(SocialLoginType.kakao),
+          onPressed: _isLoading ? null : _handleKakaoLogin,
           icon: Icons.chat_bubble, // 실제로는 카카오 아이콘 사용
           backgroundColor: const Color(0xFFFEE500),
           iconColor: AppColors.black,
@@ -497,7 +500,7 @@ class _SocialLoginButton extends StatelessWidget {
         border: Border.all(color: AppColors.grey200),
         boxShadow: [
           BoxShadow(
-            color: AppColors.grey400.withOpacity(0.2),
+            color: AppColors.grey400.withValues(alpha: 0.2),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),

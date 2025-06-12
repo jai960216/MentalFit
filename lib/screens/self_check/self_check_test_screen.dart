@@ -32,15 +32,131 @@ class _SelfCheckTestScreenState extends ConsumerState<SelfCheckTestScreen>
   late Animation<double> _progressAnimation;
 
   String? _selectedAnswerId;
-  bool _isAnswered = false;
-  bool _isSubmitting = false;
-  bool _hasShownErrorToast = false;
+  bool _isInitialized = false;
 
   @override
   void initState() {
     super.initState();
     _initializeAnimations();
-    _loadTest();
+    _initializeTest();
+  }
+
+  void _initializeAnimations() {
+    _fadeController = AnimationController(
+      duration: const Duration(milliseconds: 600),
+      vsync: this,
+    );
+
+    _slideController = AnimationController(
+      duration: const Duration(milliseconds: 400),
+      vsync: this,
+    );
+
+    _progressController = AnimationController(
+      duration: const Duration(milliseconds: 800),
+      vsync: this,
+    );
+
+    _fadeAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _fadeController, curve: Curves.easeOut));
+
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(1.0, 0.0),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: _slideController, curve: Curves.easeOut));
+
+    _progressAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _progressController, curve: Curves.easeInOut),
+    );
+  }
+
+  /// 🔥 핵심 개선: 검사 초기화 로직 강화
+  Future<void> _initializeTest() async {
+    try {
+      print('검사 초기화 시작: ${widget.testId}');
+
+      // 🔥 수정: 더 안전한 초기화 방식
+      try {
+        await ref.read(selfCheckProvider.notifier).startTestById(widget.testId);
+      } catch (e) {
+        // 특정 ID로 검사를 찾을 수 없는 경우, 첫 번째 사용 가능한 검사로 대체
+        print('특정 검사 로드 실패, 기본 검사 로드 시도: $e');
+        await _loadDefaultTest();
+      }
+
+      // 상태 확인
+      final state = ref.read(selfCheckProvider);
+      if (state.error != null) {
+        print('검사 로드 오류: ${state.error}');
+        if (mounted) {
+          _showErrorAndReturn('검사 데이터를 불러올 수 없습니다: ${state.error}');
+          return;
+        }
+      }
+
+      if (state.currentTest == null) {
+        print('검사 데이터가 null입니다');
+        if (mounted) {
+          _showErrorAndReturn('검사 데이터를 찾을 수 없습니다');
+          return;
+        }
+      }
+
+      print('검사 초기화 성공: ${state.currentTest?.title}');
+      _isInitialized = true;
+
+      if (mounted) {
+        _fadeController.forward();
+        _slideController.forward();
+        _progressController.forward();
+      }
+    } catch (e) {
+      print('검사 초기화 예외: $e');
+      if (mounted) {
+        _showErrorAndReturn('검사를 시작할 수 없습니다: $e');
+      }
+    }
+  }
+
+  /// 🔥 새로 추가: 기본 검사 로드
+  Future<void> _loadDefaultTest() async {
+    try {
+      // 사용 가능한 검사 목록을 먼저 로드
+      await ref.read(selfCheckProvider.notifier).loadAvailableTests();
+
+      final state = ref.read(selfCheckProvider);
+      if (state.availableTests.isNotEmpty) {
+        // 첫 번째 사용 가능한 검사로 시작
+        final firstTest = state.availableTests.first;
+        await ref.read(selfCheckProvider.notifier).startTest(firstTest);
+        print('기본 검사 로드 성공: ${firstTest.title}');
+      } else {
+        throw Exception('사용 가능한 검사가 없습니다');
+      }
+    } catch (e) {
+      print('기본 검사 로드 실패: $e');
+      rethrow;
+    }
+  }
+
+  void _showErrorAndReturn(String message) {
+    GlobalErrorHandler.showErrorSnackBar(
+      context,
+      message,
+      onRetry: () {
+        _isInitialized = false;
+        _initializeTest();
+      },
+    );
+
+    // 3초 후 자동으로 이전 화면으로 이동
+    Future.delayed(const Duration(seconds: 3), () {
+      if (mounted) {
+        context.pop();
+      }
+    });
   }
 
   @override
@@ -51,210 +167,95 @@ class _SelfCheckTestScreenState extends ConsumerState<SelfCheckTestScreen>
     super.dispose();
   }
 
-  void _initializeAnimations() {
-    _fadeController = AnimationController(
-      duration: const Duration(milliseconds: 600),
-      vsync: this,
-    );
-
-    _slideController = AnimationController(
-      duration: const Duration(milliseconds: 800),
-      vsync: this,
-    );
-
-    _progressController = AnimationController(
-      duration: const Duration(milliseconds: 500),
-      vsync: this,
-    );
-
-    _fadeAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(parent: _fadeController, curve: Curves.easeOut));
-
-    _slideAnimation = Tween<Offset>(
-      begin: const Offset(0.3, 0.0),
-      end: Offset.zero,
-    ).animate(
-      CurvedAnimation(parent: _slideController, curve: Curves.easeOutCubic),
-    );
-
-    _progressAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _progressController, curve: Curves.easeOut),
-    );
-
-    _fadeController.forward();
-    _slideController.forward();
-    _progressController.forward();
-  }
-
-  Future<void> _loadTest() async {
-    try {
-      await ref.read(selfCheckProvider.notifier).loadTest(widget.testId);
-      _checkCurrentAnswer();
-      _hasShownErrorToast = false; // 에러 토스트 초기화
-    } catch (e) {
-      if (mounted && !_hasShownErrorToast) {
-        _hasShownErrorToast = true;
-        GlobalErrorHandler.showErrorSnackBar(
-          context,
-          e,
-          onRetry: _loadTest,
-          customMessage: '검사 데이터를 불러올 수 없습니다.',
-        );
-      }
-    }
-  }
-
-  void _checkCurrentAnswer() {
-    final currentQuestion = ref.read(currentQuestionProvider);
-    if (currentQuestion == null) return;
-
-    final answers = ref.read(selfCheckProvider).currentAnswers;
-    final existingAnswer =
-        answers
-            .where((answer) => answer.questionId == currentQuestion.id)
-            .firstOrNull;
-
-    if (existingAnswer != null) {
-      setState(() {
-        _selectedAnswerId = existingAnswer.answerId;
-        _isAnswered = true;
-      });
-    } else {
-      setState(() {
-        _selectedAnswerId = null;
-        _isAnswered = false;
-      });
-    }
-  }
-
-  void _selectAnswer(String answerId, int score) {
+  Future<void> _selectAnswer(SelfCheckAnswer answer) async {
     setState(() {
-      _selectedAnswerId = answerId;
-      _isAnswered = true;
+      _selectedAnswerId = answer.id;
     });
 
-    final currentQuestion = ref.read(currentQuestionProvider);
-    if (currentQuestion != null) {
-      ref
-          .read(selfCheckProvider.notifier)
-          .answerQuestion(currentQuestion.id, answerId, score);
+    // 답변 선택
+    ref.read(selfCheckProvider.notifier).selectAnswer(answer);
+
+    // 잠시 대기 후 다음 질문으로 이동
+    await Future.delayed(const Duration(milliseconds: 300));
+
+    if (mounted) {
+      _goToNextQuestion();
     }
-
-    // 자동으로 다음 질문으로 이동 (약간의 지연)
-    Future.delayed(const Duration(milliseconds: 800), () {
-      if (mounted) {
-        _goToNextQuestion();
-      }
-    });
   }
 
   Future<void> _goToNextQuestion() async {
-    try {
-      final canGoNext = ref.read(canGoToNextProvider);
-      final canComplete = ref.read(canCompleteTestProvider);
+    final hasNext = ref.read(selfCheckProvider.notifier).nextQuestion();
 
-      if (canComplete) {
-        await _completeTest();
-      } else if (canGoNext) {
-        // 슬라이드 애니메이션 리셋 후 다시 재생
-        await _slideController.reverse();
-        ref.read(selfCheckProvider.notifier).goToNextQuestion();
-        _checkCurrentAnswer();
-        await _slideController.forward();
-      }
-    } catch (e) {
-      if (mounted) {
-        GlobalErrorHandler.showErrorSnackBar(
-          context,
-          e,
-          customMessage: '다음 질문으로 이동할 수 없습니다.',
-        );
-      }
+    if (hasNext) {
+      // 애니메이션 리셋 후 재시작
+      await _slideController.reverse();
+      setState(() {
+        _selectedAnswerId = null;
+      });
+      _slideController.forward();
+    } else {
+      // 마지막 질문 완료 - 결과 제출
+      _submitTest();
     }
   }
 
   Future<void> _goToPreviousQuestion() async {
-    try {
-      final canGoPrevious = ref.read(canGoToPreviousProvider);
-      if (canGoPrevious) {
-        await _slideController.reverse();
-        ref.read(selfCheckProvider.notifier).goToPreviousQuestion();
-        _checkCurrentAnswer();
-        await _slideController.forward();
-      }
-    } catch (e) {
-      if (mounted) {
-        GlobalErrorHandler.showErrorSnackBar(
-          context,
-          e,
-          customMessage: '이전 질문으로 이동할 수 없습니다.',
-        );
-      }
+    final hasPrevious = ref.read(selfCheckProvider.notifier).previousQuestion();
+
+    if (hasPrevious) {
+      await _slideController.reverse();
+      setState(() {
+        _selectedAnswerId = null;
+      });
+      _slideController.forward();
     }
   }
 
-  Future<void> _completeTest() async {
-    if (_isSubmitting) return;
-
+  Future<void> _submitTest() async {
     try {
-      setState(() => _isSubmitting = true);
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder:
+            (context) => const Center(
+              child: Card(
+                child: Padding(
+                  padding: EdgeInsets.all(20.0),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CircularProgressIndicator(),
+                      SizedBox(height: 16),
+                      Text('검사 결과를 분석하고 있습니다...'),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+      );
 
-      // 로딩 다이얼로그 표시
-      _showCompletionDialog();
-
-      final result = await ref.read(selfCheckProvider.notifier).completeTest();
+      final result = await ref.read(selfCheckProvider.notifier).submitTest();
 
       if (mounted) {
-        // 로딩 다이얼로그 닫기
-        Navigator.of(context).pop();
+        Navigator.of(context).pop(); // 로딩 다이얼로그 닫기
 
-        // 결과 페이지로 이동
+        // 결과 화면으로 이동
         context.pushReplacement(
           '${AppRoutes.selfCheckResult}/${result.id}',
           extra: {'result': result},
         );
       }
     } catch (e) {
-      setState(() => _isSubmitting = false);
-
       if (mounted) {
-        // 로딩 다이얼로그가 열려있다면 닫기
-        Navigator.of(context).pop();
-
-        GlobalErrorHandler.showErrorDialog(
+        Navigator.of(context).pop(); // 로딩 다이얼로그 닫기
+        GlobalErrorHandler.showErrorSnackBar(
           context,
           e,
-          customMessage: '검사 완료 처리 중 오류가 발생했습니다.',
-          onRetry: _completeTest,
+          customMessage: '검사 제출에 실패했습니다',
+          onRetry: _submitTest,
         );
       }
     }
-  }
-
-  void _showCompletionDialog() {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder:
-          (context) => PopScope(
-            canPop: false,
-            child: AlertDialog(
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const CircularProgressIndicator(),
-                  SizedBox(height: 16.h),
-                  Text(
-                    '검사 결과를 분석하고 있습니다...',
-                    style: TextStyle(fontSize: 14.sp),
-                  ),
-                ],
-              ),
-            ),
-          ),
-    );
   }
 
   void _showExitDialog() {
@@ -262,20 +263,8 @@ class _SelfCheckTestScreenState extends ConsumerState<SelfCheckTestScreen>
       context: context,
       builder:
           (context) => AlertDialog(
-            title: Row(
-              children: [
-                Icon(
-                  Icons.warning_amber,
-                  color: AppColors.warning,
-                  size: 24.sp,
-                ),
-                SizedBox(width: 8.w),
-                const Text('검사 중단'),
-              ],
-            ),
-            content: const Text(
-              '검사를 중단하시겠습니까?\n\n현재까지의 답변은 저장되지 않으며,\n처음부터 다시 시작해야 합니다.',
-            ),
+            title: const Text('검사 중단'),
+            content: const Text('검사를 중단하시겠습니까?\n현재까지의 답변은 저장되지 않습니다.'),
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(context).pop(),
@@ -304,7 +293,10 @@ class _SelfCheckTestScreenState extends ConsumerState<SelfCheckTestScreen>
     final progress = ref.watch(testProgressProvider);
     final canGoPrevious = ref.watch(canGoToPreviousProvider);
 
-    if (selfCheckState.isLoading || currentQuestion == null) {
+    // 초기화되지 않았거나 로딩 중인 경우
+    if (!_isInitialized ||
+        selfCheckState.isLoading ||
+        currentQuestion == null) {
       return Scaffold(
         backgroundColor: AppColors.background,
         appBar: const CustomAppBar(title: '자가진단 로딩 중...'),
@@ -312,8 +304,14 @@ class _SelfCheckTestScreenState extends ConsumerState<SelfCheckTestScreen>
       );
     }
 
+    // 오류 상태
     if (selfCheckState.error != null) {
       return _buildErrorState(selfCheckState.error!);
+    }
+
+    // 현재 테스트가 없는 경우
+    if (selfCheckState.currentTest == null) {
+      return _buildErrorState('검사 데이터를 찾을 수 없습니다');
     }
 
     return PopScope(
@@ -417,29 +415,26 @@ class _SelfCheckTestScreenState extends ConsumerState<SelfCheckTestScreen>
               ),
               SizedBox(height: 24.h),
               Row(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => context.pop(),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.textPrimary,
-                        side: BorderSide(color: AppColors.grey300),
-                        padding: EdgeInsets.symmetric(vertical: 16.h),
-                      ),
-                      child: const Text('돌아가기'),
+                  ElevatedButton(
+                    onPressed: () {
+                      _isInitialized = false;
+                      _initializeTest();
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: AppColors.white,
                     ),
+                    child: const Text('다시 시도'),
                   ),
                   SizedBox(width: 16.w),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: _loadTest,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary,
-                        foregroundColor: AppColors.white,
-                        padding: EdgeInsets.symmetric(vertical: 16.h),
-                      ),
-                      child: const Text('다시 시도'),
+                  OutlinedButton(
+                    onPressed: () => context.pop(),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.textSecondary,
                     ),
+                    child: const Text('돌아가기'),
                   ),
                 ],
               ),
@@ -452,17 +447,8 @@ class _SelfCheckTestScreenState extends ConsumerState<SelfCheckTestScreen>
 
   Widget _buildProgressSection(double progress, int current, int total) {
     return Container(
-      padding: EdgeInsets.all(20.w),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.black.withOpacity(0.05),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
+      color: AppColors.white,
+      padding: EdgeInsets.all(16.w),
       child: Column(
         children: [
           Row(
@@ -472,28 +458,29 @@ class _SelfCheckTestScreenState extends ConsumerState<SelfCheckTestScreen>
                 '질문 $current / $total',
                 style: TextStyle(
                   fontSize: 14.sp,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textPrimary,
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.textSecondary,
                 ),
               ),
               Text(
-                '${(progress * 100).toInt()}% 완료',
+                '${(progress * 100).toInt()}%',
                 style: TextStyle(
                   fontSize: 14.sp,
-                  color: AppColors.textSecondary,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.primary,
                 ),
               ),
             ],
           ),
-          SizedBox(height: 12.h),
+          SizedBox(height: 8.h),
           AnimatedBuilder(
             animation: _progressAnimation,
             builder: (context, child) {
               return LinearProgressIndicator(
                 value: progress * _progressAnimation.value,
-                backgroundColor: AppColors.grey200,
+                backgroundColor: AppColors.surface,
                 valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
-                minHeight: 6.h,
+                minHeight: 4.h,
               );
             },
           ),
@@ -513,7 +500,7 @@ class _SelfCheckTestScreenState extends ConsumerState<SelfCheckTestScreen>
         category,
         style: TextStyle(
           fontSize: 12.sp,
-          fontWeight: FontWeight.w600,
+          fontWeight: FontWeight.w500,
           color: AppColors.primary,
         ),
       ),
@@ -521,28 +508,13 @@ class _SelfCheckTestScreenState extends ConsumerState<SelfCheckTestScreen>
   }
 
   Widget _buildQuestionText(SelfCheckQuestion question) {
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.all(24.w),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(16.r),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.black.withOpacity(0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Text(
-        question.text,
-        style: TextStyle(
-          fontSize: 16.sp,
-          fontWeight: FontWeight.w500,
-          color: AppColors.textPrimary,
-          height: 1.5,
-        ),
+    return Text(
+      question.text,
+      style: TextStyle(
+        fontSize: 18.sp,
+        fontWeight: FontWeight.w600,
+        color: AppColors.textPrimary,
+        height: 1.4,
       ),
     );
   }
@@ -552,152 +524,175 @@ class _SelfCheckTestScreenState extends ConsumerState<SelfCheckTestScreen>
       children:
           question.answers.map((answer) {
             final isSelected = _selectedAnswerId == answer.id;
-            return Padding(
-              padding: EdgeInsets.only(bottom: 12.h),
-              child: _buildAnswerOption(answer, isSelected),
+            final isCurrentAnswer =
+                ref
+                    .read(selfCheckProvider.notifier)
+                    .getCurrentAnswer()
+                    ?.answerId ==
+                answer.id;
+
+            return Container(
+              margin: EdgeInsets.only(bottom: 12.h),
+              child: InkWell(
+                onTap: () => _selectAnswer(answer),
+                borderRadius: BorderRadius.circular(12.r),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  padding: EdgeInsets.all(16.w),
+                  decoration: BoxDecoration(
+                    color:
+                        isSelected || isCurrentAnswer
+                            ? AppColors.primary.withOpacity(0.1)
+                            : AppColors.white,
+                    border: Border.all(
+                      color:
+                          isSelected || isCurrentAnswer
+                              ? AppColors.primary
+                              : AppColors.border,
+                      width: isSelected || isCurrentAnswer ? 2 : 1,
+                    ),
+                    borderRadius: BorderRadius.circular(12.r),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.shadow.withOpacity(0.05),
+                        blurRadius: 4,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 24.w,
+                        height: 24.h,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color:
+                              isSelected || isCurrentAnswer
+                                  ? AppColors.primary
+                                  : AppColors.white,
+                          border: Border.all(
+                            color:
+                                isSelected || isCurrentAnswer
+                                    ? AppColors.primary
+                                    : AppColors.border,
+                            width: 2,
+                          ),
+                        ),
+                        child:
+                            isSelected || isCurrentAnswer
+                                ? Icon(
+                                  Icons.check,
+                                  size: 16.sp,
+                                  color: AppColors.white,
+                                )
+                                : null,
+                      ),
+                      SizedBox(width: 12.w),
+                      Expanded(
+                        child: Text(
+                          answer.text,
+                          style: TextStyle(
+                            fontSize: 16.sp,
+                            fontWeight:
+                                isSelected || isCurrentAnswer
+                                    ? FontWeight.w600
+                                    : FontWeight.w400,
+                            color:
+                                isSelected || isCurrentAnswer
+                                    ? AppColors.primary
+                                    : AppColors.textPrimary,
+                          ),
+                        ),
+                      ),
+                      if (question.answerType == AnswerType.likert5 ||
+                          question.answerType == AnswerType.likert7)
+                        Container(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 8.w,
+                            vertical: 4.h,
+                          ),
+                          decoration: BoxDecoration(
+                            color:
+                                isSelected || isCurrentAnswer
+                                    ? AppColors.primary
+                                    : AppColors.surface,
+                            borderRadius: BorderRadius.circular(8.r),
+                          ),
+                          child: Text(
+                            '${answer.score}점',
+                            style: TextStyle(
+                              fontSize: 12.sp,
+                              fontWeight: FontWeight.w500,
+                              color:
+                                  isSelected || isCurrentAnswer
+                                      ? AppColors.white
+                                      : AppColors.textSecondary,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
             );
           }).toList(),
     );
   }
 
-  Widget _buildAnswerOption(SelfCheckAnswer answer, bool isSelected) {
-    return GestureDetector(
-      onTap: () => _selectAnswer(answer.id, answer.score),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        width: double.infinity,
-        padding: EdgeInsets.all(20.w),
-        decoration: BoxDecoration(
-          color:
-              isSelected ? AppColors.primary.withOpacity(0.1) : AppColors.white,
-          borderRadius: BorderRadius.circular(12.r),
-          border: Border.all(
-            color: isSelected ? AppColors.primary : AppColors.grey300,
-            width: isSelected ? 2 : 1,
-          ),
-          boxShadow:
-              isSelected
-                  ? [
-                    BoxShadow(
-                      color: AppColors.primary.withOpacity(0.2),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ]
-                  : [
-                    BoxShadow(
-                      color: AppColors.black.withOpacity(0.05),
-                      blurRadius: 4,
-                      offset: const Offset(0, 1),
-                    ),
-                  ],
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 20.w,
-              height: 20.w,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: isSelected ? AppColors.primary : AppColors.white,
-                border: Border.all(
-                  color: isSelected ? AppColors.primary : AppColors.grey400,
-                  width: 2,
-                ),
-              ),
-              child:
-                  isSelected
-                      ? Icon(Icons.check, size: 12.sp, color: AppColors.white)
-                      : null,
-            ),
-            SizedBox(width: 16.w),
-            Expanded(
-              child: Text(
-                answer.text,
-                style: TextStyle(
-                  fontSize: 14.sp,
-                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-                  color: isSelected ? AppColors.primary : AppColors.textPrimary,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildBottomNavigation(bool canGoPrevious) {
     return Container(
-      padding: EdgeInsets.all(20.w),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.black.withOpacity(0.05),
-            blurRadius: 4,
-            offset: const Offset(0, -2),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          if (canGoPrevious) ...[
+      color: AppColors.white,
+      padding: EdgeInsets.all(16.w),
+      child: SafeArea(
+        child: Row(
+          children: [
+            if (canGoPrevious) ...[
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: _goToPreviousQuestion,
+                  style: OutlinedButton.styleFrom(
+                    padding: EdgeInsets.symmetric(vertical: 16.h),
+                    foregroundColor: AppColors.textSecondary,
+                  ),
+                  child: const Text('이전'),
+                ),
+              ),
+              SizedBox(width: 16.w),
+            ],
             Expanded(
-              child: OutlinedButton(
-                onPressed: _goToPreviousQuestion,
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.textPrimary,
-                  side: BorderSide(color: AppColors.grey300),
-                  padding: EdgeInsets.symmetric(vertical: 16.h),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12.r),
-                  ),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.arrow_back, size: 16.sp),
-                    SizedBox(width: 8.w),
-                    const Text('이전'),
-                  ],
-                ),
+              flex: canGoPrevious ? 1 : 2,
+              child: Consumer(
+                builder: (context, ref, child) {
+                  final notifier = ref.watch(selfCheckProvider.notifier);
+                  final hasAnswer = notifier.isCurrentQuestionAnswered();
+                  final hasNext = notifier.hasNextQuestion();
+
+                  return ElevatedButton(
+                    onPressed:
+                        hasAnswer
+                            ? () {
+                              if (hasNext) {
+                                _goToNextQuestion();
+                              } else {
+                                _submitTest();
+                              }
+                            }
+                            : null,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: AppColors.white,
+                      padding: EdgeInsets.symmetric(vertical: 16.h),
+                      disabledBackgroundColor: AppColors.surface,
+                      disabledForegroundColor: AppColors.textSecondary,
+                    ),
+                    child: Text(hasNext ? '다음' : '완료'),
+                  );
+                },
               ),
             ),
-            SizedBox(width: 16.w),
           ],
-          Expanded(
-            flex: canGoPrevious ? 1 : 2,
-            child: ElevatedButton(
-              onPressed: _isAnswered ? _goToNextQuestion : null,
-              style: ElevatedButton.styleFrom(
-                backgroundColor:
-                    _isAnswered ? AppColors.primary : AppColors.grey300,
-                foregroundColor: AppColors.white,
-                padding: EdgeInsets.symmetric(vertical: 16.h),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12.r),
-                ),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    ref.watch(canCompleteTestProvider) ? '완료' : '다음',
-                    style: TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                  SizedBox(width: 8.w),
-                  Icon(
-                    ref.watch(canCompleteTestProvider)
-                        ? Icons.check
-                        : Icons.arrow_forward,
-                    size: 16.sp,
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

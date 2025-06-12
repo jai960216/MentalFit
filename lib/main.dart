@@ -2,10 +2,23 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter_localizations/flutter_localizations.dart'; // 추가
+// import 'package:firebase_core/firebase_core.dart';
+// import 'package:kakao_flutter_sdk/kakao_flutter_sdk.dart';
 import 'core/config/app_theme.dart';
 import 'core/config/app_router.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Firebase 초기화 (임시 주석)
+  // await Firebase.initializeApp();
+
+  // Kakao SDK 초기화 (임시 주석)
+  // KakaoSdk.init(
+  //   nativeAppKey: 'YOUR_KAKAO_NATIVE_APP_KEY',
+  //   javaScriptAppKey: 'YOUR_KAKAO_JAVASCRIPT_APP_KEY',
+  // );
+
   runApp(const ProviderScope(child: MentalFitApp()));
 }
 
@@ -15,7 +28,7 @@ class MentalFitApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ScreenUtilInit(
-      designSize: const Size(375, 812), // iPhone 12 기준
+      designSize: const Size(375, 812),
       minTextAdapt: true,
       splitScreenMode: true,
       builder: (context, child) {
@@ -25,7 +38,7 @@ class MentalFitApp extends StatelessWidget {
           theme: AppTheme.lightTheme,
           routerConfig: AppRouter.router,
 
-          // === 간단한 지역화 설정 ===
+          // 이 부분을 추가
           localizationsDelegates: const [
             GlobalMaterialLocalizations.delegate,
             GlobalWidgetsLocalizations.delegate,
@@ -33,7 +46,9 @@ class MentalFitApp extends StatelessWidget {
           ],
           supportedLocales: const [
             Locale('ko', 'KR'), // 한국어
+            Locale('en', 'US'), // 영어
           ],
+          locale: const Locale('ko', 'KR'), // 기본 언어 설정
         );
       },
     );

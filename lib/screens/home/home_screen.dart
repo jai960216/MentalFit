@@ -74,6 +74,44 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     super.dispose();
   }
 
+  // === 액션 핸들러들 ===
+  Future<void> _handleRefresh() async {
+    try {
+      await ref.read(authProvider.notifier).refreshUser();
+    } catch (e) {
+      if (mounted) {
+        GlobalErrorHandler.showErrorSnackBar(context, e);
+      }
+    }
+  }
+
+  void _handleAiCounselingTap() {
+    context.push(AppRoutes.aiCounseling);
+  }
+
+  void _handleCounselorSearchTap() {
+    context.push(AppRoutes.counselorList);
+  }
+
+  void _handleChatListTap() {
+    context.push(AppRoutes.chatList);
+  }
+
+  void _handleSelfCheckTap() {
+    context.push(AppRoutes.selfCheckList);
+  }
+
+  String _getGreetingMessage() {
+    final hour = DateTime.now().hour;
+    if (hour < 12) {
+      return '좋은 아침이에요! 오늘도 힘내세요 ✨';
+    } else if (hour < 18) {
+      return '활기찬 오후 보내고 계신가요? 💪';
+    } else {
+      return '수고 많으셨어요. 편안한 저녁 되세요 🌙';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
@@ -157,7 +195,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                 onTap: () => context.push(AppRoutes.profile),
                 child: CircleAvatar(
                   radius: 24.r,
-                  backgroundColor: AppColors.white.withValues(alpha: 0.2),
+                  backgroundColor: AppColors.white.withOpacity(0.2),
                   backgroundImage:
                       user?.profileImageUrl != null
                           ? NetworkImage(user!.profileImageUrl!)
@@ -193,7 +231,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                       _getGreetingMessage(),
                       style: TextStyle(
                         fontSize: 14.sp,
-                        color: AppColors.white.withValues(alpha: 0.9),
+                        color: AppColors.white.withOpacity(0.9),
                       ),
                     ),
                   ],
@@ -224,7 +262,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         borderRadius: BorderRadius.circular(16.r),
         boxShadow: [
           BoxShadow(
-            color: AppColors.grey400.withValues(alpha: 0.1),
+            color: AppColors.grey400.withOpacity(0.1),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -258,7 +296,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           Container(
             padding: EdgeInsets.all(12.w),
             decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha: 0.1),
+              color: AppColors.primary.withOpacity(0.1),
               borderRadius: BorderRadius.circular(12.r),
             ),
             child: Icon(Icons.wb_sunny, color: AppColors.primary, size: 32.sp),
@@ -272,21 +310,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     final actions = [
       QuickAction(
         title: 'AI 상담',
-        subtitle: '24시간 언제든지',
+        subtitle: '',
         icon: Icons.psychology,
         color: AppColors.primary,
         onTap: _handleAiCounselingTap,
       ),
       QuickAction(
         title: '상담사 찾기',
-        subtitle: '전문가와 1:1',
+        subtitle: '',
         icon: Icons.person_search,
         color: AppColors.secondary,
         onTap: _handleCounselorSearchTap,
       ),
       QuickAction(
         title: '채팅',
-        subtitle: '실시간 상담',
+        subtitle: '',
         icon: Icons.chat_bubble,
         color: AppColors.accent,
         onTap: _handleChatListTap,
@@ -294,13 +332,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     ];
 
     return Container(
-      padding: EdgeInsets.all(20.w),
+      padding: EdgeInsets.all(14.w), // 패딩 더 줄임
       decoration: BoxDecoration(
         color: AppColors.white,
         borderRadius: BorderRadius.circular(16.r),
         boxShadow: [
           BoxShadow(
-            color: AppColors.grey400.withValues(alpha: 0.1),
+            color: AppColors.grey400.withOpacity(0.1),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -317,7 +355,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
               color: AppColors.textPrimary,
             ),
           ),
-          SizedBox(height: 16.h),
+          SizedBox(height: 10.h), // 간격 더 줄임
           Row(
             children:
                 actions
@@ -328,7 +366,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                             right:
                                 actions.indexOf(action) == actions.length - 1
                                     ? 0
-                                    : 8.w,
+                                    : 8.w, // 간격 더 줄임
                           ),
                           child: _buildQuickActionCard(action),
                         ),
@@ -342,22 +380,51 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   }
 
   Widget _buildQuickActionCard(QuickAction action) {
+    // 아이콘별 크기 조정
+    double getIconSize(IconData icon) {
+      switch (icon) {
+        case Icons.psychology:
+          return 18.sp; // 기본 크기
+        case Icons.person_search:
+          return 18.sp; // 기본 크기
+        case Icons.chat_bubble:
+          return 16.sp; // 채팅 아이콘은 살짝 작게
+        default:
+          return 18.sp;
+      }
+    }
+
     return GestureDetector(
       onTap: action.onTap,
       child: Container(
-        padding: EdgeInsets.all(16.w),
+        height: 82.h,
+        padding: EdgeInsets.all(10.w),
         decoration: BoxDecoration(
-          color: action.color.withValues(alpha: 0.1),
+          color: action.color.withOpacity(0.1),
           borderRadius: BorderRadius.circular(12.r),
-          border: Border.all(
-            color: action.color.withValues(alpha: 0.2),
-            width: 1,
-          ),
+          border: Border.all(color: action.color.withOpacity(0.2), width: 1),
         ),
         child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(action.icon, color: action.color, size: 28.sp),
-            SizedBox(height: 8.h),
+            // 아이콘
+            Container(
+              width: 36.w,
+              height: 36.w,
+              decoration: BoxDecoration(
+                color: action.color.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(8.r),
+              ),
+              child: Icon(
+                action.icon,
+                color: action.color,
+                size: getIconSize(action.icon), // 개별 크기 적용
+              ),
+            ),
+
+            SizedBox(height: 6.h),
+
+            // 제목만 표시
             Text(
               action.title,
               style: TextStyle(
@@ -366,12 +433,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                 color: AppColors.textPrimary,
               ),
               textAlign: TextAlign.center,
-            ),
-            SizedBox(height: 4.h),
-            Text(
-              action.subtitle,
-              style: TextStyle(fontSize: 10.sp, color: AppColors.textSecondary),
-              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ],
         ),
@@ -387,7 +450,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         borderRadius: BorderRadius.circular(16.r),
         boxShadow: [
           BoxShadow(
-            color: AppColors.grey400.withValues(alpha: 0.1),
+            color: AppColors.grey400.withOpacity(0.1),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -397,9 +460,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Icon(Icons.favorite, color: AppColors.error, size: 20.sp),
-              SizedBox(width: 8.w),
               Text(
                 '오늘의 멘탈 체크',
                 style: TextStyle(
@@ -408,154 +470,80 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                   color: AppColors.textPrimary,
                 ),
               ),
-              const Spacer(),
-              // 🔥 핵심 수정: 올바른 라우트로 연결
               TextButton(
-                onPressed: _handleMentalCheckTap,
+                onPressed: _handleSelfCheckTap,
                 child: Text(
-                  '체크하기',
-                  style: TextStyle(fontSize: 12.sp, color: AppColors.primary),
+                  '전체보기',
+                  style: TextStyle(fontSize: 14.sp, color: AppColors.primary),
                 ),
               ),
             ],
           ),
           SizedBox(height: 16.h),
-
-          // === 간단한 상태 표시 ===
-          Row(
-            children: [
-              _buildMentalIndicator('기분', 7, AppColors.success),
-              SizedBox(width: 16.w),
-              _buildMentalIndicator('에너지', 5, AppColors.warning),
-              SizedBox(width: 16.w),
-              _buildMentalIndicator('집중력', 8, AppColors.success),
-            ],
-          ),
-
-          SizedBox(height: 12.h),
-
-          Text(
-            '오늘 하루 컨디션이 좋아 보이네요! 💪',
-            style: TextStyle(fontSize: 12.sp, color: AppColors.textSecondary),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMentalIndicator(String label, int value, Color color) {
-    return Expanded(
-      child: Column(
-        children: [
-          Text(
-            label,
-            style: TextStyle(fontSize: 11.sp, color: AppColors.textSecondary),
-          ),
-          SizedBox(height: 4.h),
-          LinearProgressIndicator(
-            value: value / 10,
-            backgroundColor: AppColors.grey200,
-            valueColor: AlwaysStoppedAnimation<Color>(color),
-          ),
-          SizedBox(height: 4.h),
-          Text(
-            '$value/10',
-            style: TextStyle(
-              fontSize: 11.sp,
-              fontWeight: FontWeight.w600,
-              color: color,
+          GestureDetector(
+            // 전체 박스를 터치 가능하게 변경
+            onTap: _handleSelfCheckTap, // 자가진단 페이지로 이동
+            child: Container(
+              padding: EdgeInsets.all(16.w),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12.r),
+                border: Border.all(color: AppColors.primary.withOpacity(0.2)),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: EdgeInsets.all(8.w),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(8.r),
+                    ),
+                    child: Icon(
+                      Icons.psychology,
+                      color: AppColors.primary,
+                      size: 24.sp,
+                    ),
+                  ),
+                  SizedBox(width: 16.w),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '간단한 자가진단 해보기',
+                          style: TextStyle(
+                            fontSize: 14.sp,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                        SizedBox(height: 4.h),
+                        Text(
+                          '현재 나의 멘탈점수를 확인하세요',
+                          style: TextStyle(
+                            fontSize: 12.sp,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(
+                    Icons.arrow_forward_ios,
+                    color: AppColors.primary,
+                    size: 16.sp,
+                  ),
+                ],
+              ),
             ),
           ),
         ],
       ),
     );
   }
-
-  // === 액션 핸들러들 ===
-
-  Future<void> _handleAiCounselingTap() async {
-    try {
-      // AI 상담 페이지로 바로 이동
-      context.push(AppRoutes.aiCounseling);
-    } catch (e) {
-      _showErrorSnackBar('AI 상담을 시작할 수 없습니다.');
-    }
-  }
-
-  Future<void> _handleCounselorSearchTap() async {
-    try {
-      // 상담사 검색 페이지로 이동
-      context.push(AppRoutes.counselorList);
-    } catch (e) {
-      _showErrorSnackBar('상담사 목록을 불러올 수 없습니다.');
-    }
-  }
-
-  Future<void> _handleChatListTap() async {
-    try {
-      // 채팅방 목록으로 이동
-      context.push(AppRoutes.chatList);
-    } catch (e) {
-      _showErrorSnackBar('채팅 목록을 불러올 수 없습니다.');
-    }
-  }
-
-  // 🔥 핵심 수정: 멘탈 체크 버튼 핸들러
-  Future<void> _handleMentalCheckTap() async {
-    try {
-      // 자가진단 목록 페이지로 이동 (올바른 라우트 사용)
-      context.push(AppRoutes.selfCheckList);
-    } catch (e) {
-      if (mounted) {
-        _showErrorSnackBar('자가진단을 시작할 수 없습니다.');
-      }
-    }
-  }
-
-  // === 헬퍼 메서드들 ===
-
-  Future<void> _handleRefresh() async {
-    try {
-      await ref.read(authProvider.notifier).refreshUser();
-    } catch (e) {
-      _showErrorSnackBar('새로고침에 실패했습니다.');
-    }
-  }
-
-  String _getGreetingMessage() {
-    final hour = DateTime.now().hour;
-
-    if (hour < 12) {
-      return '좋은 아침이에요! ☀️';
-    } else if (hour < 18) {
-      return '좋은 오후예요! 🌤️';
-    } else {
-      return '좋은 저녁이에요! 🌙';
-    }
-  }
-
-  void _showErrorSnackBar(String message) {
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-          backgroundColor: AppColors.error,
-          duration: const Duration(seconds: 3),
-          action: SnackBarAction(
-            label: '확인',
-            textColor: AppColors.white,
-            onPressed: () {
-              ScaffoldMessenger.of(context).hideCurrentSnackBar();
-            },
-          ),
-        ),
-      );
-    }
-  }
 }
 
-// === 데이터 클래스들 ===
-
+// === 데이터 모델 ===
 class QuickAction {
   final String title;
   final String subtitle;
