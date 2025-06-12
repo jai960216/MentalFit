@@ -40,9 +40,22 @@ import '../../screens/self_check/self_check_list_screen.dart';
 import '../../screens/self_check/self_check_test_screen.dart';
 import '../../screens/self_check/self_check_result_screen.dart';
 
+// === 에러 및 플레이스홀더 화면 ===
+import '../../shared/widgets/error_screen.dart';
+import '../../shared/widgets/placeholder_screen.dart';
+
+// === 모델 임포트 ===
+import '../../shared/models/self_check_models.dart';
+
 class AppRouter {
   static final GoRouter router = GoRouter(
     initialLocation: AppRoutes.home,
+    // 🔥 전역 에러 핸들링
+    errorBuilder:
+        (context, state) => ErrorScreen(
+          error: state.error?.toString() ?? '알 수 없는 오류가 발생했습니다.',
+          onRetry: () => context.go(AppRoutes.home),
+        ),
     routes: [
       // === Splash Screen ===
       GoRoute(
@@ -116,11 +129,17 @@ class AppRouter {
         builder: (context, state) => const ChatListScreen(),
       ),
       GoRoute(
-        path: '${AppRoutes.chatRoom}/:chatRoomId',
+        path: '${AppRoutes.chatRoom}/:roomId',
         name: 'chat-room',
         builder: (context, state) {
-          final chatRoomId = state.pathParameters['chatRoomId']!;
-          return ChatRoomScreen(chatRoomId: chatRoomId);
+          final roomId = state.pathParameters['roomId'];
+          if (roomId == null) {
+            return ErrorScreen(
+              error: '채팅방 ID가 필요합니다.',
+              onRetry: () => context.go(AppRoutes.chatList),
+            );
+          }
+          return ChatRoomScreen(chatRoomId: roomId);
         },
       ),
 
@@ -134,7 +153,13 @@ class AppRouter {
         path: '${AppRoutes.counselorDetail}/:counselorId',
         name: 'counselor-detail',
         builder: (context, state) {
-          final counselorId = state.pathParameters['counselorId']!;
+          final counselorId = state.pathParameters['counselorId'];
+          if (counselorId == null) {
+            return ErrorScreen(
+              error: '상담사 ID가 필요합니다.',
+              onRetry: () => context.go(AppRoutes.counselorList),
+            );
+          }
           return CounselorDetailScreen(counselorId: counselorId);
         },
       ),
@@ -149,7 +174,13 @@ class AppRouter {
         path: '${AppRoutes.bookingCalendar}/:counselorId',
         name: 'booking-calendar',
         builder: (context, state) {
-          final counselorId = state.pathParameters['counselorId']!;
+          final counselorId = state.pathParameters['counselorId'];
+          if (counselorId == null) {
+            return ErrorScreen(
+              error: '상담사 ID가 필요합니다.',
+              onRetry: () => context.go(AppRoutes.counselorList),
+            );
+          }
           return BookingCalendarScreen(counselorId: counselorId);
         },
       ),
@@ -157,7 +188,13 @@ class AppRouter {
         path: '${AppRoutes.bookingConfirm}/:counselorId',
         name: 'booking-confirm',
         builder: (context, state) {
-          final counselorId = state.pathParameters['counselorId']!;
+          final counselorId = state.pathParameters['counselorId'];
+          if (counselorId == null) {
+            return ErrorScreen(
+              error: '상담사 ID가 필요합니다.',
+              onRetry: () => context.go(AppRoutes.counselorList),
+            );
+          }
           return BookingConfirmScreen(counselorId: counselorId);
         },
       ),
@@ -172,12 +209,18 @@ class AppRouter {
         path: '${AppRoutes.recordDetail}/:recordId',
         name: 'record-detail',
         builder: (context, state) {
-          final recordId = state.pathParameters['recordId']!;
+          final recordId = state.pathParameters['recordId'];
+          if (recordId == null) {
+            return ErrorScreen(
+              error: '기록 ID가 필요합니다.',
+              onRetry: () => context.go(AppRoutes.recordsList),
+            );
+          }
           return PlaceholderScreen(title: '기록 상세 ($recordId)');
         },
       ),
 
-      // === Self Check Routes ===
+      // === Self Check Routes - 🔥 강화된 에러 처리 ===
       GoRoute(
         path: AppRoutes.selfCheckList,
         name: 'self-check-list',
@@ -187,15 +230,35 @@ class AppRouter {
         path: '${AppRoutes.selfCheckTest}/:testId',
         name: 'self-check-test',
         builder: (context, state) {
-          final testId = state.pathParameters['testId']!;
-          return SelfCheckTestScreen(testId: testId);
+          final testId = state.pathParameters['testId'];
+          if (testId == null || testId.isEmpty) {
+            return ErrorScreen(
+              error: '검사 ID가 필요합니다.',
+              onRetry: () => context.go(AppRoutes.selfCheckList),
+            );
+          }
+
+          // extra 데이터에서 testType 추출 (선택사항)
+          final extra = state.extra as Map<String, dynamic>?;
+          final testType = extra?['testType'] as String?;
+
+          return SelfCheckTestScreen(
+            testId: testId,
+            testType: testType != null ? _parseTestType(testType) : null,
+          );
         },
       ),
       GoRoute(
         path: '${AppRoutes.selfCheckResult}/:resultId',
         name: 'self-check-result',
         builder: (context, state) {
-          final resultId = state.pathParameters['resultId']!;
+          final resultId = state.pathParameters['resultId'];
+          if (resultId == null || resultId.isEmpty) {
+            return ErrorScreen(
+              error: '결과 ID가 필요합니다.',
+              onRetry: () => context.go(AppRoutes.selfCheckList),
+            );
+          }
           return SelfCheckResultScreen(resultId: resultId);
         },
       ),
@@ -221,117 +284,112 @@ class AppRouter {
         name: 'settings',
         builder: (context, state) => const PlaceholderScreen(title: '설정'),
       ),
-
-      // === Error Route ===
       GoRoute(
-        path: '/error',
-        name: 'error',
+        path: AppRoutes.notifications,
+        name: 'notifications',
+        builder: (context, state) => const PlaceholderScreen(title: '알림 설정'),
+      ),
+      GoRoute(
+        path: AppRoutes.privacy,
+        name: 'privacy',
+        builder:
+            (context, state) => const PlaceholderScreen(title: '개인정보 처리방침'),
+      ),
+      GoRoute(
+        path: AppRoutes.terms,
+        name: 'terms',
+        builder: (context, state) => const PlaceholderScreen(title: '이용약관'),
+      ),
+      GoRoute(
+        path: AppRoutes.help,
+        name: 'help',
+        builder: (context, state) => const PlaceholderScreen(title: '도움말'),
+      ),
+
+      // === 404 Not Found Route ===
+      GoRoute(
+        path: '/404',
+        name: 'not-found',
         builder:
             (context, state) => ErrorScreen(
-              error: state.extra as String? ?? '알 수 없는 오류가 발생했습니다.',
+              error: '요청하신 페이지를 찾을 수 없습니다.',
+              onRetry: () => context.go(AppRoutes.home),
             ),
       ),
     ],
 
-    errorBuilder:
-        (context, state) =>
-            ErrorScreen(error: '페이지를 찾을 수 없습니다: ${state.uri.toString()}'),
-
+    // 🔥 라우팅 리다이렉트 설정
     redirect: (context, state) {
-      // 필요시 리다이렉트 로직 추가
-      return null;
+      final path = state.matchedLocation;
+
+      // 존재하지 않는 경로는 404로 리다이렉트
+      if (!_isValidRoute(path)) {
+        return '/404';
+      }
+
+      return null; // 정상 경로는 그대로 진행
     },
   );
-}
 
-// === 플레이스홀더 화면 ===
-class PlaceholderScreen extends StatelessWidget {
-  final String title;
+  // === 헬퍼 메서드들 ===
 
-  const PlaceholderScreen({super.key, required this.title});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(title),
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
-        elevation: 0,
-      ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.construction, size: 64, color: Colors.grey),
-            const SizedBox(height: 16),
-            Text(
-              '$title 화면',
-              style: const TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey,
-              ),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              '곧 구현 예정입니다',
-              style: TextStyle(fontSize: 16, color: Colors.grey),
-            ),
-            const SizedBox(height: 32),
-            ElevatedButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('뒤로 가기'),
-            ),
-          ],
-        ),
-      ),
-    );
+  /// TestType 문자열을 SelfCheckTestType으로 변환
+  static SelfCheckTestType? _parseTestType(String typeString) {
+    try {
+      return SelfCheckTestType.values.firstWhere(
+        (type) => type.name == typeString,
+      );
+    } catch (e) {
+      return null;
+    }
   }
-}
 
-// === 에러 화면 ===
-class ErrorScreen extends StatelessWidget {
-  final String error;
+  /// 유효한 라우트인지 확인
+  static bool _isValidRoute(String path) {
+    final validBasePaths = [
+      AppRoutes.splash,
+      AppRoutes.login,
+      AppRoutes.signup,
+      AppRoutes.userTypeSelection,
+      AppRoutes.forgotPassword,
+      AppRoutes.onboardingBasicInfo,
+      AppRoutes.onboardingMentalCheck,
+      AppRoutes.onboardingPreferences,
+      AppRoutes.onboardingComplete,
+      AppRoutes.home,
+      AppRoutes.aiCounseling,
+      AppRoutes.chatList,
+      AppRoutes.counselorList,
+      AppRoutes.bookingList,
+      AppRoutes.recordsList,
+      AppRoutes.selfCheckList,
+      AppRoutes.selfCheckHistory,
+      AppRoutes.profile,
+      AppRoutes.editProfile,
+      AppRoutes.settings,
+      AppRoutes.notifications,
+      AppRoutes.privacy,
+      AppRoutes.terms,
+      AppRoutes.help,
+      '/404',
+    ];
 
-  const ErrorScreen({super.key, required this.error});
+    // 정확한 경로 매칭
+    if (validBasePaths.contains(path)) {
+      return true;
+    }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('오류'),
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
-        elevation: 0,
-      ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.error_outline, size: 64, color: Colors.red),
-            const SizedBox(height: 16),
-            const Text(
-              '오류가 발생했습니다',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 32),
-              child: Text(
-                error,
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 16, color: Colors.grey),
-              ),
-            ),
-            const SizedBox(height: 32),
-            ElevatedButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('뒤로 가기'),
-            ),
-          ],
-        ),
-      ),
-    );
+    // 동적 경로 패턴 매칭
+    final dynamicRoutePatterns = [
+      RegExp(r'^/chat/room/[^/]+$'),
+      RegExp(r'^/counselor/detail/[^/]+$'),
+      RegExp(r'^/booking/calendar/[^/]+$'),
+      RegExp(r'^/booking/confirm/[^/]+$'),
+      RegExp(r'^/records/detail/[^/]+$'),
+      RegExp(r'^/self-check/test/[^/]+$'),
+      RegExp(r'^/self-check/result/[^/]+$'),
+    ];
+
+    return dynamicRoutePatterns.any((pattern) => pattern.hasMatch(path));
   }
 }

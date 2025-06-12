@@ -4,6 +4,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/config/app_colors.dart';
 import '../../core/config/app_routes.dart';
+import '../../core/network/error_handler.dart';
 import '../../shared/widgets/custom_app_bar.dart';
 import '../../shared/widgets/loading_widget.dart';
 import '../../shared/models/self_check_models.dart';
@@ -17,14 +18,39 @@ class SelfCheckListScreen extends ConsumerStatefulWidget {
       _SelfCheckListScreenState();
 }
 
-class _SelfCheckListScreenState extends ConsumerState<SelfCheckListScreen> {
+class _SelfCheckListScreenState extends ConsumerState<SelfCheckListScreen>
+    with TickerProviderStateMixin {
+  late AnimationController _fadeController;
+  late Animation<double> _fadeAnimation;
+
   @override
   void initState() {
     super.initState();
+    _initializeAnimations();
     // 페이지 로드 시 데이터 자동 로딩
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadData();
     });
+  }
+
+  void _initializeAnimations() {
+    _fadeController = AnimationController(
+      duration: const Duration(milliseconds: 600),
+      vsync: this,
+    );
+
+    _fadeAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _fadeController, curve: Curves.easeOut));
+
+    _fadeController.forward();
+  }
+
+  @override
+  void dispose() {
+    _fadeController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadData() async {
@@ -32,28 +58,73 @@ class _SelfCheckListScreenState extends ConsumerState<SelfCheckListScreen> {
       await ref.read(selfCheckProvider.notifier).loadAvailableTests();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('데이터를 불러오는 중 오류가 발생했습니다: $e'),
-            backgroundColor: AppColors.error,
-            action: SnackBarAction(
-              label: '다시 시도',
-              onPressed: _loadData,
-              textColor: AppColors.white,
-            ),
-          ),
+        GlobalErrorHandler.showErrorSnackBar(
+          context,
+          e,
+          onRetry: _loadData,
+          customMessage: '데이터를 불러오는 중 오류가 발생했습니다.',
         );
       }
     }
   }
 
-  void _startTest(SelfCheckTest test) {
-    // 검사 시작 전 프로바이더에 현재 검사 설정
-    ref.read(selfCheckProvider.notifier).startTest(test);
+  // 🔥 핵심 개선: 테스트 시작 로직 강화
+  Future<void> _startTest(SelfCheckTest test) async {
+    try {
+      // 1. 로딩 상태 표시 (선택사항)
+      _showLoadingDialog();
 
-    context.push(
-      '${AppRoutes.selfCheckTest}/${test.id}',
-      extra: {'test': test},
+      // 2. 검사 시작 전 프로바이더에 현재 검사 설정
+      ref.read(selfCheckProvider.notifier).startTest(test);
+
+      // 3. 잠시 대기 (상태 업데이트 확실히 하기 위해)
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      if (mounted) {
+        // 4. 로딩 다이얼로그 닫기
+        Navigator.of(context).pop();
+
+        // 5. 테스트 화면으로 이동
+        await context.push(
+          '${AppRoutes.selfCheckTest}/${test.id}',
+          extra: {'test': test},
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        // 로딩 다이얼로그가 열려있다면 닫기
+        Navigator.of(context).pop();
+
+        GlobalErrorHandler.showErrorSnackBar(
+          context,
+          e,
+          customMessage: '자가진단을 시작할 수 없습니다. 다시 시도해주세요.',
+          onRetry: () => _startTest(test),
+        );
+      }
+    }
+  }
+
+  void _showLoadingDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder:
+          (context) => const Center(
+            child: Card(
+              child: Padding(
+                padding: EdgeInsets.all(20.0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text('검사를 준비하고 있습니다...'),
+                  ],
+                ),
+              ),
+            ),
+          ),
     );
   }
 
@@ -73,7 +144,10 @@ class _SelfCheckListScreenState extends ConsumerState<SelfCheckListScreen> {
         child:
             selfCheckState.isLoading && selfCheckState.availableTests.isEmpty
                 ? const LoadingWidget()
-                : _buildContent(selfCheckState),
+                : FadeTransition(
+                  opacity: _fadeAnimation,
+                  child: _buildContent(selfCheckState),
+                ),
       ),
     );
   }
@@ -95,10 +169,10 @@ class _SelfCheckListScreenState extends ConsumerState<SelfCheckListScreen> {
           SizedBox(height: 24.h),
 
           // === 추천 검사 섹션 ===
-          if (state.recommendedTests.isNotEmpty)
+          if (state.recommendedTests.isNotEmpty) ...[
             _buildRecommendedSection(state.recommendedTests),
-
-          if (state.recommendedTests.isNotEmpty) SizedBox(height: 32.h),
+            SizedBox(height: 32.h),
+          ],
 
           // === 전체 검사 목록 ===
           _buildAllTestsSection(state.availableTests),
@@ -106,9 +180,10 @@ class _SelfCheckListScreenState extends ConsumerState<SelfCheckListScreen> {
           SizedBox(height: 24.h),
 
           // === 최근 검사 기록 ===
-          _buildRecentHistorySection(state.recentResults),
-
-          SizedBox(height: 40.h),
+          if (state.recentResults.isNotEmpty) ...[
+            _buildRecentHistorySection(state.recentResults),
+            SizedBox(height: 40.h),
+          ],
         ],
       ),
     );
@@ -179,19 +254,19 @@ class _SelfCheckListScreenState extends ConsumerState<SelfCheckListScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '심리상태 자가진단',
+                      '자가진단',
                       style: TextStyle(
                         fontSize: 20.sp,
-                        fontWeight: FontWeight.bold,
+                        fontWeight: FontWeight.w700,
                         color: AppColors.white,
                       ),
                     ),
                     SizedBox(height: 4.h),
                     Text(
-                      '나의 심리상태를 정확히 파악해보세요',
+                      '당신의 마음 상태를 확인해보세요',
                       style: TextStyle(
                         fontSize: 14.sp,
-                        color: AppColors.white.withOpacity(0.9),
+                        color: AppColors.white.withValues(alpha: 0.9),
                       ),
                     ),
                   ],
@@ -203,7 +278,7 @@ class _SelfCheckListScreenState extends ConsumerState<SelfCheckListScreen> {
           Container(
             padding: EdgeInsets.all(12.w),
             decoration: BoxDecoration(
-              color: AppColors.white.withOpacity(0.2),
+              color: AppColors.white.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(8.r),
             ),
             child: Row(
@@ -212,10 +287,10 @@ class _SelfCheckListScreenState extends ConsumerState<SelfCheckListScreen> {
                 SizedBox(width: 8.w),
                 Expanded(
                   child: Text(
-                    '검사 결과는 참고용이며, 정확한 진단은 전문가와 상담하세요',
+                    '검사 결과는 참고용이며, 전문적인 상담이 필요한 경우 전문가와 상담하세요.',
                     style: TextStyle(
                       fontSize: 12.sp,
-                      color: AppColors.white.withOpacity(0.9),
+                      color: AppColors.white.withValues(alpha: 0.9),
                     ),
                   ),
                 ),
@@ -231,25 +306,32 @@ class _SelfCheckListScreenState extends ConsumerState<SelfCheckListScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          '추천 검사',
-          style: TextStyle(
-            fontSize: 18.sp,
-            fontWeight: FontWeight.w600,
-            color: AppColors.textPrimary,
-          ),
+        Row(
+          children: [
+            Icon(Icons.star, color: AppColors.warning, size: 20.sp),
+            SizedBox(width: 8.w),
+            Text(
+              '추천 검사',
+              style: TextStyle(
+                fontSize: 18.sp,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textPrimary,
+              ),
+            ),
+          ],
         ),
         SizedBox(height: 16.h),
-        Container(
+        SizedBox(
           height: 200.h,
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             itemCount: recommendedTests.length,
             itemBuilder: (context, index) {
+              final test = recommendedTests[index];
               return Container(
-                width: 280.w,
+                width: 160.w,
                 margin: EdgeInsets.only(right: 16.w),
-                child: _buildRecommendedTestCard(recommendedTests[index]),
+                child: _buildRecommendedTestCard(test),
               );
             },
           ),
@@ -262,62 +344,38 @@ class _SelfCheckListScreenState extends ConsumerState<SelfCheckListScreen> {
     return GestureDetector(
       onTap: () => _startTest(test),
       child: Container(
-        padding: EdgeInsets.all(20.w),
+        padding: EdgeInsets.all(16.w),
         decoration: BoxDecoration(
           color: AppColors.white,
-          borderRadius: BorderRadius.circular(16.r),
-          border: Border.all(
-            color: test.category.color.withOpacity(0.3),
-            width: 2,
-          ),
+          borderRadius: BorderRadius.circular(12.r),
           boxShadow: [
             BoxShadow(
-              color: AppColors.black.withOpacity(0.08),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
+              color: AppColors.black.withOpacity(0.05),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
             ),
           ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Container(
-                  padding: EdgeInsets.all(8.w),
-                  decoration: BoxDecoration(
-                    color: test.category.color.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8.r),
-                  ),
-                  child: Icon(
-                    test.category.icon,
-                    color: test.category.color,
-                    size: 20.sp,
-                  ),
-                ),
-                SizedBox(width: 8.w),
-                Container(
-                  padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
-                  decoration: BoxDecoration(
-                    color: AppColors.accent.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12.r),
-                  ),
-                  child: Text(
-                    '추천',
-                    style: TextStyle(
-                      fontSize: 10.sp,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.accent,
-                    ),
-                  ),
-                ),
-              ],
+            Container(
+              padding: EdgeInsets.all(8.w),
+              decoration: BoxDecoration(
+                color: test.category.color.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8.r),
+              ),
+              child: Icon(
+                test.category.icon,
+                color: test.category.color,
+                size: 20.sp,
+              ),
             ),
             SizedBox(height: 12.h),
             Text(
               test.title,
               style: TextStyle(
-                fontSize: 16.sp,
+                fontSize: 14.sp,
                 fontWeight: FontWeight.w600,
                 color: AppColors.textPrimary,
               ),
@@ -340,45 +398,31 @@ class _SelfCheckListScreenState extends ConsumerState<SelfCheckListScreen> {
               children: [
                 Icon(
                   Icons.schedule,
-                  size: 14.sp,
+                  size: 12.sp,
                   color: AppColors.textSecondary,
                 ),
                 SizedBox(width: 4.w),
                 Text(
-                  '약 ${test.estimatedMinutes}분',
+                  '${test.estimatedMinutes}분',
                   style: TextStyle(
-                    fontSize: 12.sp,
+                    fontSize: 10.sp,
                     color: AppColors.textSecondary,
                   ),
                 ),
                 const Spacer(),
                 Container(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: 12.w,
-                    vertical: 6.h,
-                  ),
+                  padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
                   decoration: BoxDecoration(
                     color: test.category.color,
-                    borderRadius: BorderRadius.circular(20.r),
+                    borderRadius: BorderRadius.circular(12.r),
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        '시작하기',
-                        style: TextStyle(
-                          fontSize: 12.sp,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.white,
-                        ),
-                      ),
-                      SizedBox(width: 4.w),
-                      Icon(
-                        Icons.arrow_forward_ios,
-                        size: 12.w,
-                        color: AppColors.white,
-                      ),
-                    ],
+                  child: Text(
+                    '추천',
+                    style: TextStyle(
+                      fontSize: 10.sp,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.white,
+                    ),
                   ),
                 ),
               ],
@@ -454,6 +498,15 @@ class _SelfCheckListScreenState extends ConsumerState<SelfCheckListScreen> {
             '곧 새로운 검사가 추가될 예정입니다',
             style: TextStyle(fontSize: 14.sp, color: AppColors.textSecondary),
           ),
+          SizedBox(height: 24.h),
+          ElevatedButton(
+            onPressed: _loadData,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: AppColors.white,
+            ),
+            child: const Text('새로고침'),
+          ),
         ],
       ),
     );
@@ -520,7 +573,7 @@ class _SelfCheckListScreenState extends ConsumerState<SelfCheckListScreen> {
                 Icon(
                   Icons.arrow_forward_ios,
                   size: 16.sp,
-                  color: AppColors.textSecondary,
+                  color: AppColors.grey400,
                 ),
               ],
             ),
@@ -536,15 +589,9 @@ class _SelfCheckListScreenState extends ConsumerState<SelfCheckListScreen> {
             SizedBox(height: 16.h),
             Row(
               children: [
-                _buildTestInfo(
-                  icon: Icons.quiz,
-                  text: '${test.questionCount}문항',
-                ),
-                SizedBox(width: 20.w),
-                _buildTestInfo(
-                  icon: Icons.schedule,
-                  text: '약 ${test.estimatedMinutes}분',
-                ),
+                _buildTestInfo(Icons.schedule, '약 ${test.estimatedMinutes}분'),
+                SizedBox(width: 16.w),
+                _buildTestInfo(Icons.quiz, '${test.questions.length}문항'),
                 const Spacer(),
                 Container(
                   padding: EdgeInsets.symmetric(
@@ -552,19 +599,27 @@ class _SelfCheckListScreenState extends ConsumerState<SelfCheckListScreen> {
                     vertical: 8.h,
                   ),
                   decoration: BoxDecoration(
-                    color: test.category.color.withOpacity(0.1),
+                    color: test.category.color,
                     borderRadius: BorderRadius.circular(20.r),
-                    border: Border.all(
-                      color: test.category.color.withOpacity(0.3),
-                    ),
                   ),
-                  child: Text(
-                    '검사 시작',
-                    style: TextStyle(
-                      fontSize: 12.sp,
-                      fontWeight: FontWeight.w600,
-                      color: test.category.color,
-                    ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '시작하기',
+                        style: TextStyle(
+                          fontSize: 12.sp,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.white,
+                        ),
+                      ),
+                      SizedBox(width: 4.w),
+                      Icon(
+                        Icons.arrow_forward,
+                        size: 12.sp,
+                        color: AppColors.white,
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -575,10 +630,11 @@ class _SelfCheckListScreenState extends ConsumerState<SelfCheckListScreen> {
     );
   }
 
-  Widget _buildTestInfo({required IconData icon, required String text}) {
+  Widget _buildTestInfo(IconData icon, String text) {
     return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 16.sp, color: AppColors.textSecondary),
+        Icon(icon, size: 14.sp, color: AppColors.textSecondary),
         SizedBox(width: 4.w),
         Text(
           text,
@@ -589,13 +645,10 @@ class _SelfCheckListScreenState extends ConsumerState<SelfCheckListScreen> {
   }
 
   Widget _buildRecentHistorySection(List<SelfCheckResult> recentResults) {
-    if (recentResults.isEmpty) return const SizedBox.shrink();
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
               '최근 검사 기록',
@@ -605,10 +658,9 @@ class _SelfCheckListScreenState extends ConsumerState<SelfCheckListScreen> {
                 color: AppColors.textPrimary,
               ),
             ),
+            const Spacer(),
             TextButton(
-              onPressed: () {
-                context.push(AppRoutes.selfCheckHistory);
-              },
+              onPressed: () => context.push(AppRoutes.selfCheckHistory),
               child: Text(
                 '전체보기',
                 style: TextStyle(fontSize: 14.sp, color: AppColors.primary),
@@ -624,101 +676,78 @@ class _SelfCheckListScreenState extends ConsumerState<SelfCheckListScreen> {
                 padding: EdgeInsets.only(bottom: 12.h),
                 child: _buildHistoryCard(result),
               ),
-            )
-            .toList(),
+            ),
       ],
     );
   }
 
   Widget _buildHistoryCard(SelfCheckResult result) {
-    return Container(
-      padding: EdgeInsets.all(16.w),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(12.r),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.black.withOpacity(0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: EdgeInsets.all(8.w),
-            decoration: BoxDecoration(
-              color: result.riskLevel.color.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(8.r),
+    return GestureDetector(
+      onTap: () => context.push('${AppRoutes.selfCheckResult}/${result.id}'),
+      child: Container(
+        padding: EdgeInsets.all(16.w),
+        decoration: BoxDecoration(
+          color: AppColors.white,
+          borderRadius: BorderRadius.circular(12.r),
+          border: Border.all(color: AppColors.grey200),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 8.w,
+              height: 40.h,
+              decoration: BoxDecoration(
+                color: result.riskLevel.color,
+                borderRadius: BorderRadius.circular(4.r),
+              ),
             ),
-            child: Icon(
-              result.test.category.icon,
-              color: result.riskLevel.color,
-              size: 20.sp,
-            ),
-          ),
-          SizedBox(width: 12.w),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  result.test.title,
-                  style: TextStyle(
-                    fontSize: 14.sp,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textPrimary,
+            SizedBox(width: 12.w),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    result.test.title,
+                    style: TextStyle(
+                      fontSize: 14.sp,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textPrimary,
+                    ),
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                SizedBox(height: 4.h),
-                Row(
-                  children: [
-                    Text(
-                      '${result.percentage.toStringAsFixed(0)}점',
-                      style: TextStyle(
-                        fontSize: 12.sp,
-                        color: result.riskLevel.color,
-                        fontWeight: FontWeight.w600,
-                      ),
+                  SizedBox(height: 4.h),
+                  Text(
+                    _formatDate(result.completedAt),
+                    style: TextStyle(
+                      fontSize: 12.sp,
+                      color: AppColors.textSecondary,
                     ),
-                    SizedBox(width: 8.w),
-                    Text(
-                      result.riskLevel.name,
-                      style: TextStyle(
-                        fontSize: 12.sp,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                    SizedBox(width: 8.w),
-                    Text(
-                      '•',
-                      style: TextStyle(
-                        fontSize: 12.sp,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                    SizedBox(width: 8.w),
-                    Text(
-                      _formatDate(result.completedAt),
-                      style: TextStyle(
-                        fontSize: 12.sp,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+                  ),
+                ],
+              ),
             ),
-          ),
-          Icon(
-            Icons.arrow_forward_ios,
-            size: 14.sp,
-            color: AppColors.textSecondary,
-          ),
-        ],
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
+              decoration: BoxDecoration(
+                color: result.riskLevel.color.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12.r),
+              ),
+              child: Text(
+                result.riskLevel.name,
+                style: TextStyle(
+                  fontSize: 10.sp,
+                  fontWeight: FontWeight.w600,
+                  color: result.riskLevel.color,
+                ),
+              ),
+            ),
+            SizedBox(width: 8.w),
+            Icon(
+              Icons.arrow_forward_ios,
+              size: 12.sp,
+              color: AppColors.grey400,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -734,7 +763,7 @@ class _SelfCheckListScreenState extends ConsumerState<SelfCheckListScreen> {
     } else if (difference.inDays < 7) {
       return '${difference.inDays}일 전';
     } else {
-      return '${date.month}/${date.day}';
+      return '${date.year}.${date.month.toString().padLeft(2, '0')}.${date.day.toString().padLeft(2, '0')}';
     }
   }
 }
