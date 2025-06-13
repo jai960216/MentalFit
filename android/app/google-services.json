@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "1063603907093",
+    "project_id": "mental-fit-78d5a",
+    "storage_bucket": "mental-fit-78d5a.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1063603907093:android:7af1d1e58593d90e6dfc1c",
+        "android_client_info": {
+          "package_name": "com.example.flutter_mentalfit"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1063603907093-5f3t8hnqttp6ek980iufp2phu4mqsfpt.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.flutter_mentalfit",
+            "certificate_hash": "cc67682c113c2c8317965dbdd034f918c6dcf0ec"
+          }
+        },
+        {
+          "client_id": "1063603907093-u2273s97uk4vaspn7vkmfhjbedi0m1ot.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDSzbe81ggGmgZoBzqRB_9WTTRdui0iwN4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1063603907093-u2273s97uk4vaspn7vkmfhjbedi0m1ot.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "1063603907093-f03k51cdrbqjavfldqkbc67amoi4jvg9.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.flutterMentalfit"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

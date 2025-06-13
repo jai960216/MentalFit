@@ -49,7 +49,7 @@ import '../../shared/models/self_check_models.dart';
 
 class AppRouter {
   static final GoRouter router = GoRouter(
-    initialLocation: AppRoutes.home,
+    initialLocation: AppRoutes.splash,
     // 🔥 전역 에러 핸들링
     errorBuilder:
         (context, state) => ErrorScreen(

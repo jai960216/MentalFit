@@ -1,14 +1,17 @@
+import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
-import '../models/user_model.dart';
-import '../../core/network/api_client.dart';
-import '../../core/network/api_endpoints.dart';
-import '../../core/network/token_manager.dart';
+import '../models/user_model.dart' as app_user;
 
+/// Firebase Auth 기반 인증 서비스
+/// 기존 REST API + TokenManager 방식을 Firebase Auth로 완전 교체
 class AuthService {
   static AuthService? _instance;
-  late ApiClient _apiClient;
-  late TokenManager _tokenManager;
 
+  late firebase_auth.FirebaseAuth _auth;
+  late FirebaseFirestore _firestore;
+
+  // 싱글톤 패턴 (기존 인터페이스 유지)
   AuthService._();
 
   static Future<AuthService> getInstance() async {
@@ -20,167 +23,208 @@ class AuthService {
   }
 
   Future<void> _initialize() async {
-    _apiClient = await ApiClient.getInstance();
-    _tokenManager = await TokenManager.getInstance();
+    _auth = firebase_auth.FirebaseAuth.instance;
+    _firestore = FirebaseFirestore.instance;
+
+    // 인증 상태 변화 리스너 설정
+    _setupAuthStateListener();
   }
 
-  // === 로그인 ===
+  /// === 인증 상태 변화 리스너 ===
+  void _setupAuthStateListener() {
+    _auth.authStateChanges().listen((firebase_auth.User? firebaseUser) {
+      if (firebaseUser != null) {
+        debugPrint('✅ Firebase 사용자 로그인됨: ${firebaseUser.uid}');
+      } else {
+        debugPrint('❌ Firebase 사용자 로그아웃됨');
+      }
+    });
+  }
+
+  /// === 이메일/비밀번호 로그인 ===
   Future<AuthResult> login({
     required String email,
     required String password,
   }) async {
     try {
-      final response = await _apiClient.post<Map<String, dynamic>>(
-        ApiEndpoints.login,
-        data: {'email': email, 'password': password},
+      // Firebase Auth 로그인
+      final credential = await _auth.signInWithEmailAndPassword(
+        email: email,
+        password: password,
       );
 
-      if (response.success && response.data != null) {
-        return await _handleAuthSuccess(response.data!);
-      } else {
-        return AuthResult.failure(response.error ?? '로그인에 실패했습니다.');
+      if (credential.user != null) {
+        // Firestore에서 사용자 정보 가져오기
+        final appUser = await _getUserFromFirestore(credential.user!.uid);
+
+        if (appUser != null) {
+          return AuthResult.success(appUser);
+        } else {
+          // Firestore에 사용자 정보가 없으면 생성
+          final newUser = await _createUserInFirestore(credential.user!);
+          return AuthResult.success(newUser);
+        }
       }
+
+      return AuthResult.failure('로그인에 실패했습니다.');
+    } on firebase_auth.FirebaseAuthException catch (e) {
+      return AuthResult.failure(_getAuthErrorMessage(e));
     } catch (e) {
-      if (kDebugMode) {
-        return await _mockLogin(email, password);
-      }
+      debugPrint('로그인 오류: $e');
       return AuthResult.failure('로그인 중 오류가 발생했습니다: $e');
     }
   }
 
-  // === 회원가입 ===
+  /// === 이메일/비밀번호 회원가입 ===
   Future<AuthResult> register({
     required String email,
     required String password,
     required String name,
-    required UserType userType,
+    required app_user.UserType userType,
   }) async {
     try {
-      final response = await _apiClient.post<Map<String, dynamic>>(
-        ApiEndpoints.register,
-        data: {
-          'email': email,
-          'password': password,
-          'name': name,
-          'userType': userType.value,
-        },
+      // Firebase Auth 회원가입
+      final credential = await _auth.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
       );
 
-      if (response.success && response.data != null) {
-        return await _handleAuthSuccess(response.data!);
-      } else {
-        return AuthResult.failure(response.error ?? '회원가입에 실패했습니다.');
+      if (credential.user != null) {
+        // 사용자 표시명 업데이트
+        await credential.user!.updateDisplayName(name);
+
+        // Firestore에 사용자 정보 저장
+        final appUser = await _createUserInFirestore(
+          credential.user!,
+          name: name,
+          userType: userType,
+        );
+
+        return AuthResult.success(appUser);
       }
+
+      return AuthResult.failure('회원가입에 실패했습니다.');
+    } on firebase_auth.FirebaseAuthException catch (e) {
+      return AuthResult.failure(_getAuthErrorMessage(e));
     } catch (e) {
-      if (kDebugMode) {
-        return await _mockRegister(email, password, name, userType);
-      }
+      debugPrint('회원가입 오류: $e');
       return AuthResult.failure('회원가입 중 오류가 발생했습니다: $e');
     }
   }
 
-  // === 소셜 로그인 ===
+  /// === 소셜 로그인 (Firebase Auth Credential 사용) ===
   Future<AuthResult> socialLogin({
     required SocialLoginType type,
     required String accessToken,
   }) async {
     try {
-      // 개발 모드에서는 바로 Mock 사용
-      if (kDebugMode) {
-        return await _mockSocialLogin(type, accessToken);
+      firebase_auth.AuthCredential credential;
+
+      switch (type) {
+        case SocialLoginType.google:
+          // Google OAuth Credential 생성
+          credential = firebase_auth.GoogleAuthProvider.credential(
+            accessToken: accessToken,
+          );
+          break;
+        case SocialLoginType.kakao:
+          // Kakao는 Firebase에서 직접 지원하지 않으므로 Custom Token 방식 사용
+          // 또는 익명 로그인 후 Firestore에 Kakao 정보 저장
+          final userCredential = await _auth.signInAnonymously();
+          if (userCredential.user != null) {
+            final appUser = await _createUserInFirestore(
+              userCredential.user!,
+              name: 'Kakao 사용자',
+              socialProvider: 'kakao',
+              socialId: accessToken, // 임시로 사용
+            );
+            return AuthResult.success(appUser);
+          }
+          return AuthResult.failure('Kakao 로그인에 실패했습니다.');
       }
 
-      final response = await _apiClient.post<Map<String, dynamic>>(
-        ApiEndpoints.socialLogin,
-        data: {'provider': type.name, 'accessToken': accessToken},
-      );
+      // Firebase Auth 소셜 로그인
+      final userCredential = await _auth.signInWithCredential(credential);
 
-      if (response.success && response.data != null) {
-        return await _handleAuthSuccess(response.data!);
-      } else {
-        return AuthResult.failure(response.error ?? '소셜 로그인에 실패했습니다.');
+      if (userCredential.user != null) {
+        // Firestore에서 또는 새로 생성
+        final appUser =
+            await _getUserFromFirestore(userCredential.user!.uid) ??
+            await _createUserInFirestore(userCredential.user!);
+
+        return AuthResult.success(appUser);
       }
+
+      return AuthResult.failure('소셜 로그인에 실패했습니다.');
+    } on firebase_auth.FirebaseAuthException catch (e) {
+      return AuthResult.failure(_getAuthErrorMessage(e));
     } catch (e) {
+      debugPrint('소셜 로그인 오류: $e');
       return AuthResult.failure('소셜 로그인 중 오류가 발생했습니다: $e');
     }
   }
 
-  // === 자동 로그인 체크 ===
-  Future<User?> checkAutoLogin() async {
+  /// === 현재 로그인된 사용자 정보 가져오기 ===
+  Future<app_user.User?> getCurrentUser() async {
     try {
-      if (!(await _tokenManager.hasTokens())) {
-        return null;
-      }
+      final firebaseUser = _auth.currentUser;
+      if (firebaseUser == null) return null;
 
-      if (_tokenManager.isAccessTokenExpired()) {
-        final refreshed = await _refreshToken();
-        if (!refreshed) {
-          await _tokenManager.clearTokens();
-          return null;
-        }
-      }
+      return await _getUserFromFirestore(firebaseUser.uid);
+    } catch (e) {
+      debugPrint('현재 사용자 정보 가져오기 실패: $e');
+      return null;
+    }
+  }
+
+  /// === 자동 로그인 체크 ===
+  Future<app_user.User?> checkAutoLogin() async {
+    try {
+      final firebaseUser = _auth.currentUser;
+      if (firebaseUser == null) return null;
+
+      // 토큰 유효성 자동 체크 (Firebase가 알아서 처리)
+      await firebaseUser.reload();
 
       return await getCurrentUser();
     } catch (e) {
-      await _tokenManager.clearTokens();
+      debugPrint('자동 로그인 체크 실패: $e');
       return null;
     }
   }
 
-  // === 현재 사용자 정보 조회 ===
-  Future<User?> getCurrentUser() async {
-    try {
-      final response = await _apiClient.get<User>(
-        ApiEndpoints.userProfile,
-        fromJson: User.fromJson,
-      );
-
-      return response.success ? response.data : null;
-    } catch (e) {
-      if (kDebugMode) {
-        return _getMockUser();
-      }
-      return null;
-    }
-  }
-
-  // === 로그아웃 ===
+  /// === 로그아웃 ===
   Future<bool> logout() async {
     try {
-      await _apiClient.post(ApiEndpoints.logout);
+      await _auth.signOut();
+      return true;
     } catch (e) {
-      debugPrint('서버 로그아웃 요청 실패: $e');
-    }
-
-    await _tokenManager.clearTokens();
-    return true;
-  }
-
-  // === 비밀번호 재설정 ===
-  Future<bool> resetPassword(String email) async {
-    try {
-      final response = await _apiClient.post(
-        ApiEndpoints.resetPassword,
-        data: {'email': email},
-      );
-
-      return response.success;
-    } catch (e) {
-      if (kDebugMode) {
-        await Future.delayed(const Duration(seconds: 1));
-        return true;
-      }
+      debugPrint('로그아웃 실패: $e');
       return false;
     }
   }
 
-  // 호환성을 위한 별칭
+  /// === 비밀번호 재설정 ===
+  Future<bool> resetPassword(String email) async {
+    try {
+      await _auth.sendPasswordResetEmail(email: email);
+      return true;
+    } on firebase_auth.FirebaseAuthException catch (e) {
+      debugPrint('비밀번호 재설정 실패: ${_getAuthErrorMessage(e)}');
+      return false;
+    } catch (e) {
+      debugPrint('비밀번호 재설정 실패: $e');
+      return false;
+    }
+  }
+
+  /// === 호환성을 위한 별칭 ===
   Future<bool> requestPasswordReset(String email) async {
     return await resetPassword(email);
   }
 
-  // === 프로필 업데이트 ===
-  Future<User?> updateProfile({
+  /// === 프로필 업데이트 ===
+  Future<app_user.User?> updateProfile({
     String? name,
     String? profileImageUrl,
     String? birthDate,
@@ -188,7 +232,14 @@ class AuthService {
     String? goal,
   }) async {
     try {
-      final updateData = <String, dynamic>{};
+      final firebaseUser = _auth.currentUser;
+      if (firebaseUser == null) return null;
+
+      // Firestore 업데이트 데이터 준비
+      final updateData = <String, dynamic>{
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
+
       if (name != null) updateData['name'] = name;
       if (profileImageUrl != null)
         updateData['profileImageUrl'] = profileImageUrl;
@@ -196,50 +247,84 @@ class AuthService {
       if (sport != null) updateData['sport'] = sport;
       if (goal != null) updateData['goal'] = goal;
 
-      final response = await _apiClient.patch<User>(
-        ApiEndpoints.updateProfile,
-        data: updateData,
-        fromJson: User.fromJson,
-      );
+      // Firebase Auth 프로필 업데이트
+      if (name != null) {
+        await firebaseUser.updateDisplayName(name);
+      }
+      if (profileImageUrl != null) {
+        await firebaseUser.updatePhotoURL(profileImageUrl);
+      }
 
-      return response.success ? response.data : null;
+      // Firestore 문서 업데이트
+      await _firestore
+          .collection('users')
+          .doc(firebaseUser.uid)
+          .update(updateData);
+
+      // 업데이트된 사용자 정보 반환
+      return await getCurrentUser();
     } catch (e) {
       debugPrint('프로필 업데이트 실패: $e');
       return null;
     }
   }
 
-  // === 비밀번호 변경 ===
+  /// === 비밀번호 변경 ===
   Future<bool> changePassword({
     required String currentPassword,
     required String newPassword,
   }) async {
     try {
-      final response = await _apiClient.patch(
-        '/auth/change-password',
-        data: {'currentPassword': currentPassword, 'newPassword': newPassword},
+      final firebaseUser = _auth.currentUser;
+      if (firebaseUser == null || firebaseUser.email == null) {
+        return false;
+      }
+
+      // 현재 비밀번호로 재인증
+      final credential = firebase_auth.EmailAuthProvider.credential(
+        email: firebaseUser.email!,
+        password: currentPassword,
       );
 
-      return response.success;
+      await firebaseUser.reauthenticateWithCredential(credential);
+
+      // 새 비밀번호로 변경
+      await firebaseUser.updatePassword(newPassword);
+
+      return true;
+    } on firebase_auth.FirebaseAuthException catch (e) {
+      debugPrint('비밀번호 변경 실패: ${_getAuthErrorMessage(e)}');
+      return false;
     } catch (e) {
       debugPrint('비밀번호 변경 실패: $e');
       return false;
     }
   }
 
-  // === 계정 삭제 ===
+  /// === 계정 삭제 ===
   Future<bool> deleteAccount(String password) async {
     try {
-      final response = await _apiClient.delete(
-        ApiEndpoints.deleteAccount,
-        data: {'password': password},
-      );
+      final firebaseUser = _auth.currentUser;
+      if (firebaseUser == null) return false;
 
-      if (response.success) {
-        await _tokenManager.clearTokens();
-        return true;
+      // 이메일 계정인 경우 재인증
+      if (firebaseUser.email != null) {
+        final credential = firebase_auth.EmailAuthProvider.credential(
+          email: firebaseUser.email!,
+          password: password,
+        );
+        await firebaseUser.reauthenticateWithCredential(credential);
       }
 
+      // Firestore에서 사용자 데이터 삭제
+      await _firestore.collection('users').doc(firebaseUser.uid).delete();
+
+      // Firebase Auth에서 계정 삭제
+      await firebaseUser.delete();
+
+      return true;
+    } on firebase_auth.FirebaseAuthException catch (e) {
+      debugPrint('계정 삭제 실패: ${_getAuthErrorMessage(e)}');
       return false;
     } catch (e) {
       debugPrint('계정 삭제 실패: $e');
@@ -247,152 +332,128 @@ class AuthService {
     }
   }
 
-  // === 토큰 갱신 ===
-  Future<bool> _refreshToken() async {
+  /// === Firestore 관련 헬퍼 메서드들 ===
+
+  /// Firestore에서 사용자 정보 가져오기
+  Future<app_user.User?> _getUserFromFirestore(String uid) async {
     try {
-      final refreshToken = await _tokenManager.getRefreshToken();
-      if (refreshToken == null) return false;
+      final doc = await _firestore.collection('users').doc(uid).get();
 
-      final response = await _apiClient.post<Map<String, dynamic>>(
-        ApiEndpoints.refreshToken,
-        data: {'refreshToken': refreshToken},
-      );
-
-      if (response.success && response.data != null) {
-        final newAccessToken = response.data!['accessToken'] as String;
-        final newRefreshToken = response.data!['refreshToken'] as String?;
-
-        await _tokenManager.saveTokens(
-          accessToken: newAccessToken,
-          refreshToken: newRefreshToken ?? refreshToken,
-        );
-
-        return true;
+      if (doc.exists && doc.data() != null) {
+        final data = doc.data()!;
+        return app_user.User.fromJson({
+          'id': uid,
+          ...data,
+          // Timestamp를 DateTime으로 변환
+          'createdAt':
+              (data['createdAt'] as Timestamp?)?.toDate().toIso8601String(),
+          'updatedAt':
+              (data['updatedAt'] as Timestamp?)?.toDate().toIso8601String(),
+        });
       }
 
-      return false;
+      return null;
     } catch (e) {
-      return false;
+      debugPrint('Firestore 사용자 정보 가져오기 실패: $e');
+      return null;
     }
   }
 
-  // === Mock 메서드들 ===
-  Future<AuthResult> _mockLogin(String email, String password) async {
-    await Future.delayed(const Duration(seconds: 1));
+  /// Firestore에 사용자 정보 생성
+  Future<app_user.User> _createUserInFirestore(
+    firebase_auth.User firebaseUser, {
+    String? name,
+    app_user.UserType? userType,
+    String? email,
+    String? profileImageUrl,
+    String? socialProvider,
+    String? socialId,
+  }) async {
+    final now = Timestamp.now();
 
-    if (email.isEmpty || password.isEmpty) {
-      return AuthResult.failure('이메일과 비밀번호를 입력해주세요.');
-    }
+    final userData = {
+      'email': email ?? firebaseUser.email ?? '',
+      'name': name ?? firebaseUser.displayName ?? '사용자',
+      'userType': (userType ?? app_user.UserType.general).value,
+      'isOnboardingCompleted': false,
+      'createdAt': now,
+      'updatedAt': now,
+      'profileImageUrl': profileImageUrl ?? firebaseUser.photoURL,
+      'socialProvider': socialProvider,
+      'socialId': socialId,
+    };
 
-    if (password.length < 6) {
-      return AuthResult.failure('비밀번호가 올바르지 않습니다.');
-    }
+    await _firestore.collection('users').doc(firebaseUser.uid).set(userData);
 
-    final mockUser = _createMockUser(email);
-    await _saveMockTokens(mockUser.id);
-
-    return AuthResult.success(mockUser);
-  }
-
-  Future<AuthResult> _mockRegister(
-    String email,
-    String password,
-    String name,
-    UserType userType,
-  ) async {
-    await Future.delayed(const Duration(seconds: 1));
-
-    final mockUser = _createMockUser(email, name: name, userType: userType);
-    await _saveMockTokens(mockUser.id);
-
-    return AuthResult.success(mockUser);
-  }
-
-  Future<AuthResult> _mockSocialLogin(
-    SocialLoginType type,
-    String accessToken,
-  ) async {
-    await Future.delayed(const Duration(seconds: 1));
-
-    final email = '${type.name}_user@mentalfit.com';
-    final mockUser = _createMockUser(
-      email,
-      name: '${type.name.toUpperCase()} 사용자',
-    );
-    await _saveMockTokens(mockUser.id);
-
-    return AuthResult.success(mockUser);
-  }
-
-  User _createMockUser(String email, {String? name, UserType? userType}) {
-    final now = DateTime.now();
-    return User(
-      id: 'mock_user_${now.millisecondsSinceEpoch}',
-      email: email,
-      name: name ?? email.split('@')[0],
-      userType: userType ?? UserType.general, // general로 수정
+    return app_user.User(
+      id: firebaseUser.uid,
+      email: userData['email'] as String,
+      name: userData['name'] as String,
+      userType: userType ?? app_user.UserType.general,
       isOnboardingCompleted: false,
-      createdAt: now,
-      updatedAt: now,
+      createdAt: now.toDate(),
+      updatedAt: now.toDate(),
+      profileImageUrl: userData['profileImageUrl'] as String?,
     );
   }
 
-  User _getMockUser() {
-    final userId = _tokenManager.getUserId();
-    return User(
-      id: userId ?? 'mock_user_current',
-      email: 'current@mentalfit.com',
-      name: '현재 사용자',
-      userType: UserType.general, // general로 수정
-      isOnboardingCompleted: true,
-      createdAt: DateTime.now().subtract(const Duration(days: 30)),
-      updatedAt: DateTime.now(),
-    );
+  /// Firebase Auth 에러 메시지 한국어 변환
+  String _getAuthErrorMessage(firebase_auth.FirebaseAuthException e) {
+    switch (e.code) {
+      case 'user-not-found':
+        return '등록되지 않은 이메일입니다.';
+      case 'wrong-password':
+        return '비밀번호가 올바르지 않습니다.';
+      case 'email-already-in-use':
+        return '이미 사용 중인 이메일입니다.';
+      case 'weak-password':
+        return '비밀번호가 너무 간단합니다.';
+      case 'invalid-email':
+        return '유효하지 않은 이메일 형식입니다.';
+      case 'user-disabled':
+        return '비활성화된 계정입니다.';
+      case 'too-many-requests':
+        return '너무 많은 시도로 인해 일시적으로 차단되었습니다.';
+      case 'requires-recent-login':
+        return '보안을 위해 다시 로그인해주세요.';
+      default:
+        return e.message ?? '인증 오류가 발생했습니다.';
+    }
   }
 
-  Future<void> _saveMockTokens(String userId) async {
-    final accessToken =
-        'mock_access_token_${DateTime.now().millisecondsSinceEpoch}';
-    final refreshToken =
-        'mock_refresh_token_${DateTime.now().millisecondsSinceEpoch}';
+  /// === 개발용 메서드들 ===
 
-    await _tokenManager.saveTokens(
-      accessToken: accessToken,
-      refreshToken: refreshToken,
-      userId: userId,
-    );
-  }
+  /// 현재 Firebase 사용자 UID 가져오기
+  String? get currentUserUid => _auth.currentUser?.uid;
 
-  // === 헬퍼 메서드 ===
-  Future<AuthResult> _handleAuthSuccess(Map<String, dynamic> data) async {
+  /// Firebase Auth 상태 스트림
+  Stream<firebase_auth.User?> get authStateChanges => _auth.authStateChanges();
+
+  /// 이메일 인증 발송
+  Future<bool> sendEmailVerification() async {
     try {
-      final accessToken = data['accessToken'] as String;
-      final refreshToken = data['refreshToken'] as String;
-      final userData = data['user'] as Map<String, dynamic>;
-
-      await _tokenManager.saveTokens(
-        accessToken: accessToken,
-        refreshToken: refreshToken,
-        userId: userData['id'] as String,
-      );
-
-      final user = User.fromJson(userData);
-      return AuthResult.success(user);
+      final user = _auth.currentUser;
+      if (user != null && !user.emailVerified) {
+        await user.sendEmailVerification();
+        return true;
+      }
+      return false;
     } catch (e) {
-      return AuthResult.failure('인증 데이터 처리 중 오류가 발생했습니다: $e');
+      debugPrint('이메일 인증 발송 실패: $e');
+      return false;
     }
   }
 }
 
-// === 인증 결과 클래스 ===
+/// === 인증 결과 클래스 (기존 인터페이스 유지) ===
 class AuthResult {
   final bool success;
-  final User? user;
+  final app_user.User? user;
   final String? error;
 
   const AuthResult._(this.success, this.user, this.error);
 
-  factory AuthResult.success(User user) {
+  factory AuthResult.success(app_user.User user) {
     return AuthResult._(true, user, null);
   }
 
@@ -401,8 +462,8 @@ class AuthResult {
   }
 }
 
-// === 소셜 로그인 타입 ===
+/// === 소셜 로그인 타입 (기존 인터페이스 유지) ===
 enum SocialLoginType { google, kakao }
 
-// === 인증 상태 ===
+/// === 인증 상태 (기존 인터페이스 유지) ===
 enum AuthStatus { initial, loading, authenticated, unauthenticated, error }

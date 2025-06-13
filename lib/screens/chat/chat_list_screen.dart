@@ -67,7 +67,7 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen>
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(chatRoomsProvider);
-    final user = ref.watch(userProvider);
+    final user = ref.watch(currentUserProvider);
 
     if (_isInitializing) {
       return ChatListWidgets.buildLoadingScreen();

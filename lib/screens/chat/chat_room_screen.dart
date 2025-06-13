@@ -229,9 +229,7 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen>
         final messagesState = ref.watch(
           chatMessagesProvider(widget.chatRoomId),
         );
-        final currentUser = ref.watch(
-          userProvider,
-        ); // 수정: currentUserProvider → userProvider
+        final currentUser = ref.watch(currentUserProvider);
 
         if (messagesState.isLoading && messagesState.messages.isEmpty) {
           return const LoadingWidget(message: '메시지를 불러오는 중...');
@@ -442,7 +440,7 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen>
           chatMessagesProvider(widget.chatRoomId),
         );
         final currentUser = ref.watch(
-          userProvider,
+          currentUserProvider,
         ); // 수정: currentUserProvider → userProvider
 
         return Container(
@@ -532,7 +530,7 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen>
     if (content.isEmpty) return;
 
     final currentUser = ref.read(
-      userProvider,
+      currentUserProvider,
     ); // 수정: currentUserProvider → userProvider
     if (currentUser == null) {
       _showErrorSnackBar('로그인이 필요합니다.');
