@@ -366,34 +366,21 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
           icon: Icons.help_outline,
           title: '도움말',
           subtitle: '자주 묻는 질문',
-          onTap: () {
-            // TODO: 도움말 페이지로 이동
-            ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(const SnackBar(content: Text('도움말 기능은 준비 중입니다')));
-          },
+          onTap: () => context.push(AppRoutes.help), // ← 수정: TODO 제거, 실제 라우트 연결
         ),
         _ProfileMenuItem(
           icon: Icons.privacy_tip_outlined,
           title: '개인정보처리방침',
           subtitle: '개인정보 보호 정책',
-          onTap: () {
-            // TODO: 개인정보처리방침 페이지로 이동
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('개인정보처리방침 페이지는 준비 중입니다')),
-            );
-          },
+          onTap:
+              () => context.push(AppRoutes.privacy), // ← 수정: TODO 제거, 실제 라우트 연결
         ),
         _ProfileMenuItem(
           icon: Icons.description_outlined,
           title: '이용약관',
           subtitle: '서비스 이용약관',
-          onTap: () {
-            // TODO: 이용약관 페이지로 이동
-            ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(const SnackBar(content: Text('이용약관 페이지는 준비 중입니다')));
-          },
+          onTap:
+              () => context.push(AppRoutes.terms), // ← 수정: TODO 제거, 실제 라우트 연결
         ),
       ],
     );

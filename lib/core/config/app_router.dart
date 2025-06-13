@@ -1,8 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_mentalfit/screens/info/privacy_screen.dart';
+import 'package:flutter_mentalfit/screens/info/terms_screen.dart';
+import 'package:flutter_mentalfit/screens/profile/edit_profile_screen.dart';
+import 'package:flutter_mentalfit/screens/profile/settings_screen.dart';
+import 'package:flutter_mentalfit/screens/settings/notifications_screen.dart';
 import 'package:go_router/go_router.dart';
 import 'app_routes.dart';
 
 // === 스크린 임포트 ===
+import '../../screens/profile/profile_screen.dart';
+
 // Auth
 import '../../screens/auth/login_screen.dart';
 import '../../screens/auth/signup_screen.dart';
@@ -272,33 +279,32 @@ class AppRouter {
       GoRoute(
         path: AppRoutes.profile,
         name: 'profile',
-        builder: (context, state) => const PlaceholderScreen(title: '마이페이지'),
+        builder: (context, state) => const ProfileScreen(),
       ),
       GoRoute(
         path: AppRoutes.editProfile,
         name: 'edit-profile',
-        builder: (context, state) => const PlaceholderScreen(title: '프로필 수정'),
+        builder: (context, state) => const EditProfileScreen(),
       ),
       GoRoute(
         path: AppRoutes.settings,
         name: 'settings',
-        builder: (context, state) => const PlaceholderScreen(title: '설정'),
+        builder: (context, state) => const SettingsScreen(),
       ),
       GoRoute(
         path: AppRoutes.notifications,
         name: 'notifications',
-        builder: (context, state) => const PlaceholderScreen(title: '알림 설정'),
+        builder: (context, state) => const NotificationsScreen(),
       ),
       GoRoute(
         path: AppRoutes.privacy,
         name: 'privacy',
-        builder:
-            (context, state) => const PlaceholderScreen(title: '개인정보 처리방침'),
+        builder: (context, state) => const PrivacyScreen(),
       ),
       GoRoute(
         path: AppRoutes.terms,
         name: 'terms',
-        builder: (context, state) => const PlaceholderScreen(title: '이용약관'),
+        builder: (context, state) => const TermsScreen(),
       ),
       GoRoute(
         path: AppRoutes.help,

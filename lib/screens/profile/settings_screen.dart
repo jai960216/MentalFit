@@ -442,19 +442,6 @@ MentalFit(이하 "회사")는 다음의 목적을 위하여 개인정보를 처�
             );
           },
         ),
-        _buildMenuTile(
-          title: '개인정보 내보내기',
-          subtitle: '내 데이터 다운로드',
-          icon: Icons.download_outlined,
-          onTap: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('데이터 내보내기 기능은 준비 중입니다'),
-                backgroundColor: AppColors.info,
-              ),
-            );
-          },
-        ),
       ],
     );
   }
