@@ -1,4 +1,8 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'message_model.dart';
+
+// Message 타입을 re-export하여 순환 import 방지
+export 'message_model.dart';
 
 class ChatRoom {
   final String id;
@@ -42,13 +46,13 @@ class ChatRoom {
       counselorImageUrl: json['counselorImageUrl'] as String?,
       lastMessage:
           json['lastMessage'] != null
-              ? Message.fromJson(json['lastMessage'] as Map<String, dynamic>)
+              ? _parseLastMessage(json['lastMessage'])
               : null,
-      unreadCount: json['unreadCount'] as int,
+      unreadCount: json['unreadCount'] as int? ?? 0,
       topic: json['topic'] as String?,
-      status: ChatRoomStatus.fromString(json['status'] as String),
-      createdAt: DateTime.parse(json['createdAt'] as String),
-      updatedAt: DateTime.parse(json['updatedAt'] as String),
+      status: ChatRoomStatus.fromString(json['status'] as String? ?? 'active'),
+      createdAt: _parseDateTime(json['createdAt']),
+      updatedAt: _parseDateTime(json['updatedAt']),
     );
   }
 
@@ -67,6 +71,24 @@ class ChatRoom {
       'status': status.value,
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
+    };
+  }
+
+  /// Firebase Firestore 저장용 데이터 변환
+  Map<String, dynamic> toFirestore() {
+    return {
+      'title': title,
+      'type': type.value,
+      'participantIds': participantIds,
+      'counselorId': counselorId,
+      'counselorName': counselorName,
+      'counselorImageUrl': counselorImageUrl,
+      'lastMessage': lastMessage?.toFirestore(),
+      'unreadCount': unreadCount,
+      'topic': topic,
+      'status': status.value,
+      'createdAt': Timestamp.fromDate(createdAt),
+      'updatedAt': Timestamp.fromDate(updatedAt),
     };
   }
 
@@ -111,6 +133,35 @@ class ChatRoom {
   @override
   String toString() {
     return 'ChatRoom(id: $id, title: $title, type: $type)';
+  }
+
+  /// Firebase DateTime 파싱 헬퍼
+  static DateTime _parseDateTime(dynamic value) {
+    if (value == null) return DateTime.now();
+
+    if (value is Timestamp) {
+      return value.toDate();
+    } else if (value is String) {
+      return DateTime.parse(value);
+    } else if (value is DateTime) {
+      return value;
+    } else {
+      return DateTime.now();
+    }
+  }
+
+  /// Firebase lastMessage 파싱 헬퍼
+  static Message? _parseLastMessage(dynamic value) {
+    if (value == null) return null;
+
+    try {
+      if (value is Map<String, dynamic>) {
+        return Message.fromJson(value);
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
   }
 }
 

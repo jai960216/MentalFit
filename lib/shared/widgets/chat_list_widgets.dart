@@ -9,7 +9,7 @@ class ChatListWidgets {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(title: const Text('채팅'), backgroundColor: AppColors.white),
-      body: buildLoading('채팅 서비스를 초기화하는 중...'),
+      body: buildLoading('채팅 불러오는 중...'),
     );
   }
 

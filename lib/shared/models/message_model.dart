@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 class Message {
   final String id;
   final String chatRoomId;
@@ -29,8 +31,8 @@ class Message {
       senderName: json['senderName'] as String?,
       content: json['content'] as String,
       type: MessageType.fromString(json['type'] as String),
-      timestamp: DateTime.parse(json['timestamp'] as String),
-      isRead: json['isRead'] as bool,
+      timestamp: _parseDateTime(json['timestamp']),
+      isRead: json['isRead'] as bool? ?? false,
       metadata: json['metadata'] as Map<String, dynamic>?,
     );
   }
@@ -46,6 +48,20 @@ class Message {
       'timestamp': timestamp.toIso8601String(),
       'isRead': isRead,
       'metadata': metadata,
+    };
+  }
+
+  /// Firebase Firestore 저장용 데이터 변환
+  Map<String, dynamic> toFirestore() {
+    return {
+      'chatRoomId': chatRoomId,
+      'senderId': senderId,
+      'senderName': senderName,
+      'content': content,
+      'type': type.value,
+      'timestamp': Timestamp.fromDate(timestamp),
+      'isRead': isRead,
+      'metadata': metadata ?? {},
     };
   }
 
@@ -81,9 +97,33 @@ class Message {
   // AI 메시지인지 확인
   bool get isFromAI => senderId == 'ai' || senderId == 'system';
 
+  // 이미지 메시지인지 확인
+  bool get isImage => type == MessageType.image;
+
+  // 파일 메시지인지 확인
+  bool get isFile => type == MessageType.file;
+
+  // 시스템 메시지인지 확인
+  bool get isSystem => type == MessageType.system;
+
   @override
   String toString() {
     return 'Message(id: $id, senderId: $senderId, content: $content)';
+  }
+
+  /// Firebase DateTime 파싱 헬퍼
+  static DateTime _parseDateTime(dynamic value) {
+    if (value == null) return DateTime.now();
+
+    if (value is Timestamp) {
+      return value.toDate();
+    } else if (value is String) {
+      return DateTime.parse(value);
+    } else if (value is DateTime) {
+      return value;
+    } else {
+      return DateTime.now();
+    }
   }
 }
 

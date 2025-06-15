@@ -2,284 +2,285 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import '../../core/config/app_colors.dart';
-import 'custom_button.dart';
 import '../models/chat_room_model.dart';
 import '../../providers/chat_provider.dart';
 
 class ChatErrorWidgets {
+  /// 에러 상태 위젯
   static Widget buildErrorState(
     ChatRoomType type,
     String error,
     VoidCallback onRetry,
-    VoidCallback onCreateAI,
+    VoidCallback onCreateAIChat,
     VoidCallback onFindCounselor,
   ) {
     return Center(
       child: Padding(
-        padding: EdgeInsets.all(32.w),
+        padding: EdgeInsets.all(24.w),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(_getErrorIcon(type), size: 64.sp, color: AppColors.error),
-            SizedBox(height: 24.h),
+            Icon(Icons.error_outline, size: 64.sp, color: AppColors.error),
+            SizedBox(height: 16.h),
             Text(
-              _getErrorTitle(type),
+              '채팅방을 불러올 수 없습니다',
               style: TextStyle(
                 fontSize: 18.sp,
                 fontWeight: FontWeight.w600,
                 color: AppColors.textPrimary,
               ),
-              textAlign: TextAlign.center,
             ),
             SizedBox(height: 8.h),
             Text(
-              _getErrorMessage(error),
-              style: TextStyle(
-                fontSize: 14.sp,
-                color: AppColors.textSecondary,
-                height: 1.4,
-              ),
+              error,
+              style: TextStyle(fontSize: 14.sp, color: AppColors.textSecondary),
               textAlign: TextAlign.center,
             ),
-            SizedBox(height: 32.h),
-            if (type == ChatRoomType.ai) ...[
-              CustomButton(
-                text: '새 AI 채팅 시작',
-                onPressed: onCreateAI,
-                icon: Icons.smart_toy,
-              ),
-              SizedBox(height: 12.h),
-              TextButton(
-                onPressed: onRetry,
-                child: Text(
-                  '다시 시도',
-                  style: TextStyle(fontSize: 14.sp, color: AppColors.primary),
-                ),
-              ),
-            ] else if (type == ChatRoomType.counselor) ...[
-              CustomButton(
-                text: '상담사 찾기',
-                onPressed: onFindCounselor,
-                icon: Icons.search,
-              ),
-              SizedBox(height: 12.h),
-              TextButton(
-                onPressed: onRetry,
-                child: Text(
-                  '다시 시도',
-                  style: TextStyle(fontSize: 14.sp, color: AppColors.primary),
-                ),
-              ),
-            ] else ...[
-              Row(
-                children: [
-                  Expanded(
-                    child: CustomButton(
-                      text: '다시 시도',
-                      onPressed: onRetry,
-                      icon: Icons.refresh,
-                      type: ButtonType.primary,
-                    ),
+            SizedBox(height: 24.h),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                ElevatedButton(
+                  onPressed: onRetry,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: AppColors.white,
                   ),
-                  SizedBox(width: 12.w),
-                  Expanded(
-                    child: CustomButton(
-                      text: '새 채팅',
-                      onPressed: onCreateAI,
-                      icon: Icons.add,
-                      type: ButtonType.secondary,
-                    ),
+                  child: const Text('다시 시도'),
+                ),
+                SizedBox(width: 16.w),
+                if (type == ChatRoomType.ai)
+                  OutlinedButton(
+                    onPressed: onCreateAIChat,
+                    child: const Text('AI 상담 시작'),
+                  )
+                else
+                  OutlinedButton(
+                    onPressed: onFindCounselor,
+                    child: const Text('상담사 찾기'),
                   ),
-                ],
-              ),
-            ],
+              ],
+            ),
           ],
         ),
       ),
     );
   }
 
+  /// 빈 상태 위젯
   static Widget buildEmptyState(
     ChatRoomType type,
-    VoidCallback onCreateAI,
+    VoidCallback onCreateAIChat,
     VoidCallback onFindCounselor,
   ) {
     return Center(
       child: Padding(
-        padding: EdgeInsets.all(32.w),
+        padding: EdgeInsets.all(24.w),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(_getEmptyIcon(type), size: 64.sp, color: AppColors.grey400),
-            SizedBox(height: 24.h),
+            Icon(
+              type == ChatRoomType.ai ? Icons.smart_toy : Icons.person_search,
+              size: 64.sp,
+              color: AppColors.grey400,
+            ),
+            SizedBox(height: 16.h),
             Text(
-              _getEmptyTitle(type),
+              type == ChatRoomType.ai ? '아직 AI 상담이 없습니다' : '아직 상담사와의 대화가 없습니다',
               style: TextStyle(
                 fontSize: 18.sp,
                 fontWeight: FontWeight.w600,
-                color: AppColors.textSecondary,
+                color: AppColors.textPrimary,
               ),
             ),
             SizedBox(height: 8.h),
             Text(
-              _getEmptyMessage(type),
-              style: TextStyle(
-                fontSize: 14.sp,
-                color: AppColors.textSecondary,
-                height: 1.4,
-              ),
+              type == ChatRoomType.ai
+                  ? 'AI 상담사와 대화를 시작해보세요'
+                  : '전문 상담사와 상담을 시작해보세요',
+              style: TextStyle(fontSize: 14.sp, color: AppColors.textSecondary),
               textAlign: TextAlign.center,
             ),
-            SizedBox(height: 32.h),
-            if (type == ChatRoomType.ai) ...[
-              CustomButton(
-                text: 'AI 상담 시작',
-                onPressed: onCreateAI,
-                icon: Icons.smart_toy,
+            SizedBox(height: 24.h),
+            ElevatedButton(
+              onPressed:
+                  type == ChatRoomType.ai ? onCreateAIChat : onFindCounselor,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: AppColors.white,
+                padding: EdgeInsets.symmetric(horizontal: 32.w, vertical: 12.h),
               ),
-            ] else if (type == ChatRoomType.counselor) ...[
-              CustomButton(
-                text: '상담사 찾기',
-                onPressed: onFindCounselor,
-                icon: Icons.search,
+              child: Text(
+                type == ChatRoomType.ai ? 'AI 상담 시작' : '상담사 찾기',
+                style: TextStyle(fontSize: 16.sp, fontWeight: FontWeight.w600),
               ),
-            ] else ...[
-              CustomButton(
-                text: 'AI 상담 시작',
-                onPressed: onCreateAI,
-                icon: Icons.smart_toy,
-              ),
-              SizedBox(height: 12.h),
-              CustomButton(
-                text: '상담사 찾기',
-                onPressed: onFindCounselor,
-                icon: Icons.search,
-                type: ButtonType.secondary,
-              ),
-            ],
+            ),
           ],
         ),
       ),
     );
   }
 
+  /// 에러 배너 위젯
   static Widget buildErrorBanner(
     String error,
-    VoidCallback onRefresh,
+    VoidCallback onRetry,
     WidgetRef ref,
   ) {
     return Container(
       width: double.infinity,
-      padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
-      color: AppColors.error.withValues(alpha: 0.1),
+      margin: EdgeInsets.all(16.w),
+      padding: EdgeInsets.all(12.w),
+      decoration: BoxDecoration(
+        color: AppColors.error.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8.r),
+        border: Border.all(color: AppColors.error.withOpacity(0.3)),
+      ),
       child: Row(
         children: [
-          Icon(Icons.warning_amber, size: 20.sp, color: AppColors.error),
+          Icon(Icons.warning, color: AppColors.error, size: 20.sp),
           SizedBox(width: 8.w),
           Expanded(
             child: Text(
-              '일부 채팅방을 불러오지 못했습니다',
-              style: TextStyle(
-                fontSize: 12.sp,
-                color: AppColors.error,
-                fontWeight: FontWeight.w500,
-              ),
+              error,
+              style: TextStyle(fontSize: 14.sp, color: AppColors.error),
             ),
           ),
           TextButton(
             onPressed: () {
-              ref.read(chatRoomsProvider.notifier).clearError();
-              onRefresh();
+              ref.read(chatListProvider.notifier).clearError();
             },
-            style: TextButton.styleFrom(
-              padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
-              minimumSize: Size.zero,
-            ),
             child: Text(
-              '재시도',
-              style: TextStyle(
-                fontSize: 12.sp,
-                color: AppColors.error,
-                fontWeight: FontWeight.w600,
-              ),
+              '닫기',
+              style: TextStyle(fontSize: 12.sp, color: AppColors.error),
             ),
           ),
           IconButton(
-            onPressed: () => ref.read(chatRoomsProvider.notifier).clearError(),
+            onPressed: () => ref.read(chatListProvider.notifier).clearError(),
             icon: Icon(Icons.close, size: 16.sp, color: AppColors.error),
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(),
           ),
         ],
       ),
     );
   }
 
-  // Helper methods
-  static IconData _getErrorIcon(ChatRoomType type) {
-    switch (type) {
-      case ChatRoomType.ai:
-        return Icons.smart_toy_outlined;
-      case ChatRoomType.counselor:
-        return Icons.people_outline;
-      default:
-        return Icons.error_outline;
-    }
+  /// 네트워크 에러 위젯
+  static Widget buildNetworkError(VoidCallback onRetry) {
+    return Center(
+      child: Padding(
+        padding: EdgeInsets.all(24.w),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.wifi_off, size: 64.sp, color: AppColors.grey400),
+            SizedBox(height: 16.h),
+            Text(
+              '인터넷 연결을 확인해주세요',
+              style: TextStyle(
+                fontSize: 18.sp,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            SizedBox(height: 8.h),
+            Text(
+              '네트워크 연결 상태를 확인하고 다시 시도해주세요',
+              style: TextStyle(fontSize: 14.sp, color: AppColors.textSecondary),
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: 24.h),
+            ElevatedButton(
+              onPressed: onRetry,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: AppColors.white,
+              ),
+              child: const Text('다시 시도'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
-  static IconData _getEmptyIcon(ChatRoomType type) {
-    switch (type) {
-      case ChatRoomType.ai:
-        return Icons.smart_toy_outlined;
-      case ChatRoomType.counselor:
-        return Icons.people_outline;
-      default:
-        return Icons.chat_bubble_outline;
-    }
+  /// 로딩 실패 위젯
+  static Widget buildLoadingError(String message, VoidCallback onRetry) {
+    return Center(
+      child: Padding(
+        padding: EdgeInsets.all(24.w),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.refresh, size: 64.sp, color: AppColors.grey400),
+            SizedBox(height: 16.h),
+            Text(
+              '데이터를 불러올 수 없습니다',
+              style: TextStyle(
+                fontSize: 18.sp,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            SizedBox(height: 8.h),
+            Text(
+              message,
+              style: TextStyle(fontSize: 14.sp, color: AppColors.textSecondary),
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: 24.h),
+            ElevatedButton(
+              onPressed: onRetry,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: AppColors.white,
+              ),
+              child: const Text('새로고침'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
-  static String _getErrorTitle(ChatRoomType type) {
-    switch (type) {
-      case ChatRoomType.ai:
-        return 'AI 채팅방을 불러올 수 없습니다';
-      case ChatRoomType.counselor:
-        return '상담사 채팅방을 불러올 수 없습니다';
-      default:
-        return '채팅 목록을 불러올 수 없습니다';
-    }
-  }
-
-  static String _getEmptyTitle(ChatRoomType type) {
-    switch (type) {
-      case ChatRoomType.ai:
-        return 'AI 상담을 시작해보세요';
-      case ChatRoomType.counselor:
-        return '상담사와의 채팅이 없습니다';
-      default:
-        return '아직 진행 중인 채팅이 없습니다';
-    }
-  }
-
-  static String _getErrorMessage(String error) {
-    if (error.contains('네트워크') || error.contains('network')) {
-      return '인터넷 연결을 확인해주세요';
-    } else if (error.contains('서버') || error.contains('server')) {
-      return '서버에 일시적인 문제가 있습니다\n잠시 후 다시 시도해주세요';
-    } else if (error.contains('권한') || error.contains('authorization')) {
-      return '로그인이 필요합니다\n다시 로그인해주세요';
-    } else {
-      return '일시적인 오류가 발생했습니다\n잠시 후 다시 시도해주세요';
-    }
-  }
-
-  static String _getEmptyMessage(ChatRoomType type) {
-    switch (type) {
-      case ChatRoomType.ai:
-        return '24시간 언제든지 AI와 대화할 수 있습니다';
-      case ChatRoomType.counselor:
-        return '전문 상담사를 찾아 1:1 상담을 시작해보세요';
-      default:
-        return 'AI 상담이나 전문가와의 상담을 시작해보세요';
-    }
+  /// 권한 거부 위젯
+  static Widget buildPermissionDenied(
+    String permission,
+    VoidCallback onOpenSettings,
+  ) {
+    return Center(
+      child: Padding(
+        padding: EdgeInsets.all(24.w),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.block, size: 64.sp, color: AppColors.warning),
+            SizedBox(height: 16.h),
+            Text(
+              '$permission 권한이 필요합니다',
+              style: TextStyle(
+                fontSize: 18.sp,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            SizedBox(height: 8.h),
+            Text(
+              '해당 기능을 사용하려면 권한을 허용해주세요',
+              style: TextStyle(fontSize: 14.sp, color: AppColors.textSecondary),
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: 24.h),
+            ElevatedButton(
+              onPressed: onOpenSettings,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: AppColors.white,
+              ),
+              child: const Text('설정으로 이동'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

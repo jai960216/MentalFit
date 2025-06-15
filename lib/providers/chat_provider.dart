@@ -1,34 +1,33 @@
+import 'dart:async';
+import 'dart:io';
+import 'package:flutter/foundation.dart';
+import 'package:flutter_mentalfit/shared/models/chat_room_model.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../shared/models/chat_room_model.dart';
-import '../shared/models/message_model.dart';
+
+// ChatRoom에서 Message를 이미 export하므로 별도 import 불필요
 import '../shared/services/chat_service.dart';
 
-// === 채팅 서비스 프로바이더 ===
-final chatServiceProvider = FutureProvider<ChatService>((ref) {
-  return ChatService.getInstance();
-});
-
-// === 채팅방 상태 ===
-class ChatRoomsState {
+// === 채팅방 목록 상태 ===
+class ChatListState {
   final List<ChatRoom> chatRooms;
   final bool isLoading;
   final bool isInitialized;
   final String? error;
 
-  const ChatRoomsState({
+  const ChatListState({
     this.chatRooms = const [],
     this.isLoading = false,
     this.isInitialized = false,
     this.error,
   });
 
-  ChatRoomsState copyWith({
+  ChatListState copyWith({
     List<ChatRoom>? chatRooms,
     bool? isLoading,
     bool? isInitialized,
     String? error,
   }) {
-    return ChatRoomsState(
+    return ChatListState(
       chatRooms: chatRooms ?? this.chatRooms,
       isLoading: isLoading ?? this.isLoading,
       isInitialized: isInitialized ?? this.isInitialized,
@@ -37,116 +36,133 @@ class ChatRoomsState {
   }
 }
 
-// === 채팅방 상태 관리 ===
-class ChatRoomsNotifier extends StateNotifier<ChatRoomsState> {
+// === 채팅방 목록 Provider ===
+class ChatListNotifier extends StateNotifier<ChatListState> {
   ChatService? _chatService;
+  StreamSubscription<List<ChatRoom>>? _chatRoomsSubscription;
   bool _isInitializing = false;
 
-  ChatRoomsNotifier() : super(const ChatRoomsState());
+  ChatListNotifier() : super(const ChatListState()) {
+    initializeIfNeeded();
+  }
 
-  /// 서비스 초기화 (개선된 버전)
+  @override
+  void dispose() {
+    _chatRoomsSubscription?.cancel();
+    _chatService?.dispose();
+    super.dispose();
+  }
+
+  /// 서비스 초기화 및 실시간 스트림 구독
   Future<void> initializeIfNeeded() async {
-    // 이미 초기화 중이거나 완료된 경우 스킵
-    if (_isInitializing || state.isInitialized) {
-      return;
-    }
+    if (state.isInitialized || _isInitializing) return;
 
     _isInitializing = true;
-
-    // 로딩 상태 설정
     state = state.copyWith(isLoading: true, error: null);
 
     try {
-      // ChatService 초기화
       _chatService = await ChatService.getInstance();
 
-      // 초기화 완료 표시
-      state = state.copyWith(isInitialized: true);
+      // Firebase 연결 상태 확인
+      final isConnected = await _chatService!.isConnected();
+      if (!isConnected) {
+        throw Exception('Firebase에 연결할 수 없습니다. 인터넷 연결을 확인해주세요.');
+      }
 
-      // 초기 데이터 로드 (loadChatRooms 호출하지 않고 직접 처리)
-      await _loadInitialData();
+      // 실시간 채팅방 목록 스트림 구독
+      await _subscribeToChatRoomsStream();
+
+      // 초기 데이터 로드
+      await _loadInitialChatRooms();
+
+      state = state.copyWith(
+        isInitialized: true,
+        isLoading: false,
+        error: null,
+      );
     } catch (e) {
-      // 초기화 실패 시에도 기본 상태 제공
+      debugPrint('ChatListNotifier 초기화 실패: $e');
       state = state.copyWith(
         isLoading: false,
-        isInitialized: true,
-        error: '채팅 서비스를 초기화하는 중 오류가 발생했습니다.',
-        chatRooms: [_createDefaultAIChatRoom()], // 기본 AI 채팅방 제공
+        error: '채팅 서비스를 초기화할 수 없습니다. 인터넷 연결을 확인해주세요.',
+        isInitialized: false,
       );
     } finally {
       _isInitializing = false;
     }
   }
 
-  /// 초기 데이터 로드 (내부 메서드)
-  Future<void> _loadInitialData() async {
+  /// 초기 채팅방 목록 로드
+  Future<void> _loadInitialChatRooms() async {
     try {
-      if (_chatService == null) {
-        throw Exception('ChatService가 초기화되지 않았습니다.');
+      if (_chatService != null) {
+        // 명시적으로 채팅방 목록 한 번 로드
+        final chatRooms = await _chatService!.getChatRooms();
+        state = state.copyWith(chatRooms: chatRooms);
       }
-
-      final chatRooms = await _chatService!.getChatRooms();
-
-      state = state.copyWith(
-        chatRooms: chatRooms,
-        isLoading: false,
-        error: null,
-      );
     } catch (e) {
-      // 데이터 로드 실패 시 기본 데이터 제공
-      state = state.copyWith(
-        isLoading: false,
-        error: null, // 에러를 null로 설정하여 UI에서 정상 동작하도록
-        chatRooms: [_createDefaultAIChatRoom()],
-      );
+      debugPrint('초기 채팅방 로드 실패: $e');
+      // 초기 로드 실패 시에도 스트림은 유지
     }
   }
 
-  /// 서비스 가져오기 (안전한 버전)
-  Future<ChatService> _getService() async {
-    if (_chatService == null) {
-      await initializeIfNeeded();
-    }
+  /// 실시간 채팅방 목록 스트림 구독
+  Future<void> _subscribeToChatRoomsStream() async {
+    try {
+      _chatRoomsSubscription?.cancel();
 
-    if (_chatService == null) {
-      throw Exception('ChatService 초기화에 실패했습니다.');
-    }
+      if (_chatService != null) {
+        // 스트림 구독 전 잠시 대기 (Firebase 연결 안정화)
+        await Future.delayed(const Duration(milliseconds: 500));
 
-    return _chatService!;
+        final stream = _chatService!.getChatRoomsStream();
+        _chatRoomsSubscription = stream.listen(
+          (chatRooms) {
+            if (mounted) {
+              state = state.copyWith(
+                chatRooms: chatRooms,
+                isLoading: false,
+                error: null,
+              );
+            }
+          },
+          onError: (error) {
+            debugPrint('채팅방 스트림 오류: $error');
+            if (mounted) {
+              state = state.copyWith(
+                error: '채팅방 목록을 불러오는 중 오류가 발생했습니다.',
+                isLoading: false,
+              );
+            }
+          },
+        );
+      }
+    } catch (e) {
+      debugPrint('채팅방 스트림 구독 실패: $e');
+    }
   }
 
-  /// 채팅방 목록 로드 (개선된 버전)
-  Future<void> loadChatRooms() async {
-    // 초기화되지 않은 경우 먼저 초기화
+  /// 채팅방 목록 새로고침
+  Future<void> refreshChatRooms() async {
     if (!state.isInitialized) {
       await initializeIfNeeded();
       return;
     }
 
-    // 이미 로딩 중인 경우 중복 방지
-    if (state.isLoading) {
-      return;
-    }
-
-    state = state.copyWith(isLoading: true, error: null);
-
     try {
-      final service = await _getService();
-      final chatRooms = await service.getChatRooms();
+      state = state.copyWith(isLoading: true, error: null);
 
-      state = state.copyWith(
-        chatRooms: chatRooms,
-        isLoading: false,
-        error: null,
-      );
+      if (_chatService != null) {
+        final chatRooms = await _chatService!.getChatRooms();
+        state = state.copyWith(
+          chatRooms: chatRooms,
+          isLoading: false,
+          error: null,
+        );
+      }
     } catch (e) {
-      state = state.copyWith(
-        isLoading: false,
-        error: '채팅방 목록을 불러오는 중 오류가 발생했습니다.',
-        // 에러 발생 시에도 기존 데이터 유지하거나 기본 데이터 제공
-        chatRooms:
-            state.chatRooms.isEmpty ? [_createDefaultAIChatRoom()] : null,
-      );
+      debugPrint('채팅방 새로고침 실패: $e');
+      state = state.copyWith(isLoading: false, error: '채팅방 목록을 새로고침할 수 없습니다.');
     }
   }
 
@@ -157,424 +173,409 @@ class ChatRoomsNotifier extends StateNotifier<ChatRoomsState> {
     String? counselorId,
     String? topic,
   }) async {
+    if (!state.isInitialized) {
+      await initializeIfNeeded();
+    }
+
     try {
-      final service = await _getService();
-      final chatRoom = await service.createChatRoom(
-        title: title,
-        type: type,
-        counselorId: counselorId,
-        topic: topic,
-      );
+      if (_chatService != null) {
+        final chatRoom = await _chatService!.createChatRoom(
+          title: title,
+          type: type,
+          counselorId: counselorId,
+          topic: topic,
+        );
 
-      // 새 채팅방을 목록에 추가
-      await loadChatRooms();
-
-      return chatRoom.id;
+        // Firebase 실시간 스트림이 자동으로 업데이트 처리
+        return chatRoom.id;
+      }
+      return null;
     } catch (e) {
+      debugPrint('채팅방 생성 실패: $e');
       state = state.copyWith(error: '채팅방을 생성하는 중 오류가 발생했습니다.');
       return null;
     }
   }
 
-  /// 채팅방 삭제 (로컬 상태에서만 제거)
-  Future<void> deleteChatRoom(String chatRoomId) async {
-    try {
-      // ChatService에 deleteChatRoom 메서드가 없으므로 로컬 상태에서만 제거
-      final updatedList =
-          state.chatRooms
-              .where((chatRoom) => chatRoom.id != chatRoomId)
-              .toList();
-
-      state = state.copyWith(chatRooms: updatedList);
-    } catch (e) {
-      state = state.copyWith(error: '채팅방을 삭제하는 중 오류가 발생했습니다.');
-    }
-  }
-
-  /// 읽음 처리
-  Future<void> markAsRead(String chatRoomId) async {
-    try {
-      final service = await _getService();
-      await service.markMessagesAsRead(chatRoomId);
-
-      final updatedList =
-          state.chatRooms.map((chatRoom) {
-            if (chatRoom.id == chatRoomId) {
-              return chatRoom.copyWith(unreadCount: 0);
-            }
-            return chatRoom;
-          }).toList();
-
-      state = state.copyWith(chatRooms: updatedList);
-    } catch (e) {
-      // 읽음 처리 실패 시에도 UI 상에서는 읽음 처리
-      final updatedList =
-          state.chatRooms.map((chatRoom) {
-            if (chatRoom.id == chatRoomId) {
-              return chatRoom.copyWith(unreadCount: 0);
-            }
-            return chatRoom;
-          }).toList();
-
-      state = state.copyWith(chatRooms: updatedList);
-    }
-  }
-
-  /// 에러 상태 클리어
-  void clearError() {
-    state = state.copyWith(error: null);
-  }
-
-  /// 강제 새로고침
-  Future<void> refresh() async {
-    await loadChatRooms();
-  }
-
-  /// 기본 AI 채팅방 생성
-  ChatRoom _createDefaultAIChatRoom() {
-    return ChatRoom(
-      id: 'ai_chat_default_${DateTime.now().millisecondsSinceEpoch}',
-      title: 'AI 상담',
+  /// AI 채팅방 생성
+  Future<String?> createAIChatRoom({String? topic}) async {
+    return await createChatRoom(
+      title: topic != null ? 'AI 상담 - $topic' : 'AI 상담',
       type: ChatRoomType.ai,
-      participantIds: ['current_user', 'ai'],
-      unreadCount: 0,
-      status: ChatRoomStatus.active,
-      createdAt: DateTime.now(),
-      updatedAt: DateTime.now(),
+      topic: topic,
     );
   }
 
-  /// 새 AI 채팅방 생성 (편의 메서드)
-  Future<ChatRoom?> createAIChatRoom({String? topic}) async {
-    try {
-      final service = await _getService();
-      final chatRoom = await service.createAIChatRoom(topic: topic);
-
-      // 상태 업데이트
-      state = state.copyWith(chatRooms: [chatRoom, ...state.chatRooms]);
-
-      return chatRoom;
-    } catch (e) {
-      state = state.copyWith(error: 'AI 채팅방을 생성하는 중 오류가 발생했습니다.');
-      return null;
-    }
-  }
-
-  /// 새 상담사 채팅방 생성 (편의 메서드)
-  Future<ChatRoom?> createCounselorChatRoom({
+  /// 상담사 채팅방 생성
+  Future<String?> createCounselorChatRoom({
     required String counselorId,
     required String counselorName,
     String? topic,
   }) async {
+    return await createChatRoom(
+      title: '$counselorName님과의 상담',
+      type: ChatRoomType.counselor,
+      counselorId: counselorId,
+      topic: topic,
+    );
+  }
+
+  /// 채팅방 삭제
+  Future<bool> deleteChatRoom(String chatRoomId) async {
     try {
-      final service = await _getService();
-      final chatRoom = await service.createCounselorChatRoom(
-        counselorId: counselorId,
-        counselorName: counselorName,
-        topic: topic,
-      );
+      if (_chatService != null) {
+        final success = await _chatService!.deleteChatRoom(chatRoomId);
 
-      // 상태 업데이트
-      state = state.copyWith(chatRooms: [chatRoom, ...state.chatRooms]);
-
-      return chatRoom;
+        if (success) {
+          // Firebase 실시간 스트림이 자동으로 업데이트 처리
+          return true;
+        }
+      }
+      return false;
     } catch (e) {
-      state = state.copyWith(error: '상담사 채팅방을 생성하는 중 오류가 발생했습니다.');
-      return null;
+      debugPrint('채팅방 삭제 실패: $e');
+      state = state.copyWith(error: '채팅방을 삭제하는 중 오류가 발생했습니다.');
+      return false;
+    }
+  }
+
+  /// 에러 클리어
+  void clearError() {
+    state = state.copyWith(error: null);
+  }
+
+  /// 연결 상태 확인
+  Future<bool> checkConnection() async {
+    try {
+      if (_chatService != null) {
+        return await _chatService!.isConnected();
+      }
+      return false;
+    } catch (e) {
+      return false;
     }
   }
 }
 
-// === 채팅방 목록 프로바이더 ===
-final chatRoomsProvider =
-    StateNotifierProvider<ChatRoomsNotifier, ChatRoomsState>((ref) {
-      return ChatRoomsNotifier();
-    });
-
-// === 메시지 상태 ===
-class ChatMessagesState {
+// === 채팅방 상세 상태 ===
+class ChatRoomState {
   final List<Message> messages;
   final bool isLoading;
-  final bool isSending;
   final bool isInitialized;
+  final bool isSending;
   final String? error;
 
-  const ChatMessagesState({
+  const ChatRoomState({
     this.messages = const [],
     this.isLoading = false,
-    this.isSending = false,
     this.isInitialized = false,
+    this.isSending = false,
     this.error,
   });
 
-  ChatMessagesState copyWith({
+  ChatRoomState copyWith({
     List<Message>? messages,
     bool? isLoading,
-    bool? isSending,
     bool? isInitialized,
+    bool? isSending,
     String? error,
   }) {
-    return ChatMessagesState(
+    return ChatRoomState(
       messages: messages ?? this.messages,
       isLoading: isLoading ?? this.isLoading,
-      isSending: isSending ?? this.isSending,
       isInitialized: isInitialized ?? this.isInitialized,
+      isSending: isSending ?? this.isSending,
       error: error,
     );
   }
 }
 
-// === 메시지 상태 관리 ===
-class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
+// === 채팅방 상세 Provider ===
+class ChatRoomNotifier extends StateNotifier<ChatRoomState> {
   final String chatRoomId;
   ChatService? _chatService;
+  StreamSubscription<List<Message>>? _messagesSubscription;
   bool _isInitializing = false;
 
-  ChatMessagesNotifier(this.chatRoomId) : super(const ChatMessagesState());
+  ChatRoomNotifier(this.chatRoomId) : super(const ChatRoomState()) {
+    initializeIfNeeded();
+  }
 
-  /// 서비스 초기화
+  @override
+  void dispose() {
+    _messagesSubscription?.cancel();
+    super.dispose();
+  }
+
+  /// 서비스 초기화 및 실시간 메시지 스트림 구독
   Future<void> initializeIfNeeded() async {
-    if (_isInitializing || state.isInitialized) return;
+    if (state.isInitialized || _isInitializing) return;
 
     _isInitializing = true;
     state = state.copyWith(isLoading: true, error: null);
 
     try {
       _chatService = await ChatService.getInstance();
-      state = state.copyWith(isInitialized: true);
-      await _loadInitialMessages();
+
+      // 실시간 메시지 스트림 구독
+      await _subscribeToMessagesStream();
+
+      // 메시지 읽음 처리
+      await markAsRead();
+
+      state = state.copyWith(
+        isInitialized: true,
+        isLoading: false,
+        error: null,
+      );
     } catch (e) {
+      debugPrint('ChatRoomNotifier 초기화 실패: $e');
       state = state.copyWith(
         isLoading: false,
-        isInitialized: true,
-        error: '메시지를 불러오는 중 오류가 발생했습니다.',
-        messages: [],
+        error: '채팅을 불러올 수 없습니다.',
+        isInitialized: false,
       );
     } finally {
       _isInitializing = false;
     }
   }
 
-  /// 초기 메시지 로드
-  Future<void> _loadInitialMessages() async {
+  /// 실시간 메시지 스트림 구독
+  Future<void> _subscribeToMessagesStream() async {
     try {
-      if (_chatService == null) {
-        throw Exception('ChatService가 초기화되지 않았습니다.');
+      _messagesSubscription?.cancel();
+
+      if (_chatService != null) {
+        final stream = _chatService!.getMessagesStream(chatRoomId);
+        _messagesSubscription = stream.listen(
+          (messages) {
+            state = state.copyWith(
+              messages: messages,
+              isLoading: false,
+              error: null,
+            );
+          },
+          onError: (error) {
+            debugPrint('메시지 스트림 오류: $error');
+            state = state.copyWith(
+              error: '메시지를 불러오는 중 오류가 발생했습니다.',
+              isLoading: false,
+            );
+          },
+        );
       }
-
-      final messages = await _chatService!.getMessages(chatRoomId);
-
-      state = state.copyWith(messages: messages, isLoading: false, error: null);
-
-      // 실시간 메시지 스트림 구독 시작
-      _subscribeToMessageStream();
     } catch (e) {
-      state = state.copyWith(
-        isLoading: false,
-        error: null, // 에러를 null로 하여 빈 메시지 목록으로 정상 동작
-        messages: [],
-      );
+      debugPrint('메시지 스트림 구독 실패: $e');
     }
   }
 
-  Future<ChatService> _getService() async {
-    if (_chatService == null) {
+  /// 메시지 전송
+  Future<bool> sendMessage(String content) async {
+    if (!state.isInitialized) {
       await initializeIfNeeded();
     }
 
-    if (_chatService == null) {
-      throw Exception('ChatService 초기화에 실패했습니다.');
-    }
+    if (state.isSending || content.trim().isEmpty) return false;
 
-    return _chatService!;
+    state = state.copyWith(isSending: true, error: null);
+
+    try {
+      if (_chatService != null) {
+        await _chatService!.sendMessage(
+          chatRoomId: chatRoomId,
+          content: content.trim(),
+          senderId: 'current_user', // 실제로는 Firebase Auth에서 가져올 예정
+          type: MessageType.text,
+        );
+
+        state = state.copyWith(isSending: false);
+        return true;
+      }
+
+      state = state.copyWith(isSending: false);
+      return false;
+    } catch (e) {
+      debugPrint('메시지 전송 실패: $e');
+      state = state.copyWith(isSending: false, error: '메시지 전송에 실패했습니다.');
+      return false;
+    }
   }
 
-  /// 메시지 목록 로드
-  Future<void> loadMessages() async {
+  /// 이미지 메시지 전송
+  Future<bool> sendImageMessage(File imageFile) async {
+    if (!state.isInitialized) {
+      await initializeIfNeeded();
+    }
+
+    if (state.isSending) return false;
+
+    state = state.copyWith(isSending: true, error: null);
+
+    try {
+      if (_chatService != null) {
+        await _chatService!.sendImageMessage(
+          chatRoomId: chatRoomId,
+          imageFile: imageFile,
+          senderId: 'current_user',
+        );
+
+        state = state.copyWith(isSending: false);
+        return true;
+      }
+
+      state = state.copyWith(isSending: false);
+      return false;
+    } catch (e) {
+      debugPrint('이미지 전송 실패: $e');
+      state = state.copyWith(isSending: false, error: '이미지 전송에 실패했습니다.');
+      return false;
+    }
+  }
+
+  /// 파일 메시지 전송
+  Future<bool> sendFileMessage(File file) async {
+    if (!state.isInitialized) {
+      await initializeIfNeeded();
+    }
+
+    if (state.isSending) return false;
+
+    state = state.copyWith(isSending: true, error: null);
+
+    try {
+      if (_chatService != null) {
+        await _chatService!.sendFileMessage(
+          chatRoomId: chatRoomId,
+          file: file,
+          senderId: 'current_user',
+        );
+
+        state = state.copyWith(isSending: false);
+        return true;
+      }
+
+      state = state.copyWith(isSending: false);
+      return false;
+    } catch (e) {
+      debugPrint('파일 전송 실패: $e');
+      state = state.copyWith(isSending: false, error: '파일 전송에 실패했습니다.');
+      return false;
+    }
+  }
+
+  /// 메시지 읽음 처리
+  Future<void> markAsRead() async {
+    try {
+      if (_chatService != null) {
+        await _chatService!.markMessagesAsRead(chatRoomId);
+      }
+    } catch (e) {
+      debugPrint('읽음 처리 실패: $e');
+    }
+  }
+
+  /// 메시지 새로고침
+  Future<void> refreshMessages() async {
     if (!state.isInitialized) {
       await initializeIfNeeded();
       return;
     }
 
-    if (state.isLoading) return; // 중복 로딩 방지
-
-    state = state.copyWith(isLoading: true, error: null);
-
     try {
-      final service = await _getService();
-      final messages = await service.getMessages(chatRoomId);
+      state = state.copyWith(isLoading: true, error: null);
 
-      state = state.copyWith(messages: messages, isLoading: false, error: null);
-
-      _subscribeToMessageStream();
+      if (_chatService != null) {
+        final messages = await _chatService!.getMessages(chatRoomId);
+        state = state.copyWith(
+          messages: messages,
+          isLoading: false,
+          error: null,
+        );
+      }
     } catch (e) {
-      state = state.copyWith(
-        isLoading: false,
-        error: '메시지를 불러올 수 없습니다.',
-        messages: state.messages, // 기존 메시지 유지
-      );
+      debugPrint('메시지 새로고침 실패: $e');
+      state = state.copyWith(isLoading: false, error: '메시지를 새로고침할 수 없습니다.');
     }
   }
 
-  /// 메시지 전송
-  Future<void> sendMessage({
-    required String content,
-    required String senderId,
-    MessageType type = MessageType.text,
-    Map<String, dynamic>? metadata,
-  }) async {
-    if (state.isSending) return; // 중복 전송 방지
-
-    state = state.copyWith(isSending: true, error: null);
-
-    try {
-      final service = await _getService();
-      final message = await service.sendMessage(
-        chatRoomId: chatRoomId,
-        content: content,
-        senderId: senderId,
-        type: type,
-        metadata: metadata,
-      );
-
-      // 새 메시지를 목록에 추가
-      final updatedMessages = [...state.messages, message];
-      state = state.copyWith(messages: updatedMessages, isSending: false);
-    } catch (e) {
-      state = state.copyWith(isSending: false, error: '메시지 전송에 실패했습니다.');
-    }
-  }
-
-  /// 실시간 메시지 스트림 구독
-  void _subscribeToMessageStream() {
-    try {
-      _chatService
-          ?.getNewMessageStream(chatRoomId)
-          .listen(
-            (newMessage) {
-              if (!mounted) return;
-
-              final updatedMessages = [...state.messages, newMessage];
-              state = state.copyWith(messages: updatedMessages);
-            },
-            onError: (error) {
-              // 스트림 에러는 조용히 처리
-            },
-          );
-    } catch (e) {
-      // 스트림 구독 실패는 조용히 처리
-    }
-  }
-
-  /// 메시지 목록 초기화
-  void clearMessages() {
-    state = state.copyWith(messages: [], error: null);
-  }
-
-  /// 에러 상태 클리어
+  /// 에러 클리어
   void clearError() {
     state = state.copyWith(error: null);
   }
+
+  /// 타이핑 상태 업데이트
+  void updateTypingStatus(bool isTyping) {
+    try {
+      if (_chatService != null) {
+        _chatService!.updateTypingStatus(chatRoomId, 'current_user', isTyping);
+      }
+    } catch (e) {
+      debugPrint('타이핑 상태 업데이트 실패: $e');
+    }
+  }
+
+  /// 타이핑 상태 스트림
+  Stream<Map<String, bool>> getTypingStream() {
+    if (_chatService != null) {
+      return _chatService!.getTypingStream(chatRoomId);
+    }
+    return Stream.value({});
+  }
 }
 
-// === 개별 채팅방 메시지 프로바이더 ===
-final chatMessagesProvider = StateNotifierProvider.family<
-  ChatMessagesNotifier,
-  ChatMessagesState,
-  String
->((ref, chatRoomId) {
-  return ChatMessagesNotifier(chatRoomId);
+// === Provider 정의 ===
+
+/// 채팅방 목록 Provider
+final chatListProvider = StateNotifierProvider<ChatListNotifier, ChatListState>(
+  (ref) {
+    return ChatListNotifier();
+  },
+);
+
+/// 채팅방 상세 Provider (Family)
+final chatRoomProvider =
+    StateNotifierProvider.family<ChatRoomNotifier, ChatRoomState, String>((
+      ref,
+      chatRoomId,
+    ) {
+      return ChatRoomNotifier(chatRoomId);
+    });
+
+/// 현재 사용자 ID Provider (임시)
+final currentUserIdProvider = Provider<String>((ref) {
+  // 실제로는 Firebase Auth에서 가져올 예정
+  return 'current_user';
 });
 
-// === 편의용 프로바이더들 ===
-
-/// 읽지 않은 메시지 총 개수
-final unreadMessagesCountProvider = Provider<int>((ref) {
-  final chatRoomsState = ref.watch(chatRoomsProvider);
-  return chatRoomsState.chatRooms.fold<int>(
-    0,
-    (sum, chatRoom) => sum + chatRoom.unreadCount,
-  );
-});
-
-/// 채팅방 로딩 상태
-final chatRoomsLoadingProvider = Provider<bool>((ref) {
-  final chatRoomsState = ref.watch(chatRoomsProvider);
-  return chatRoomsState.isLoading;
-});
-
-/// 채팅방 초기화 상태
-final chatRoomsInitializedProvider = Provider<bool>((ref) {
-  final chatRoomsState = ref.watch(chatRoomsProvider);
-  return chatRoomsState.isInitialized;
-});
-
-/// 채팅방 에러 상태
-final chatRoomsErrorProvider = Provider<String?>((ref) {
-  final chatRoomsState = ref.watch(chatRoomsProvider);
-  return chatRoomsState.error;
-});
-
-/// 특정 채팅방의 메시지 로딩 상태
-final chatMessagesLoadingProvider = Provider.family<bool, String>((
-  ref,
-  chatRoomId,
-) {
-  final messagesState = ref.watch(chatMessagesProvider(chatRoomId));
-  return messagesState.isLoading;
-});
-
-/// 특정 채팅방의 메시지 전송 상태
-final chatMessagesSendingProvider = Provider.family<bool, String>((
-  ref,
-  chatRoomId,
-) {
-  final messagesState = ref.watch(chatMessagesProvider(chatRoomId));
-  return messagesState.isSending;
-});
-
-/// 특정 채팅방의 메시지 에러 상태
-final chatMessagesErrorProvider = Provider.family<String?, String>((
-  ref,
-  chatRoomId,
-) {
-  final messagesState = ref.watch(chatMessagesProvider(chatRoomId));
-  return messagesState.error;
-});
-
-/// AI 채팅방 필터
-final aiChatRoomsProvider = Provider<List<ChatRoom>>((ref) {
-  final chatRoomsState = ref.watch(chatRoomsProvider);
-  return chatRoomsState.chatRooms
-      .where((chatRoom) => chatRoom.type == ChatRoomType.ai)
-      .toList();
-});
-
-/// 상담사 채팅방 필터
-final counselorChatRoomsProvider = Provider<List<ChatRoom>>((ref) {
-  final chatRoomsState = ref.watch(chatRoomsProvider);
-  return chatRoomsState.chatRooms
-      .where((chatRoom) => chatRoom.type == ChatRoomType.counselor)
-      .toList();
-});
-
-/// 최근 활성 채팅방 (홈 화면용)
-final recentActiveChatRoomsProvider = Provider<List<ChatRoom>>((ref) {
-  final chatRoomsState = ref.watch(chatRoomsProvider);
-  return chatRoomsState.chatRooms
-      .where((chatRoom) => chatRoom.lastMessage != null)
-      .take(3)
-      .toList();
-});
-
-/// 특정 채팅방 정보 (단일 조회)
-final chatRoomProvider = Provider.family<ChatRoom?, String>((ref, chatRoomId) {
-  final chatRoomsState = ref.watch(chatRoomsProvider);
+/// 읽지 않은 메시지 총 개수 Provider
+final totalUnreadCountProvider = FutureProvider<int>((ref) async {
   try {
-    return chatRoomsState.chatRooms.firstWhere(
-      (chatRoom) => chatRoom.id == chatRoomId,
-    );
+    final chatService = await ChatService.getInstance();
+    return await chatService.getTotalUnreadCount();
+  } catch (e) {
+    return 0;
+  }
+});
+
+/// 특정 채팅방 정보 Provider
+final chatRoomInfoProvider = FutureProvider.family<ChatRoom?, String>((
+  ref,
+  chatRoomId,
+) async {
+  try {
+    final chatService = await ChatService.getInstance();
+    return await chatService.getChatRoom(chatRoomId);
   } catch (e) {
     return null;
+  }
+});
+
+/// Firebase 연결 상태 Provider
+final chatConnectionProvider = FutureProvider<bool>((ref) async {
+  try {
+    final chatService = await ChatService.getInstance();
+    return await chatService.isConnected();
+  } catch (e) {
+    return false;
   }
 });

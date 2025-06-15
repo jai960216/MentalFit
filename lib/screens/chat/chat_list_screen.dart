@@ -38,11 +38,38 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen>
     setState(() => _isInitializing = true);
 
     try {
-      await ref.read(chatRoomsProvider.notifier).initializeIfNeeded();
-      if (mounted) setState(() => _isInitialized = true);
+      // Provider 초기화 시도 (최대 3번)
+      int attempts = 0;
+      bool success = false;
+
+      while (!success && attempts < 3) {
+        try {
+          attempts++;
+          await ref.read(chatListProvider.notifier).initializeIfNeeded();
+          success = true;
+        } catch (e) {
+          debugPrint('초기화 시도 $attempts 실패: $e');
+          if (attempts < 3) {
+            await Future.delayed(Duration(seconds: attempts)); // 점진적 지연
+          }
+        }
+      }
+
+      if (mounted) {
+        setState(() => _isInitialized = success);
+
+        if (!success) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('채팅 서비스 초기화에 실패했습니다. 새로고침을 시도해주세요.'),
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+      }
     } catch (e) {
       if (mounted) {
-        setState(() => _isInitialized = true);
+        setState(() => _isInitialized = true); // 실패해도 UI는 표시
         GlobalErrorHandler.showErrorSnackBar(context, e);
       }
     } finally {
@@ -52,7 +79,7 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen>
 
   Future<void> _refresh() async {
     try {
-      await ref.read(chatRoomsProvider.notifier).refresh();
+      await ref.read(chatListProvider.notifier).refreshChatRooms();
     } catch (e) {
       if (mounted) GlobalErrorHandler.showErrorSnackBar(context, e);
     }
@@ -66,7 +93,7 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen>
 
   @override
   Widget build(BuildContext context) {
-    final state = ref.watch(chatRoomsProvider);
+    final state = ref.watch(chatListProvider);
     final user = ref.watch(currentUserProvider);
 
     if (_isInitializing) {
@@ -108,89 +135,67 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen>
           onSelected: _handleMenuAction,
           itemBuilder:
               (context) => [
-                const PopupMenuItem(
-                  value: 'new_ai_chat',
-                  child: Row(
-                    children: [
-                      Icon(Icons.smart_toy, size: 16),
-                      SizedBox(width: 8),
-                      Text('새 AI 상담'),
-                    ],
-                  ),
-                ),
-                const PopupMenuItem(
-                  value: 'find_counselor',
-                  child: Row(
-                    children: [
-                      Icon(Icons.people, size: 16),
-                      SizedBox(width: 8),
-                      Text('상담사 찾기'),
-                    ],
-                  ),
-                ),
-                const PopupMenuItem(
-                  value: 'refresh',
-                  child: Row(
-                    children: [
-                      Icon(Icons.refresh, size: 16),
-                      SizedBox(width: 8),
-                      Text('새로고침'),
-                    ],
-                  ),
-                ),
+                const PopupMenuItem(value: 'refresh', child: Text('새로고침')),
+                const PopupMenuItem(value: 'settings', child: Text('설정')),
               ],
         ),
       ],
       bottom: TabBar(
         controller: _tabController,
-        labelColor: AppColors.primary,
-        unselectedLabelColor: AppColors.textSecondary,
-        indicatorColor: AppColors.primary,
-        tabs: [
-          Tab(child: Text('전체', style: TextStyle(fontSize: 14.sp))),
-          Tab(child: Text('AI 상담', style: TextStyle(fontSize: 14.sp))),
-          Tab(child: Text('전문가', style: TextStyle(fontSize: 14.sp))),
-        ],
+        tabs: const [Tab(text: '전체'), Tab(text: 'AI 상담'), Tab(text: '상담사')],
       ),
     );
   }
 
-  Widget _buildTab(ChatRoomsState state, User? user, String tabType) {
-    // 1. 초기화 체크
-    if (!state.isInitialized) {
-      return ChatListWidgets.buildLoading('채팅방을 불러오는 중...');
+  void _handleMenuAction(String action) {
+    switch (action) {
+      case 'refresh':
+        _refresh();
+        break;
+      case 'settings':
+        context.push(AppRoutes.settings);
+        break;
     }
+  }
 
-    // 2. 채팅방 필터링
+  Widget _buildTab(ChatListState state, User? user, String tabType) {
+    // 탭에 따른 채팅방 필터링
     List<ChatRoom> rooms;
-    if (tabType == 'all') {
-      rooms = state.chatRooms;
-    } else if (tabType == 'ai') {
-      rooms =
-          state.chatRooms
-              .where((room) => room.type == ChatRoomType.ai)
-              .toList();
-    } else {
-      // counselor
-      rooms =
-          state.chatRooms
-              .where((room) => room.type == ChatRoomType.counselor)
-              .toList();
+    switch (tabType) {
+      case 'ai':
+        rooms =
+            state.chatRooms
+                .where((room) => room.type == ChatRoomType.ai)
+                .toList();
+        break;
+      case 'counselor':
+        rooms =
+            state.chatRooms
+                .where((room) => room.type == ChatRoomType.counselor)
+                .toList();
+        break;
+      default:
+        rooms = state.chatRooms;
     }
 
-    // 3. 로딩 중 + 빈 데이터
-    if (state.isLoading && rooms.isEmpty && state.error == null) {
+    // 1. 초기화되지 않은 상태
+    if (!state.isInitialized) {
+      return ChatListWidgets.buildLoading('채팅 서비스를 초기화하는 중...');
+    }
+
+    // 2. 로딩 상태
+    if (state.isLoading && rooms.isEmpty) {
       return ChatListWidgets.buildLoading('채팅방을 불러오는 중...');
     }
 
-    // 4. 에러 + 빈 데이터
+    // 3. 에러 + 빈 데이터
     if (state.error != null && rooms.isEmpty) {
       ChatRoomType errorType =
           tabType == 'ai'
               ? ChatRoomType.ai
               : tabType == 'counselor'
               ? ChatRoomType.counselor
-              : ChatRoomType.ai; // 기본값
+              : ChatRoomType.ai;
 
       return ChatErrorWidgets.buildErrorState(
         errorType,
@@ -201,14 +206,14 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen>
       );
     }
 
-    // 5. 빈 상태
+    // 4. 빈 상태
     if (rooms.isEmpty) {
       ChatRoomType emptyType =
           tabType == 'ai'
               ? ChatRoomType.ai
               : tabType == 'counselor'
               ? ChatRoomType.counselor
-              : ChatRoomType.ai; // 기본값
+              : ChatRoomType.ai;
 
       return ChatErrorWidgets.buildEmptyState(
         emptyType,
@@ -217,7 +222,7 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen>
       );
     }
 
-    // 6. 정상 데이터
+    // 5. 정상 데이터
     return Column(
       children: [
         if (state.error != null)
@@ -243,7 +248,7 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen>
   }
 
   void _enterChatRoom(ChatRoom chatRoom) {
-    ref.read(chatRoomsProvider.notifier).markAsRead(chatRoom.id);
+    // 읽음 처리는 채팅방 진입 시 자동으로 처리됨
     context.push('${AppRoutes.chatRoom}/${chatRoom.id}');
   }
 
@@ -288,18 +293,20 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen>
               TextButton(
                 onPressed: () async {
                   Navigator.pop(context);
-                  try {
-                    await ref
-                        .read(chatRoomsProvider.notifier)
-                        .deleteChatRoom(chatRoom.id);
-                    if (mounted) {
+                  final success = await ref
+                      .read(chatListProvider.notifier)
+                      .deleteChatRoom(chatRoom.id);
+
+                  if (mounted) {
+                    if (success) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('채팅방이 삭제되었습니다')),
+                        const SnackBar(content: Text('채팅방이 삭제되었습니다.')),
+                      );
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('채팅방 삭제에 실패했습니다.')),
                       );
                     }
-                  } catch (e) {
-                    if (mounted)
-                      GlobalErrorHandler.showErrorSnackBar(context, e);
                   }
                 },
                 child: const Text(
@@ -321,25 +328,22 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen>
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  '새로운 대화 시작',
-                  style: TextStyle(
-                    fontSize: 18.sp,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                SizedBox(height: 20.h),
                 ListTile(
-                  leading: Icon(Icons.smart_toy, color: AppColors.primary),
-                  title: const Text('AI 상담'),
+                  leading: const Icon(
+                    Icons.smart_toy,
+                    color: AppColors.primary,
+                  ),
+                  title: const Text('AI 상담 시작'),
+                  subtitle: const Text('AI와 즉시 대화를 시작합니다'),
                   onTap: () {
                     Navigator.pop(context);
                     _createNewAIChat();
                   },
                 ),
                 ListTile(
-                  leading: Icon(Icons.people, color: AppColors.secondary),
-                  title: const Text('전문가 상담'),
+                  leading: const Icon(Icons.person, color: AppColors.secondary),
+                  title: const Text('상담사 찾기'),
+                  subtitle: const Text('전문 상담사와 상담을 예약합니다'),
                   onTap: () {
                     Navigator.pop(context);
                     context.push(AppRoutes.counselorList);
@@ -351,29 +355,18 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen>
     );
   }
 
-  Future<void> _createNewAIChat() async {
+  void _createNewAIChat() async {
     try {
-      final chatRoom =
-          await ref.read(chatRoomsProvider.notifier).createAIChatRoom();
-      if (chatRoom != null && mounted) {
-        context.push('${AppRoutes.chatRoom}/${chatRoom.id}');
+      final chatRoomId =
+          await ref.read(chatListProvider.notifier).createAIChatRoom();
+
+      if (mounted && chatRoomId != null) {
+        context.push('${AppRoutes.chatRoom}/$chatRoomId');
       }
     } catch (e) {
-      if (mounted) GlobalErrorHandler.showErrorSnackBar(context, e);
-    }
-  }
-
-  void _handleMenuAction(String value) {
-    switch (value) {
-      case 'new_ai_chat':
-        _createNewAIChat();
-        break;
-      case 'find_counselor':
-        context.push(AppRoutes.counselorList);
-        break;
-      case 'refresh':
-        _refresh();
-        break;
+      if (mounted) {
+        GlobalErrorHandler.showErrorSnackBar(context, e);
+      }
     }
   }
 }
