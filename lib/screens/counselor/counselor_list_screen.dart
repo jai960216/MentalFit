@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_mentalfit/providers/booking_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/config/app_colors.dart';
 import '../../core/config/app_routes.dart';
-import '../../core/network/error_handler.dart';
 import '../../shared/widgets/custom_button.dart';
+import '../../shared/widgets/custom_text_field.dart';
 import '../../shared/models/counselor_model.dart';
 import '../../providers/counselor_provider.dart';
-import '../../providers/counselor_filters_provider.dart';
+import 'dart:io';
 
 class CounselorListScreen extends ConsumerStatefulWidget {
   const CounselorListScreen({super.key});
@@ -18,352 +19,482 @@ class CounselorListScreen extends ConsumerStatefulWidget {
       _CounselorListScreenState();
 }
 
-class _CounselorListScreenState extends ConsumerState<CounselorListScreen> {
+class _CounselorListScreenState extends ConsumerState<CounselorListScreen>
+    with TickerProviderStateMixin {
+  late AnimationController _fadeController;
+  late Animation<double> _fadeAnimation;
+
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _searchController = TextEditingController();
+
+  bool _showFilter = false;
 
   @override
   void initState() {
     super.initState();
+    _setupAnimations();
     _setupScrollListener();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadInitialData();
+    });
   }
 
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    _searchController.dispose();
-    super.dispose();
+  void _setupAnimations() {
+    _fadeController = AnimationController(
+      duration: const Duration(milliseconds: 600),
+      vsync: this,
+    );
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _fadeController, curve: Curves.easeInOut),
+    );
+    _fadeController.forward();
   }
 
   void _setupScrollListener() {
     _scrollController.addListener(() {
       if (_scrollController.position.pixels >=
           _scrollController.position.maxScrollExtent - 200) {
-        _loadMoreCounselors();
+        _loadMoreData();
       }
     });
   }
 
-  Future<void> _loadMoreCounselors() async {
-    final filters = ref.read(counselorFiltersProvider);
-    await ref
-        .read(counselorsProvider.notifier)
-        .loadMoreCounselors(
-          specialties:
-              filters.selectedSpecialties.isNotEmpty
-                  ? filters.selectedSpecialties
-                  : null,
-          method: filters.selectedMethod,
-          minRating: filters.minRating,
-          maxPrice: filters.maxPrice,
-          onlineOnly: filters.onlineOnly ? true : null,
-          sortBy: filters.sortBy,
-        );
+  void _loadInitialData() {
+    ref.read(counselorsProvider.notifier).loadCounselors();
+  }
+
+  void _loadMoreData() {
+    final state = ref.read(counselorsProvider);
+    if (!state.isLoadingMore && state.hasMoreData) {
+      ref.read(counselorsProvider.notifier).loadMoreCounselors();
+    }
   }
 
   Future<void> _refreshData() async {
-    final filters = ref.read(counselorFiltersProvider);
-    await ref
-        .read(counselorsProvider.notifier)
-        .loadCounselors(
-          specialties:
-              filters.selectedSpecialties.isNotEmpty
-                  ? filters.selectedSpecialties
-                  : null,
-          method: filters.selectedMethod,
-          minRating: filters.minRating,
-          maxPrice: filters.maxPrice,
-          onlineOnly: filters.onlineOnly ? true : null,
-          sortBy: filters.sortBy,
-          refresh: true,
-        );
+    await ref.read(counselorsProvider.notifier).refreshCounselors();
   }
 
-  Future<void> _applyFilters() async {
-    final filters = ref.read(counselorFiltersProvider);
-    await ref
-        .read(counselorsProvider.notifier)
-        .loadCounselors(
-          specialties:
-              filters.selectedSpecialties.isNotEmpty
-                  ? filters.selectedSpecialties
-                  : null,
-          method: filters.selectedMethod,
-          minRating: filters.minRating,
-          maxPrice: filters.maxPrice,
-          onlineOnly: filters.onlineOnly ? true : null,
-          sortBy: filters.sortBy,
-          refresh: true,
-        );
-  }
-
-  Future<void> _searchCounselors(String query) async {
-    if (query.trim().isEmpty) {
-      await _refreshData();
-      return;
+  void _performSearch(String query) {
+    if (query.isEmpty) {
+      ref.read(counselorSearchProvider.notifier).clearSearch();
+      _refreshData();
+    } else {
+      ref.read(counselorSearchProvider.notifier).performSearch(query);
     }
-
-    await ref.read(counselorSearchProvider.notifier).searchCounselors(query);
   }
 
-  void _showFilterBottomSheet() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => _buildFilterBottomSheet(),
-    );
+  @override
+  void dispose() {
+    _fadeController.dispose();
+    _scrollController.dispose();
+    _searchController.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final counselorsState = ref.watch(counselorsProvider);
-    final searchState = ref.watch(counselorSearchProvider);
-    final filtersState = ref.watch(counselorFiltersProvider);
-
-    // 검색 결과가 있으면 검색 결과를 표시, 없으면 일반 목록 표시
-    final displayCounselors =
-        searchState.searchQuery.isNotEmpty
-            ? searchState.searchResults
-            : counselorsState.counselors;
-    final isLoading =
-        searchState.searchQuery.isNotEmpty
-            ? searchState.isSearching
-            : counselorsState.isLoading;
-
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: _buildAppBar(),
-      body: Column(
-        children: [
-          // === 검색 및 필터 영역 ===
-          _buildSearchAndFilterSection(filtersState),
-
-          // === 상담사 목록 ===
-          Expanded(
-            child:
-                isLoading && displayCounselors.isEmpty
-                    ? _buildLoadingWidget()
-                    : displayCounselors.isEmpty
-                    ? _buildEmptyWidget()
-                    : _buildCounselorList(displayCounselors, counselorsState),
-          ),
-        ],
-      ),
-    );
-  }
-
-  PreferredSizeWidget _buildAppBar() {
-    return AppBar(
-      backgroundColor: Colors.white,
-      elevation: 0,
-      title: Text(
-        '상담사 찾기',
-        style: TextStyle(
-          fontSize: 20.sp,
-          fontWeight: FontWeight.bold,
-          color: AppColors.textPrimary,
-        ),
-      ),
-      centerTitle: true,
-      leading: IconButton(
-        icon: Icon(Icons.arrow_back, color: AppColors.textPrimary),
-        onPressed: () => context.pop(),
-      ),
-    );
-  }
-
-  Widget _buildSearchAndFilterSection(CounselorFilters filters) {
-    return Container(
-      padding: EdgeInsets.all(20.w),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(bottom: BorderSide(color: AppColors.grey200)),
-      ),
-      child: Column(
-        children: [
-          // === 검색창 ===
-          Row(
+      body: SafeArea(
+        child: FadeTransition(
+          opacity: _fadeAnimation,
+          child: Column(
             children: [
-              Expanded(
-                child: Container(
-                  height: 48.h,
-                  decoration: BoxDecoration(
-                    color: AppColors.grey100,
-                    borderRadius: BorderRadius.circular(12.r),
-                  ),
-                  child: TextField(
-                    controller: _searchController,
-                    decoration: InputDecoration(
-                      hintText: '상담사 이름, 전문분야 검색',
-                      hintStyle: TextStyle(
-                        color: AppColors.textHint,
-                        fontSize: 14.sp,
-                      ),
-                      prefixIcon: Icon(
-                        Icons.search,
-                        color: AppColors.textSecondary,
-                        size: 20.sp,
-                      ),
-                      border: InputBorder.none,
-                      contentPadding: EdgeInsets.symmetric(
-                        horizontal: 16.w,
-                        vertical: 12.h,
-                      ),
-                    ),
-                    onChanged: _searchCounselors,
-                  ),
-                ),
-              ),
-
-              SizedBox(width: 12.w),
-
-              // === 필터 버튼 ===
-              Container(
-                height: 48.h,
-                width: 48.w,
-                decoration: BoxDecoration(
-                  color:
-                      filters.hasActiveFilters
-                          ? AppColors.primary
-                          : AppColors.grey100,
-                  borderRadius: BorderRadius.circular(12.r),
-                ),
-                child: IconButton(
-                  onPressed: _showFilterBottomSheet,
-                  icon: Icon(
-                    Icons.tune,
-                    color:
-                        filters.hasActiveFilters
-                            ? Colors.white
-                            : AppColors.textSecondary,
-                    size: 20.sp,
-                  ),
-                ),
-              ),
+              _buildHeader(),
+              _buildSearchBar(),
+              if (_showFilter) Expanded(child: _buildFilterSection()),
+              Expanded(child: _buildContent()),
             ],
           ),
-
-          // === 활성 필터 표시 ===
-          if (filters.hasActiveFilters) ...[
-            SizedBox(height: 16.h),
-            _buildActiveFilters(filters),
-          ],
-        ],
+        ),
       ),
     );
   }
 
-  Widget _buildActiveFilters(CounselorFilters filters) {
-    return SizedBox(
-      height: 32.h,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        children: [
-          // === 필터 개수 표시 ===
-          Container(
-            padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
-            decoration: BoxDecoration(
-              color: AppColors.primary,
-              borderRadius: BorderRadius.circular(16.r),
-            ),
-            child: Text(
-              '${filters.activeFilterCount}개 필터 적용',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 12.sp,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-
-          SizedBox(width: 8.w),
-
-          // === 전문분야 필터 ===
-          ...filters.selectedSpecialties.map(
-            (specialty) => _buildFilterChip(
-              specialty,
-              () => ref
-                  .read(counselorFiltersProvider.notifier)
-                  .toggleSpecialty(specialty),
-            ),
-          ),
-
-          // === 상담방식 필터 ===
-          if (filters.selectedMethod != null)
-            _buildFilterChip(
-              filters.selectedMethod!.displayName,
-              () => ref.read(counselorFiltersProvider.notifier).setMethod(null),
-            ),
-
-          // === 온라인 전용 필터 ===
-          if (filters.onlineOnly)
-            _buildFilterChip(
-              '온라인',
-              () => ref
-                  .read(counselorFiltersProvider.notifier)
-                  .setOnlineOnly(false),
-            ),
-
-          // === 전체 초기화 ===
-          SizedBox(width: 8.w),
-          GestureDetector(
-            onTap: () {
-              ref.read(counselorFiltersProvider.notifier).clearAllFilters();
-              _applyFilters();
-            },
-            child: Container(
-              padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
-              decoration: BoxDecoration(
-                color: AppColors.grey300,
-                borderRadius: BorderRadius.circular(16.r),
-              ),
-              child: Text(
-                '초기화',
-                style: TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 12.sp,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFilterChip(String text, VoidCallback onRemove) {
+  Widget _buildHeader() {
     return Container(
-      margin: EdgeInsets.only(right: 8.w),
-      padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
+      padding: EdgeInsets.fromLTRB(20.w, 20.h, 20.w, 16.h),
       decoration: BoxDecoration(
-        color: AppColors.lightBlue100,
-        borderRadius: BorderRadius.circular(16.r),
+        color: AppColors.white,
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.cardShadow,
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            text,
-            style: TextStyle(
-              color: AppColors.primary,
-              fontSize: 12.sp,
-              fontWeight: FontWeight.w500,
+          IconButton(
+            onPressed: () => context.pop(),
+            icon: const Icon(Icons.arrow_back),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+          ),
+          SizedBox(width: 12.w),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '상담사 찾기',
+                  style: TextStyle(
+                    fontSize: 24.sp,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                SizedBox(height: 4.h),
+                Consumer(
+                  builder: (context, ref, child) {
+                    final state = ref.watch(counselorsProvider);
+                    return Text(
+                      '${state.counselors.length}명의 전문 상담사',
+                      style: TextStyle(
+                        fontSize: 14.sp,
+                        color: AppColors.textSecondary,
+                      ),
+                    );
+                  },
+                ),
+              ],
             ),
           ),
-          SizedBox(width: 4.w),
-          GestureDetector(
-            onTap: onRemove,
-            child: Icon(Icons.close, size: 14.sp, color: AppColors.primary),
+          IconButton(
+            onPressed: () => setState(() => _showFilter = !_showFilter),
+            icon: Icon(
+              _showFilter ? Icons.filter_list_off : Icons.filter_list,
+              color: _showFilter ? AppColors.primary : AppColors.textSecondary,
+            ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildSearchBar() {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 16.h),
+      color: AppColors.white,
+      child: CustomTextField(
+        controller: _searchController,
+        hintText: '상담사 이름이나 전문 분야로 검색',
+        prefixIcon: Icons.search,
+        onChanged: _performSearch,
+        suffixIcon: _searchController.text.isNotEmpty ? Icons.clear : null,
+      ),
+    );
+  }
+
+  Widget _buildFilterSection() {
+    return Container(
+      padding: EdgeInsets.all(20.w),
+      color: AppColors.lightBlue50,
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '필터',
+              style: TextStyle(
+                fontSize: 16.sp,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            SizedBox(height: 16.h),
+            _buildSpecialtyFilter(),
+            SizedBox(height: 16.h),
+            _buildMethodFilter(),
+            SizedBox(height: 16.h),
+            _buildRatingFilter(),
+            SizedBox(height: 16.h),
+            _buildPriceFilter(),
+            SizedBox(height: 16.h),
+            Row(
+              children: [
+                Expanded(
+                  child: CustomButton(text: '필터 적용', onPressed: _applyFilters),
+                ),
+                SizedBox(width: 12.w),
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: _clearFilters,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.textSecondary,
+                      side: BorderSide(color: AppColors.grey300),
+                    ),
+                    child: const Text('초기화'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSpecialtyFilter() {
+    final searchState = ref.watch(counselorSearchProvider);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '전문 분야',
+          style: TextStyle(fontSize: 14.sp, fontWeight: FontWeight.w600),
+        ),
+        SizedBox(height: 8.h),
+        Wrap(
+          spacing: 8.w,
+          runSpacing: 8.h,
+          children:
+              [
+                '스포츠 심리',
+                '스트레스 관리',
+                '불안 장애',
+                '우울증',
+                '수면 장애',
+                '인지 행동 치료',
+                '정신분석',
+                '가족 상담',
+              ].map((specialty) {
+                final isSelected = searchState.selectedSpecialties.contains(
+                  specialty,
+                );
+                return _buildFilterChip(
+                  specialty,
+                  isSelected,
+                  () => ref
+                      .read(counselorSearchProvider.notifier)
+                      .toggleSpecialty(specialty),
+                );
+              }).toList(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMethodFilter() {
+    final searchState = ref.watch(counselorSearchProvider);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '상담 방식',
+          style: TextStyle(fontSize: 14.sp, fontWeight: FontWeight.w600),
+        ),
+        SizedBox(height: 8.h),
+        Wrap(
+          spacing: 8.w,
+          runSpacing: 8.h,
+          children:
+              CounselingMethod.values
+                  .where((method) => method != CounselingMethod.all)
+                  .map((method) {
+                    final isSelected = searchState.selectedMethod == method;
+                    return _buildFilterChip(
+                      method.displayName,
+                      isSelected,
+                      () => ref
+                          .read(counselorSearchProvider.notifier)
+                          .setMethod(isSelected ? null : method),
+                    );
+                  })
+                  .toList(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRatingFilter() {
+    final searchState = ref.watch(counselorSearchProvider);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '최소 평점',
+          style: TextStyle(fontSize: 14.sp, fontWeight: FontWeight.w600),
+        ),
+        SizedBox(height: 8.h),
+        Row(
+          children:
+              [1.0, 2.0, 3.0, 4.0, 4.5].map((rating) {
+                final isSelected = searchState.minRating == rating;
+                return Padding(
+                  padding: EdgeInsets.only(right: 8.w),
+                  child: _buildFilterChip(
+                    '$rating★',
+                    isSelected,
+                    () => ref
+                        .read(counselorSearchProvider.notifier)
+                        .setMinRating(isSelected ? null : rating),
+                  ),
+                );
+              }).toList(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPriceFilter() {
+    final searchState = ref.watch(counselorSearchProvider);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '최대 상담료',
+          style: TextStyle(fontSize: 14.sp, fontWeight: FontWeight.w600),
+        ),
+        SizedBox(height: 8.h),
+        Wrap(
+          spacing: 8.w,
+          runSpacing: 8.h,
+          children:
+              [30000, 50000, 70000, 100000].map((price) {
+                final isSelected = searchState.maxPrice == price;
+                return _buildFilterChip(
+                  '${price ~/ 10000}만원 이하',
+                  isSelected,
+                  () => ref
+                      .read(counselorSearchProvider.notifier)
+                      .setMaxPrice(isSelected ? null : price),
+                );
+              }).toList(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFilterChip(String label, bool isSelected, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.primary : AppColors.white,
+          borderRadius: BorderRadius.circular(20.r),
+          border: Border.all(
+            color: isSelected ? AppColors.primary : AppColors.grey300,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12.sp,
+            color: isSelected ? Colors.white : AppColors.textSecondary,
+            fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _applyFilters() {
+    final searchState = ref.read(counselorSearchProvider);
+    ref
+        .read(counselorsProvider.notifier)
+        .loadCounselors(
+          specialties: searchState.selectedSpecialties,
+          method: searchState.selectedMethod,
+          minRating: searchState.minRating,
+          maxPrice: searchState.maxPrice,
+          onlineOnly: searchState.onlineOnly,
+        );
+    setState(() => _showFilter = false);
+  }
+
+  void _clearFilters() {
+    ref.read(counselorSearchProvider.notifier).clearFilters();
+    _refreshData();
+  }
+
+  Widget _buildContent() {
+    return Consumer(
+      builder: (context, ref, child) {
+        final counselorsState = ref.watch(counselorsProvider);
+        final searchState = ref.watch(counselorSearchProvider);
+
+        if (searchState.isSearching) {
+          return _buildLoadingWidget();
+        }
+
+        if (searchState.searchResults.isNotEmpty) {
+          return _buildCounselorList(
+            searchState.searchResults,
+            counselorsState,
+          );
+        }
+
+        if (searchState.searchQuery.isNotEmpty &&
+            searchState.searchResults.isEmpty &&
+            !searchState.isSearching) {
+          return _buildEmptyWidget();
+        }
+
+        if (counselorsState.isLoading && counselorsState.counselors.isEmpty) {
+          return _buildLoadingWidget();
+        }
+
+        if (counselorsState.error != null &&
+            counselorsState.counselors.isEmpty) {
+          return _buildErrorWidget(counselorsState.error!);
+        }
+
+        if (counselorsState.counselors.isEmpty && !counselorsState.isLoading) {
+          return _buildEmptyWidget();
+        }
+
+        return _buildCounselorList(counselorsState.counselors, counselorsState);
+      },
     );
   }
 
   Widget _buildLoadingWidget() {
-    return Center(child: CircularProgressIndicator(color: AppColors.primary));
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          CircularProgressIndicator(color: AppColors.primary),
+          SizedBox(height: 16.h),
+          Text(
+            '상담사 목록을 불러오는 중...',
+            style: TextStyle(fontSize: 14.sp, color: AppColors.textSecondary),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildErrorWidget(String error) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.error_outline, size: 64.sp, color: AppColors.error),
+          SizedBox(height: 16.h),
+          Text(
+            '상담사 목록을 불러올 수 없습니다',
+            style: TextStyle(fontSize: 16.sp, color: AppColors.error),
+          ),
+          SizedBox(height: 8.h),
+          Text(
+            error,
+            style: TextStyle(fontSize: 14.sp, color: AppColors.textSecondary),
+            textAlign: TextAlign.center,
+          ),
+          SizedBox(height: 16.h),
+          CustomButton(text: '다시 시도', onPressed: _refreshData, width: 120.w),
+        ],
+      ),
+    );
   }
 
   Widget _buildEmptyWidget() {
@@ -389,6 +520,17 @@ class _CounselorListScreenState extends ConsumerState<CounselorListScreen> {
             isSearchMode ? '다른 검색어를 입력해보세요' : '나중에 다시 확인해주세요',
             style: TextStyle(fontSize: 14.sp, color: AppColors.textHint),
           ),
+          if (isSearchMode) ...[
+            SizedBox(height: 16.h),
+            CustomButton(
+              text: '전체 상담사 보기',
+              onPressed: () {
+                _searchController.clear();
+                _refreshData();
+              },
+              width: 150.w,
+            ),
+          ],
         ],
       ),
     );
@@ -422,9 +564,15 @@ class _CounselorListScreenState extends ConsumerState<CounselorListScreen> {
     return Container(
       padding: EdgeInsets.all(20.w),
       child: Center(
-        child: CircularProgressIndicator(
-          color: AppColors.primary,
-          strokeWidth: 2,
+        child: Column(
+          children: [
+            CircularProgressIndicator(color: AppColors.primary, strokeWidth: 2),
+            SizedBox(height: 8.h),
+            Text(
+              '더 많은 상담사를 불러오는 중...',
+              style: TextStyle(fontSize: 12.sp, color: AppColors.textSecondary),
+            ),
+          ],
         ),
       ),
     );
@@ -434,9 +582,9 @@ class _CounselorListScreenState extends ConsumerState<CounselorListScreen> {
     return GestureDetector(
       onTap: () => context.push('${AppRoutes.counselorDetail}/${counselor.id}'),
       child: Container(
-        padding: EdgeInsets.all(20.w),
+        padding: EdgeInsets.all(16.w),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: AppColors.white,
           borderRadius: BorderRadius.circular(16.r),
           boxShadow: [
             BoxShadow(
@@ -446,573 +594,147 @@ class _CounselorListScreenState extends ConsumerState<CounselorListScreen> {
             ),
           ],
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // === 상담사 기본 정보 ===
-            Row(
-              children: [
-                // === 프로필 이미지 ===
-                CircleAvatar(
-                  radius: 30.r,
-                  backgroundColor: AppColors.grey200,
-                  backgroundImage:
-                      counselor.profileImageUrl != null
-                          ? NetworkImage(counselor.profileImageUrl!)
-                          : null,
-                  child:
-                      counselor.profileImageUrl == null
-                          ? Icon(
-                            Icons.person,
-                            size: 30.sp,
-                            color: AppColors.textSecondary,
-                          )
-                          : null,
-                ),
-
-                SizedBox(width: 16.w),
-
-                // === 기본 정보 ===
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Text(
-                            counselor.name,
-                            style: TextStyle(
-                              fontSize: 18.sp,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.textPrimary,
-                            ),
-                          ),
-                          SizedBox(width: 8.w),
-                          if (counselor.isOnline)
-                            Container(
-                              width: 8.w,
-                              height: 8.w,
-                              decoration: const BoxDecoration(
-                                color: AppColors.success,
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                        ],
-                      ),
-
-                      SizedBox(height: 4.h),
-
-                      Text(
-                        counselor.title,
-                        style: TextStyle(
-                          fontSize: 14.sp,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-
-                      SizedBox(height: 8.h),
-
-                      // === 평점과 경력 ===
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.star,
-                            size: 16.sp,
-                            color: AppColors.warning,
-                          ),
-                          SizedBox(width: 4.w),
-                          Text(
-                            counselor.rating.toStringAsFixed(1),
-                            style: TextStyle(
-                              fontSize: 14.sp,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.textPrimary,
-                            ),
-                          ),
-                          Text(
-                            ' (${counselor.reviewCount})',
-                            style: TextStyle(
-                              fontSize: 12.sp,
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                          SizedBox(width: 16.w),
-                          Text(
-                            '경력 ${counselor.experienceYears}년',
-                            style: TextStyle(
-                              fontSize: 12.sp,
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-
-                // === 가격 ===
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      counselor.price.consultationFeeText,
-                      style: TextStyle(
-                        fontSize: 16.sp,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.primary,
-                      ),
-                    ),
-                    if (counselor.price.packagePriceText != null) ...[
-                      SizedBox(height: 4.h),
-                      Text(
-                        counselor.price.packagePriceText!,
-                        style: TextStyle(
-                          fontSize: 12.sp,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ],
-            ),
-
-            SizedBox(height: 16.h),
-
-            // === 전문 분야 ===
-            Wrap(
-              spacing: 8.w,
-              runSpacing: 8.h,
-              children:
-                  counselor.specialties
-                      .take(3)
-                      .map(
-                        (specialty) => Container(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: 12.w,
-                            vertical: 6.h,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppColors.lightBlue50,
-                            borderRadius: BorderRadius.circular(12.r),
-                          ),
-                          child: Text(
-                            specialty,
-                            style: TextStyle(
-                              fontSize: 12.sp,
-                              color: AppColors.primary,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                      )
-                      .toList(),
-            ),
-
-            SizedBox(height: 12.h),
-
-            // === 소개 (2줄까지만) ===
-            Text(
-              counselor.introduction,
-              style: TextStyle(
-                fontSize: 14.sp,
-                color: AppColors.textSecondary,
-                height: 1.4,
-              ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFilterBottomSheet() {
-    return Consumer(
-      builder: (context, ref, child) {
-        final filters = ref.watch(counselorFiltersProvider);
-        final specialtiesAsync = ref.watch(specialtiesProvider);
-
-        return Container(
-          height: MediaQuery.of(context).size.height * 0.8,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(20.r)),
-          ),
-          child: Column(
-            children: [
-              // === 헤더 ===
-              Container(
-                padding: EdgeInsets.all(20.w),
-                decoration: BoxDecoration(
-                  border: Border(bottom: BorderSide(color: AppColors.grey200)),
-                ),
-                child: Row(
-                  children: [
-                    Text(
-                      '필터',
-                      style: TextStyle(
-                        fontSize: 18.sp,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    const Spacer(),
-                    TextButton(
-                      onPressed: () {
-                        ref
-                            .read(counselorFiltersProvider.notifier)
-                            .clearAllFilters();
-                      },
-                      child: Text(
-                        '초기화',
-                        style: TextStyle(
-                          fontSize: 14.sp,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                    ),
-                    IconButton(
-                      onPressed: () => Navigator.pop(context),
-                      icon: Icon(Icons.close, color: AppColors.textSecondary),
-                    ),
-                  ],
-                ),
-              ),
-
-              // === 필터 옵션들 ===
-              Expanded(
-                child: specialtiesAsync.when(
-                  data:
-                      (specialties) =>
-                          _buildFilterContent(filters, specialties),
-                  loading:
-                      () => Center(
-                        child: CircularProgressIndicator(
-                          color: AppColors.primary,
-                        ),
-                      ),
-                  error:
-                      (error, stack) => Center(
-                        child: Text(
-                          '전문분야를 불러올 수 없습니다',
-                          style: TextStyle(
-                            fontSize: 14.sp,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                      ),
-                ),
-              ),
-
-              // === 적용 버튼 ===
-              Container(
-                padding: EdgeInsets.all(20.w),
-                decoration: BoxDecoration(
-                  border: Border(top: BorderSide(color: AppColors.grey200)),
-                ),
-                child: CustomButton(
-                  text: '필터 적용',
-                  onPressed: () {
-                    Navigator.pop(context);
-                    _applyFilters();
-                  },
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildFilterContent(
-    CounselorFilters filters,
-    List<String> specialties,
-  ) {
-    return SingleChildScrollView(
-      padding: EdgeInsets.all(20.w),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // === 전문 분야 ===
-          _buildFilterSection(
-            title: '전문 분야',
-            child: Wrap(
-              spacing: 8.w,
-              runSpacing: 8.h,
-              children:
-                  specialties.map((specialty) {
-                    final isSelected = filters.selectedSpecialties.contains(
-                      specialty,
-                    );
-                    return GestureDetector(
-                      onTap:
-                          () => ref
-                              .read(counselorFiltersProvider.notifier)
-                              .toggleSpecialty(specialty),
-                      child: Container(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: 16.w,
-                          vertical: 10.h,
-                        ),
-                        decoration: BoxDecoration(
-                          color:
-                              isSelected
-                                  ? AppColors.primary
-                                  : AppColors.grey100,
-                          borderRadius: BorderRadius.circular(20.r),
-                          border:
-                              isSelected
-                                  ? Border.all(color: AppColors.primary)
-                                  : null,
-                        ),
-                        child: Text(
-                          specialty,
-                          style: TextStyle(
-                            fontSize: 14.sp,
-                            color:
-                                isSelected
-                                    ? Colors.white
-                                    : AppColors.textPrimary,
-                            fontWeight:
-                                isSelected
-                                    ? FontWeight.w600
-                                    : FontWeight.normal,
-                          ),
-                        ),
-                      ),
-                    );
-                  }).toList(),
-            ),
-          ),
-
-          SizedBox(height: 24.h),
-
-          // === 상담 방식 ===
-          _buildFilterSection(
-            title: '상담 방식',
-            child: Column(
-              children:
-                  CounselingMethod.values
-                      .where((method) => method != CounselingMethod.all)
-                      .map((method) {
-                        final isSelected = filters.selectedMethod == method;
-                        return GestureDetector(
-                          onTap:
-                              () => ref
-                                  .read(counselorFiltersProvider.notifier)
-                                  .setMethod(isSelected ? null : method),
-                          child: Container(
-                            margin: EdgeInsets.only(bottom: 8.h),
-                            padding: EdgeInsets.all(16.w),
-                            decoration: BoxDecoration(
-                              color:
-                                  isSelected
-                                      ? AppColors.lightBlue50
-                                      : Colors.transparent,
-                              borderRadius: BorderRadius.circular(12.r),
-                              border: Border.all(
-                                color:
-                                    isSelected
-                                        ? AppColors.primary
-                                        : AppColors.grey300,
-                              ),
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  _getMethodIcon(method),
-                                  color:
-                                      isSelected
-                                          ? AppColors.primary
-                                          : AppColors.textSecondary,
-                                  size: 20.sp,
-                                ),
-                                SizedBox(width: 12.w),
-                                Text(
-                                  method.displayName,
-                                  style: TextStyle(
-                                    fontSize: 14.sp,
-                                    color:
-                                        isSelected
-                                            ? AppColors.primary
-                                            : AppColors.textPrimary,
-                                    fontWeight:
-                                        isSelected
-                                            ? FontWeight.w600
-                                            : FontWeight.normal,
-                                  ),
-                                ),
-                                const Spacer(),
-                                if (isSelected)
-                                  Icon(
-                                    Icons.check_circle,
-                                    color: AppColors.primary,
-                                    size: 20.sp,
-                                  ),
-                              ],
-                            ),
-                          ),
-                        );
-                      })
-                      .toList(),
-            ),
-          ),
-
-          SizedBox(height: 24.h),
-
-          // === 기타 옵션 ===
-          _buildFilterSection(
-            title: '기타 옵션',
-            child: Column(
-              children: [
-                // === 온라인 상담 가능 ===
-                GestureDetector(
-                  onTap:
-                      () =>
-                          ref
-                              .read(counselorFiltersProvider.notifier)
-                              .toggleOnlineOnly(),
-                  child: Container(
-                    padding: EdgeInsets.all(16.w),
-                    decoration: BoxDecoration(
-                      color:
-                          filters.onlineOnly
-                              ? AppColors.lightBlue50
-                              : Colors.transparent,
-                      borderRadius: BorderRadius.circular(12.r),
-                      border: Border.all(
-                        color:
-                            filters.onlineOnly
-                                ? AppColors.primary
-                                : AppColors.grey300,
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.online_prediction,
-                          color:
-                              filters.onlineOnly
-                                  ? AppColors.primary
-                                  : AppColors.textSecondary,
-                          size: 20.sp,
-                        ),
-                        SizedBox(width: 12.w),
-                        Text(
-                          '온라인 상담 가능한 상담사만',
-                          style: TextStyle(
-                            fontSize: 14.sp,
-                            color:
-                                filters.onlineOnly
-                                    ? AppColors.primary
-                                    : AppColors.textPrimary,
-                            fontWeight:
-                                filters.onlineOnly
-                                    ? FontWeight.w600
-                                    : FontWeight.normal,
-                          ),
-                        ),
-                        const Spacer(),
-                        Switch(
-                          value: filters.onlineOnly,
-                          onChanged:
-                              (value) => ref
-                                  .read(counselorFiltersProvider.notifier)
-                                  .setOnlineOnly(value),
-                          activeColor: AppColors.primary,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          SizedBox(height: 24.h),
-
-          // === 정렬 옵션 ===
-          _buildFilterSection(
-            title: '정렬',
-            child: Column(
-              children: [
-                _buildSortOption('평점순', 'rating', filters.sortBy),
-                _buildSortOption('가격순', 'price', filters.sortBy),
-                _buildSortOption('경력순', 'experience', filters.sortBy),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFilterSection({required String title, required Widget child}) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          title,
-          style: TextStyle(
-            fontSize: 16.sp,
-            fontWeight: FontWeight.bold,
-            color: AppColors.textPrimary,
-          ),
-        ),
-        SizedBox(height: 12.h),
-        child,
-      ],
-    );
-  }
-
-  Widget _buildSortOption(String title, String value, String currentSort) {
-    final isSelected = currentSort == value;
-    return GestureDetector(
-      onTap: () => ref.read(counselorFiltersProvider.notifier).setSortBy(value),
-      child: Container(
-        margin: EdgeInsets.only(bottom: 8.h),
-        padding: EdgeInsets.all(16.w),
-        decoration: BoxDecoration(
-          color: isSelected ? AppColors.lightBlue50 : Colors.transparent,
-          borderRadius: BorderRadius.circular(12.r),
-          border: Border.all(
-            color: isSelected ? AppColors.primary : AppColors.grey300,
-          ),
-        ),
         child: Row(
           children: [
-            Text(
-              title,
-              style: TextStyle(
-                fontSize: 14.sp,
-                color: isSelected ? AppColors.primary : AppColors.textPrimary,
-                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+            CircleAvatar(
+              radius: 32,
+              backgroundColor: AppColors.primary.withOpacity(0.1),
+              backgroundImage:
+                  (counselor.profileImageUrl != null &&
+                          counselor.profileImageUrl!.isNotEmpty)
+                      ? (counselor.profileImageUrl!.startsWith('/')
+                          ? FileImage(File(counselor.profileImageUrl!))
+                          : NetworkImage(counselor.profileImageUrl!)
+                              as ImageProvider)
+                      : null,
+              child:
+                  (counselor.profileImageUrl == null ||
+                          counselor.profileImageUrl!.isEmpty)
+                      ? const Icon(Icons.person, size: 32, color: Colors.grey)
+                      : null,
+            ),
+            SizedBox(width: 16.w),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          counselor.name,
+                          style: TextStyle(
+                            fontSize: 16.sp,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                      ),
+                      if (counselor.isOnline)
+                        Container(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 8.w,
+                            vertical: 4.h,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.success.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(12.r),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 8.w,
+                                height: 8.w,
+                                decoration: BoxDecoration(
+                                  color: AppColors.success,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              SizedBox(width: 4.w),
+                              Text(
+                                '온라인',
+                                style: TextStyle(
+                                  fontSize: 12.sp,
+                                  color: AppColors.success,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                  SizedBox(height: 4.h),
+                  Text(
+                    counselor.title,
+                    style: TextStyle(
+                      fontSize: 14.sp,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                  SizedBox(height: 8.h),
+                  Wrap(
+                    spacing: 8.w,
+                    children:
+                        counselor.specialties
+                            .take(3)
+                            .map(
+                              (specialty) => Container(
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: 8.w,
+                                  vertical: 4.h,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppColors.primary.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(12.r),
+                                ),
+                                child: Text(
+                                  specialty,
+                                  style: TextStyle(
+                                    fontSize: 12.sp,
+                                    color: AppColors.primary,
+                                  ),
+                                ),
+                              ),
+                            )
+                            .toList(),
+                  ),
+                  SizedBox(height: 8.h),
+                  Row(
+                    children: [
+                      Icon(Icons.star, size: 16.w, color: AppColors.warning),
+                      SizedBox(width: 4.w),
+                      Text(
+                        counselor.ratingText,
+                        style: TextStyle(
+                          fontSize: 14.sp,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                      SizedBox(width: 8.w),
+                      Text(
+                        '•',
+                        style: TextStyle(
+                          fontSize: 14.sp,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                      SizedBox(width: 8.w),
+                      Text(
+                        counselor.consultationText,
+                        style: TextStyle(
+                          fontSize: 14.sp,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
-            const Spacer(),
-            if (isSelected)
-              Icon(Icons.check_circle, color: AppColors.primary, size: 20.sp),
           ],
         ),
       ),
     );
-  }
-
-  IconData _getMethodIcon(CounselingMethod method) {
-    switch (method) {
-      case CounselingMethod.faceToFace:
-        return Icons.person;
-      case CounselingMethod.video:
-        return Icons.videocam;
-      case CounselingMethod.voice:
-        return Icons.phone;
-      case CounselingMethod.chat:
-        return Icons.chat;
-      default:
-        return Icons.help_outline;
-    }
   }
 }

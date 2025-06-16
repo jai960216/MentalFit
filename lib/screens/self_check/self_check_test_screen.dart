@@ -38,7 +38,7 @@ class _SelfCheckTestScreenState extends ConsumerState<SelfCheckTestScreen>
   void initState() {
     super.initState();
     _initializeAnimations();
-    _initializeTest();
+    Future.microtask(_initializeTest);
   }
 
   void _initializeAnimations() {
@@ -76,15 +76,7 @@ class _SelfCheckTestScreenState extends ConsumerState<SelfCheckTestScreen>
   Future<void> _initializeTest() async {
     try {
       print('검사 초기화 시작: ${widget.testId}');
-
-      // 🔥 수정: 더 안전한 초기화 방식
-      try {
-        await ref.read(selfCheckProvider.notifier).startTestById(widget.testId);
-      } catch (e) {
-        // 특정 ID로 검사를 찾을 수 없는 경우, 첫 번째 사용 가능한 검사로 대체
-        print('특정 검사 로드 실패, 기본 검사 로드 시도: $e');
-        await _loadDefaultTest();
-      }
+      await ref.read(selfCheckProvider.notifier).startTestById(widget.testId);
 
       // 상태 확인
       final state = ref.read(selfCheckProvider);

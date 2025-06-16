@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
+import 'package:table_calendar/table_calendar.dart';
 import '../../core/config/app_colors.dart';
 import '../../core/config/app_routes.dart';
 import '../../shared/widgets/custom_button.dart';
@@ -22,30 +23,23 @@ class BookingCalendarScreen extends ConsumerStatefulWidget {
 class _BookingCalendarScreenState extends ConsumerState<BookingCalendarScreen>
     with TickerProviderStateMixin {
   late AnimationController _fadeController;
+  late AnimationController _slideController;
   late Animation<double> _fadeAnimation;
+  late Animation<Offset> _slideAnimation;
 
   DateTime _focusedDay = DateTime.now();
   DateTime? _selectedDay;
-  String? _selectedTimeSlot;
-  CounselingMethod _selectedMethod = CounselingMethod.video;
-
-  final List<String> _timeSlots = [
-    '09:00',
-    '10:00',
-    '11:00',
-    '14:00',
-    '15:00',
-    '16:00',
-    '17:00',
-    '19:00',
-    '20:00',
-  ];
+  DateTime? _selectedTime;
+  CounselingMethod _selectedMethod = CounselingMethod.online;
 
   @override
   void initState() {
     super.initState();
     _setupAnimations();
-    _loadAvailableSlots();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadInitialData();
+    });
+    _setupBookingCallback();
   }
 
   void _setupAnimations() {
@@ -53,96 +47,198 @@ class _BookingCalendarScreenState extends ConsumerState<BookingCalendarScreen>
       duration: const Duration(milliseconds: 800),
       vsync: this,
     );
-
-    _fadeAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(parent: _fadeController, curve: Curves.easeIn));
-
+    _slideController = AnimationController(
+      duration: const Duration(milliseconds: 600),
+      vsync: this,
+    );
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _fadeController, curve: Curves.easeInOut),
+    );
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(0, 0.3),
+      end: Offset.zero,
+    ).animate(
+      CurvedAnimation(parent: _slideController, curve: Curves.easeOutBack),
+    );
     _fadeController.forward();
   }
 
-  Future<void> _loadAvailableSlots() async {
-    // availableSlotsProvider를 사용하여 예약 가능 시간 로드
+  Future<void> _loadInitialData() async {
+    // 상담사 정보 로드
+    ref
+        .read(counselorDetailProvider(widget.counselorId).notifier)
+        .loadCounselorDetail();
+
+    // 오늘 날짜의 예약 가능 시간 로드
     ref
         .read(availableSlotsProvider(widget.counselorId).notifier)
         .loadAvailableSlots(DateTime.now());
   }
 
+  void _setupBookingCallback() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(bookingProvider.notifier).setOnBookingCreatedCallback(() {
+        ref.read(myAppointmentsProvider.notifier).loadAppointments();
+      });
+    });
+  }
+
   @override
   void dispose() {
     _fadeController.dispose();
+    _slideController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final bookingState = ref.watch(bookingProvider);
-    final counselorDetailState = ref.watch(
-      counselorDetailProvider(widget.counselorId),
-    );
-    final counselor = counselorDetailState.counselor;
-
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text('예약하기'),
-        backgroundColor: AppColors.white,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.pop(),
-        ),
-      ),
+      appBar: _buildAppBar(),
       body: FadeTransition(
         opacity: _fadeAnimation,
-        child: Column(
-          children: [
-            // === 상담사 정보 헤더 ===
-            if (counselor != null) _buildCounselorHeader(counselor),
+        child: Consumer(
+          builder: (context, ref, child) {
+            final counselorState = ref.watch(
+              counselorDetailProvider(widget.counselorId),
+            );
 
-            // === 메인 컨텐츠 ===
-            Expanded(
-              child: SingleChildScrollView(
-                child: Column(
-                  children: [
-                    // === 상담 방식 선택 ===
-                    _buildMethodSelection(),
+            if (counselorState.isLoading) {
+              debugPrint('상담사 정보 로딩 중...');
+              return _buildLoadingState();
+            }
 
-                    // === 달력 ===
-                    _buildCalendar(),
+            if (counselorState.error != null) {
+              debugPrint('상담사 정보 에러: \\${counselorState.error}');
+              return _buildErrorState(counselorState.error!);
+            }
 
-                    // === 시간 선택 ===
-                    if (_selectedDay != null) _buildTimeSlotSelection(),
+            if (counselorState.counselor == null) {
+              debugPrint('상담사 정보 없음');
+              return _buildNotFoundState();
+            }
 
-                    SizedBox(height: 24.h),
-                  ],
+            return Column(
+              children: [
+                _buildCounselorHeader(counselorState.counselor!),
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      children: [
+                        _buildCalendarSection(),
+                        if (_selectedDay != null) _buildTimeSlots(),
+                        if (_selectedDay != null && _selectedTime != null)
+                          _buildMethodSelection(),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
-            ),
+              ],
+            );
+          },
+        ),
+      ),
+      bottomNavigationBar: _buildBookingButton(),
+    );
+  }
 
-            // === 예약하기 버튼 ===
-            _buildBookingButton(),
+  PreferredSizeWidget _buildAppBar() {
+    return AppBar(
+      title: const Text('예약하기'),
+      backgroundColor: AppColors.white,
+      elevation: 0,
+      leading: IconButton(
+        icon: const Icon(Icons.arrow_back),
+        onPressed: () => context.pop(),
+      ),
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.help_outline),
+          onPressed: _showHelpDialog,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLoadingState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          CircularProgressIndicator(color: AppColors.primary),
+          SizedBox(height: 16.h),
+          Text(
+            '상담사 정보를 불러오는 중...',
+            style: TextStyle(fontSize: 14.sp, color: AppColors.textSecondary),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildErrorState(String error) {
+    return Center(
+      child: Padding(
+        padding: EdgeInsets.all(32.w),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.error_outline, size: 64.sp, color: AppColors.error),
+            SizedBox(height: 16.h),
+            Text(
+              '상담사 정보를 불러올 수 없습니다',
+              style: TextStyle(fontSize: 16.sp, color: AppColors.error),
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: 8.h),
+            Text(
+              error,
+              style: TextStyle(fontSize: 14.sp, color: AppColors.textSecondary),
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: 24.h),
+            CustomButton(
+              text: '다시 시도',
+              onPressed: _loadInitialData,
+              icon: Icons.refresh,
+            ),
           ],
         ),
       ),
     );
   }
 
-  // === UI 구성 요소들 ===
+  Widget _buildNotFoundState() {
+    return Center(
+      child: Padding(
+        padding: EdgeInsets.all(32.w),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.person_off, size: 64.sp, color: AppColors.textSecondary),
+            SizedBox(height: 16.h),
+            Text(
+              '상담사 정보를 찾을 수 없습니다',
+              style: TextStyle(fontSize: 16.sp, color: AppColors.textSecondary),
+            ),
+            SizedBox(height: 24.h),
+            CustomButton(text: '상담사 목록으로', onPressed: () => context.pop()),
+          ],
+        ),
+      ),
+    );
+  }
 
   Widget _buildCounselorHeader(Counselor counselor) {
     return Container(
       padding: EdgeInsets.all(20.w),
+      margin: EdgeInsets.all(16.w),
       decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.only(
-          bottomLeft: Radius.circular(24.r),
-          bottomRight: Radius.circular(24.r),
-        ),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16.r),
         boxShadow: [
           BoxShadow(
-            color: AppColors.grey400.withOpacity(0.1),
+            color: AppColors.cardShadow,
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -150,29 +246,16 @@ class _BookingCalendarScreenState extends ConsumerState<BookingCalendarScreen>
       ),
       child: Row(
         children: [
-          // 상담사 프로필 이미지
-          Container(
-            width: 60.w,
-            height: 60.w,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              image:
-                  counselor.profileImageUrl != null
-                      ? DecorationImage(
-                        image: NetworkImage(counselor.profileImageUrl!),
-                        fit: BoxFit.cover,
-                      )
-                      : null,
-              color:
-                  counselor.profileImageUrl == null ? AppColors.grey200 : null,
-            ),
+          CircleAvatar(
+            radius: 30.r,
+            backgroundColor: AppColors.grey200,
+            backgroundImage:
+                counselor.profileImageUrl != null
+                    ? NetworkImage(counselor.profileImageUrl!)
+                    : null,
             child:
                 counselor.profileImageUrl == null
-                    ? Icon(
-                      Icons.person,
-                      size: 30.sp,
-                      color: AppColors.textSecondary,
-                    )
+                    ? Icon(Icons.person, size: 32.sp, color: AppColors.grey400)
                     : null,
           ),
           SizedBox(width: 16.w),
@@ -180,37 +263,54 @@ class _BookingCalendarScreenState extends ConsumerState<BookingCalendarScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  counselor.name,
-                  style: TextStyle(
-                    fontSize: 18.sp,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
-                  ),
+                Row(
+                  children: [
+                    Text(
+                      counselor.name,
+                      style: TextStyle(
+                        fontSize: 18.sp,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    SizedBox(width: 8.w),
+                    if (counselor.isOnline)
+                      Container(
+                        width: 8.w,
+                        height: 8.w,
+                        decoration: BoxDecoration(
+                          color: AppColors.success,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                  ],
                 ),
                 SizedBox(height: 4.h),
                 Text(
-                  counselor.specialties.join(', '),
+                  counselor.title,
                   style: TextStyle(
                     fontSize: 14.sp,
                     color: AppColors.textSecondary,
                   ),
                 ),
-                SizedBox(height: 8.h),
+                SizedBox(height: 4.h),
                 Row(
                   children: [
+                    Icon(Icons.star, size: 16.sp, color: AppColors.warning),
+                    SizedBox(width: 4.w),
                     Text(
-                      '₩${counselor.price.consultationFee.toStringAsFixed(0)}',
-                      style: TextStyle(
-                        fontSize: 16.sp,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.primary,
-                      ),
-                    ),
-                    Text(
-                      ' / 회',
+                      counselor.ratingText,
                       style: TextStyle(
                         fontSize: 14.sp,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    SizedBox(width: 4.w),
+                    Text(
+                      '(${counselor.reviewCount})',
+                      style: TextStyle(
+                        fontSize: 12.sp,
                         color: AppColors.textSecondary,
                       ),
                     ),
@@ -219,55 +319,22 @@ class _BookingCalendarScreenState extends ConsumerState<BookingCalendarScreen>
               ],
             ),
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMethodSelection() {
-    return Container(
-      margin: EdgeInsets.all(20.w),
-      padding: EdgeInsets.all(16.w),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(16.r),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.grey400.withOpacity(0.1),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '상담 방식',
-            style: TextStyle(
-              fontSize: 16.sp,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textPrimary,
-            ),
-          ),
-          SizedBox(height: 12.h),
-          Row(
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Expanded(
-                child: _buildMethodOption(
-                  CounselingMethod.video,
-                  '화상 상담',
-                  Icons.videocam,
-                  '편안한 공간에서',
+              Text(
+                '${(counselor.price.consultationFee / 10000).toInt()}만원',
+                style: TextStyle(
+                  fontSize: 18.sp,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.primary,
                 ),
               ),
-              SizedBox(width: 12.w),
-              Expanded(
-                child: _buildMethodOption(
-                  CounselingMethod.chat,
-                  '채팅 상담',
-                  Icons.chat,
-                  '텍스트로 소통',
+              Text(
+                '1회 상담',
+                style: TextStyle(
+                  fontSize: 12.sp,
+                  color: AppColors.textSecondary,
                 ),
               ),
             ],
@@ -277,55 +344,329 @@ class _BookingCalendarScreenState extends ConsumerState<BookingCalendarScreen>
     );
   }
 
-  Widget _buildMethodOption(
-    CounselingMethod method,
-    String title,
-    IconData icon,
-    String subtitle,
-  ) {
-    final isSelected = _selectedMethod == method;
-
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          _selectedMethod = method;
-        });
-      },
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: EdgeInsets.all(12.w),
-        decoration: BoxDecoration(
-          color:
-              isSelected
-                  ? AppColors.primary.withOpacity(0.1)
-                  : AppColors.grey50,
-          borderRadius: BorderRadius.circular(12.r),
-          border: Border.all(
-            color: isSelected ? AppColors.primary : AppColors.grey200,
-            width: isSelected ? 2 : 1,
+  Widget _buildCalendarSection() {
+    return Container(
+      margin: EdgeInsets.symmetric(horizontal: 16.w),
+      padding: EdgeInsets.all(20.w),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16.r),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.cardShadow,
+            blurRadius: 8,
+            offset: const Offset(0, 2),
           ),
-        ),
-        child: Column(
-          children: [
-            Icon(
-              icon,
-              size: 24.sp,
-              color: isSelected ? AppColors.primary : AppColors.textSecondary,
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '예약 날짜 선택',
+            style: TextStyle(fontSize: 18.sp, fontWeight: FontWeight.bold),
+          ),
+          SizedBox(height: 16.h),
+          TableCalendar<DateTime>(
+            firstDay: DateTime.now(),
+            lastDay: DateTime.now().add(const Duration(days: 30)),
+            focusedDay: _focusedDay,
+            selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
+            calendarFormat: CalendarFormat.month,
+            startingDayOfWeek: StartingDayOfWeek.sunday,
+            onDaySelected: _onDaySelected,
+            onPageChanged:
+                (focusedDay) => setState(() => _focusedDay = focusedDay),
+            enabledDayPredicate:
+                (day) =>
+                    !day.isBefore(
+                      DateTime.now().subtract(const Duration(days: 1)),
+                    ),
+            eventLoader: _getEventsForDay,
+            calendarStyle: CalendarStyle(
+              selectedDecoration: BoxDecoration(
+                color: AppColors.primary,
+                shape: BoxShape.circle,
+              ),
+              todayDecoration: BoxDecoration(
+                color: AppColors.primary.withOpacity(0.6),
+                shape: BoxShape.circle,
+              ),
+              markerDecoration: BoxDecoration(
+                color: AppColors.success,
+                shape: BoxShape.circle,
+              ),
+              outsideDaysVisible: false,
+              weekendTextStyle: TextStyle(color: AppColors.error),
             ),
-            SizedBox(height: 8.h),
-            Text(
-              title,
-              style: TextStyle(
-                fontSize: 14.sp,
-                fontWeight: FontWeight.w600,
-                color: isSelected ? AppColors.primary : AppColors.textPrimary,
+            headerStyle: HeaderStyle(
+              formatButtonVisible: false,
+              titleCentered: true,
+              leftChevronIcon: Icon(
+                Icons.chevron_left,
+                color: AppColors.primary,
+              ),
+              rightChevronIcon: Icon(
+                Icons.chevron_right,
+                color: AppColors.primary,
               ),
             ),
-            SizedBox(height: 4.h),
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<DateTime> _getEventsForDay(DateTime day) {
+    // 예약 가능한 날짜에 마커 표시
+    // 이 부분은 실제로는 상담사의 availableTimes를 체크해야 함
+    final weekday = _getKoreanWeekday(day.weekday);
+    final counselorState = ref.read(
+      counselorDetailProvider(widget.counselorId),
+    );
+
+    if (counselorState.counselor != null) {
+      final hasAvailableTime = counselorState.counselor!.availableTimes.any(
+        (time) => time.dayOfWeek == weekday && time.isAvailable,
+      );
+      return hasAvailableTime ? [day] : [];
+    }
+
+    return [];
+  }
+
+  Widget _buildTimeSlots() {
+    return Container(
+      margin: EdgeInsets.symmetric(horizontal: 16.w, vertical: 16.h),
+      padding: EdgeInsets.all(20.w),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16.r),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.cardShadow,
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '예약 시간 선택',
+            style: TextStyle(fontSize: 18.sp, fontWeight: FontWeight.bold),
+          ),
+          SizedBox(height: 16.h),
+          Consumer(
+            builder: (context, ref, child) {
+              final slotsState = ref.watch(
+                availableSlotsProvider(widget.counselorId),
+              );
+
+              if (slotsState.isLoading) {
+                return Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(20.h),
+                    child: CircularProgressIndicator(color: AppColors.primary),
+                  ),
+                );
+              }
+
+              if (slotsState.error != null) {
+                return Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(20.h),
+                    child: Column(
+                      children: [
+                        Icon(Icons.error_outline, color: AppColors.error),
+                        SizedBox(height: 8.h),
+                        Text(
+                          slotsState.error!,
+                          style: TextStyle(
+                            fontSize: 14.sp,
+                            color: AppColors.error,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }
+
+              if (slotsState.availableSlots.isEmpty) {
+                return Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(20.h),
+                    child: Column(
+                      children: [
+                        Icon(
+                          Icons.schedule_outlined,
+                          size: 48.sp,
+                          color: AppColors.textSecondary,
+                        ),
+                        SizedBox(height: 8.h),
+                        Text(
+                          '선택한 날짜에 예약 가능한 시간이 없습니다',
+                          style: TextStyle(
+                            fontSize: 14.sp,
+                            color: AppColors.textSecondary,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        SizedBox(height: 4.h),
+                        Text(
+                          '다른 날짜를 선택해주세요',
+                          style: TextStyle(
+                            fontSize: 12.sp,
+                            color: AppColors.textHint,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }
+
+              return Wrap(
+                spacing: 12.w,
+                runSpacing: 12.h,
+                children:
+                    slotsState.availableSlots.map((slot) {
+                      final isSelected =
+                          _selectedTime != null &&
+                          _selectedTime!.hour == slot.hour &&
+                          _selectedTime!.minute == slot.minute;
+
+                      return GestureDetector(
+                        onTap: () {
+                          setState(() => _selectedTime = slot);
+                          ref.read(bookingProvider.notifier).selectTime(slot);
+                          _slideController.reset();
+                          _slideController.forward();
+                        },
+                        child: Container(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 16.w,
+                            vertical: 12.h,
+                          ),
+                          decoration: BoxDecoration(
+                            color:
+                                isSelected
+                                    ? AppColors.primary
+                                    : AppColors.grey50,
+                            borderRadius: BorderRadius.circular(8.r),
+                            border: Border.all(
+                              color:
+                                  isSelected
+                                      ? AppColors.primary
+                                      : AppColors.grey200,
+                            ),
+                          ),
+                          child: Text(
+                            '${slot.hour.toString().padLeft(2, '0')}:${slot.minute.toString().padLeft(2, '0')}',
+                            style: TextStyle(
+                              fontSize: 14.sp,
+                              fontWeight:
+                                  isSelected
+                                      ? FontWeight.w600
+                                      : FontWeight.normal,
+                              color:
+                                  isSelected
+                                      ? Colors.white
+                                      : AppColors.textPrimary,
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMethodSelection() {
+    return SlideTransition(
+      position: _slideAnimation,
+      child: Container(
+        margin: EdgeInsets.symmetric(horizontal: 16.w, vertical: 16.h),
+        padding: EdgeInsets.all(20.w),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16.r),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.cardShadow,
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
             Text(
-              subtitle,
-              style: TextStyle(fontSize: 12.sp, color: AppColors.textSecondary),
-              textAlign: TextAlign.center,
+              '상담 방식 선택',
+              style: TextStyle(fontSize: 18.sp, fontWeight: FontWeight.bold),
+            ),
+            SizedBox(height: 16.h),
+            Wrap(
+              spacing: 12.w,
+              runSpacing: 12.h,
+              children:
+                  CounselingMethod.values.map((method) {
+                    final isSelected = _selectedMethod == method;
+                    return InkWell(
+                      onTap: () => setState(() => _selectedMethod = method),
+                      child: Container(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 16.w,
+                          vertical: 12.h,
+                        ),
+                        decoration: BoxDecoration(
+                          color:
+                              isSelected
+                                  ? AppColors.primary
+                                  : AppColors.background,
+                          borderRadius: BorderRadius.circular(8.r),
+                          border: Border.all(
+                            color:
+                                isSelected
+                                    ? AppColors.primary
+                                    : AppColors.border,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              method.icon,
+                              size: 20.sp,
+                              color:
+                                  isSelected
+                                      ? Colors.white
+                                      : AppColors.textPrimary,
+                            ),
+                            SizedBox(width: 8.w),
+                            Text(
+                              method.displayName,
+                              style: TextStyle(
+                                fontSize: 14.sp,
+                                color:
+                                    isSelected
+                                        ? Colors.white
+                                        : AppColors.textPrimary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }).toList(),
             ),
           ],
         ),
@@ -333,322 +674,243 @@ class _BookingCalendarScreenState extends ConsumerState<BookingCalendarScreen>
     );
   }
 
-  Widget _buildCalendar() {
-    return Container(
-      margin: EdgeInsets.symmetric(horizontal: 20.w),
-      padding: EdgeInsets.all(16.w),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(16.r),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.grey400.withOpacity(0.1),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+  Widget _buildBookingButton() {
+    return Consumer(
+      builder: (context, ref, child) {
+        final bookingState = ref.watch(bookingProvider);
+        final canBook = _selectedDay != null && _selectedTime != null;
+
+        return Container(
+          padding: EdgeInsets.all(20.w),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(24.r),
+              topRight: Radius.circular(24.r),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.cardShadow,
+                blurRadius: 8,
+                offset: const Offset(0, -2),
+              ),
+            ],
           ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '날짜 선택',
-            style: TextStyle(
-              fontSize: 16.sp,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textPrimary,
+          child: SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (canBook) _buildSelectedBookingInfo(),
+                CustomButton(
+                  text: bookingState.isCreating ? '예약 중...' : '예약하기',
+                  onPressed:
+                      canBook && !bookingState.isCreating
+                          ? _handleBooking
+                          : null,
+                  isLoading: bookingState.isCreating,
+                  icon: bookingState.isCreating ? null : Icons.calendar_month,
+                  gradient:
+                      canBook
+                          ? const LinearGradient(
+                            colors: [AppColors.primary, AppColors.secondary],
+                          )
+                          : null,
+                ),
+                if (bookingState.error != null)
+                  _buildErrorMessage(bookingState.error!),
+              ],
             ),
           ),
-          SizedBox(height: 16.h),
-          _buildSimpleCalendar(),
+        );
+      },
+    );
+  }
+
+  Widget _buildSelectedBookingInfo() {
+    return Container(
+      padding: EdgeInsets.all(16.w),
+      margin: EdgeInsets.only(bottom: 16.h),
+      decoration: BoxDecoration(
+        color: AppColors.lightBlue50,
+        borderRadius: BorderRadius.circular(12.r),
+        border: Border.all(color: AppColors.primary.withOpacity(0.3)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.event_available, size: 20.sp, color: AppColors.primary),
+          SizedBox(width: 12.w),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${_selectedDay!.month}월 ${_selectedDay!.day}일 ${_selectedTime!.hour.toString().padLeft(2, '0')}:${_selectedTime!.minute.toString().padLeft(2, '0')}',
+                  style: TextStyle(
+                    fontSize: 16.sp,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.primary,
+                  ),
+                ),
+                SizedBox(height: 4.h),
+                Text(
+                  '${_selectedMethod.displayName} 상담',
+                  style: TextStyle(
+                    fontSize: 14.sp,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildSimpleCalendar() {
-    final now = DateTime.now();
-    final daysInMonth = DateTime(now.year, now.month + 1, 0).day;
+  Widget _buildErrorMessage(String error) {
+    return Container(
+      margin: EdgeInsets.only(top: 12.h),
+      padding: EdgeInsets.all(12.w),
+      decoration: BoxDecoration(
+        color: AppColors.error.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8.r),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.error_outline, size: 16.sp, color: AppColors.error),
+          SizedBox(width: 8.w),
+          Expanded(
+            child: Text(
+              error,
+              style: TextStyle(fontSize: 12.sp, color: AppColors.error),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
-    return Column(
+  void _onDaySelected(DateTime selectedDay, DateTime focusedDay) {
+    setState(() {
+      _selectedDay = selectedDay;
+      _selectedTime = null;
+      _focusedDay = focusedDay;
+    });
+
+    // 선택한 날짜의 예약 가능 시간 로드
+    ref
+        .read(availableSlotsProvider(widget.counselorId).notifier)
+        .loadAvailableSlots(selectedDay);
+    ref.read(bookingProvider.notifier).selectDate(selectedDay);
+
+    _slideController.reset();
+    _slideController.forward();
+  }
+
+  Future<void> _handleBooking() async {
+    if (_selectedDay == null || _selectedTime == null) return;
+
+    // 예약 정보 설정
+    ref.read(bookingProvider.notifier)
+      ..selectCounselor(widget.counselorId)
+      ..selectDate(_selectedDay!)
+      ..selectTime(_selectedTime!)
+      ..selectMethod(_selectedMethod);
+
+    // 예약 생성
+    final success = await ref.read(bookingProvider.notifier).createBooking();
+
+    if (success && mounted) {
+      // 예약 성공 시 예약 정보 extra로 전달
+      final appointment = ref.read(bookingProvider).createdAppointment;
+      if (appointment != null) {
+        context.push(
+          '${AppRoutes.bookingConfirm}/${widget.counselorId}',
+          extra: appointment,
+        );
+      }
+    }
+  }
+
+  void _showHelpDialog() {
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('예약 도움말'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildHelpItem(
+                  Icons.calendar_today,
+                  '날짜 선택',
+                  '오늘부터 30일 후까지 예약 가능합니다.',
+                ),
+                SizedBox(height: 12.h),
+                _buildHelpItem(
+                  Icons.schedule,
+                  '시간 선택',
+                  '녹색 점이 있는 날짜에 예약 가능한 시간이 있습니다.',
+                ),
+                SizedBox(height: 12.h),
+                _buildHelpItem(
+                  Icons.videocam,
+                  '상담 방식',
+                  '화상, 음성, 채팅, 대면 중 선택할 수 있습니다.',
+                ),
+                SizedBox(height: 12.h),
+                _buildHelpItem(
+                  Icons.cancel,
+                  '예약 취소',
+                  '예약 시간 2시간 전까지 취소 가능합니다.',
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('확인'),
+              ),
+            ],
+          ),
+    );
+  }
+
+  Widget _buildHelpItem(IconData icon, String title, String description) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // 요일 헤더
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children:
-              ['일', '월', '화', '수', '목', '금', '토']
-                  .map(
-                    (day) => Text(
-                      day,
-                      style: TextStyle(
-                        fontSize: 14.sp,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                  )
-                  .toList(),
-        ),
-        SizedBox(height: 12.h),
-        // 날짜 그리드
-        ...List.generate(
-          (daysInMonth / 7).ceil(),
-          (weekIndex) => _buildWeekRow(weekIndex, now),
+        Icon(icon, size: 20.sp, color: AppColors.primary),
+        SizedBox(width: 12.w),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 14.sp,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              SizedBox(height: 2.h),
+              Text(
+                description,
+                style: TextStyle(
+                  fontSize: 12.sp,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ],
+          ),
         ),
       ],
     );
   }
 
-  Widget _buildWeekRow(int weekIndex, DateTime now) {
-    final startDay = weekIndex * 7 + 1;
-    final daysInMonth = DateTime(now.year, now.month + 1, 0).day;
-
-    return Padding(
-      padding: EdgeInsets.only(bottom: 8.h),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: List.generate(7, (dayIndex) {
-          final day = startDay + dayIndex;
-          if (day > daysInMonth) {
-            return SizedBox(width: 32.w, height: 32.w);
-          }
-
-          final date = DateTime(now.year, now.month, day);
-          final isSelected = _selectedDay?.day == day;
-          final isPast = date.isBefore(
-            DateTime.now().subtract(const Duration(days: 1)),
-          );
-
-          return GestureDetector(
-            onTap:
-                isPast
-                    ? null
-                    : () {
-                      setState(() {
-                        _selectedDay = date;
-                        _selectedTimeSlot = null; // 날짜 변경시 시간 초기화
-                      });
-                    },
-            child: Container(
-              width: 32.w,
-              height: 32.w,
-              decoration: BoxDecoration(
-                color: isSelected ? AppColors.primary : Colors.transparent,
-                borderRadius: BorderRadius.circular(8.r),
-              ),
-              child: Center(
-                child: Text(
-                  '$day',
-                  style: TextStyle(
-                    fontSize: 14.sp,
-                    fontWeight:
-                        isSelected ? FontWeight.w600 : FontWeight.normal,
-                    color:
-                        isPast
-                            ? AppColors.grey300
-                            : isSelected
-                            ? Colors.white
-                            : AppColors.textPrimary,
-                  ),
-                ),
-              ),
-            ),
-          );
-        }),
-      ),
-    );
-  }
-
-  Widget _buildTimeSlotSelection() {
-    return Container(
-      margin: EdgeInsets.fromLTRB(20.w, 16.w, 20.w, 0),
-      padding: EdgeInsets.all(16.w),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(16.r),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.grey400.withOpacity(0.1),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '시간 선택',
-            style: TextStyle(
-              fontSize: 16.sp,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textPrimary,
-            ),
-          ),
-          SizedBox(height: 12.h),
-          Wrap(
-            spacing: 8.w,
-            runSpacing: 8.h,
-            children:
-                _timeSlots.map((timeSlot) {
-                  final isSelected = _selectedTimeSlot == timeSlot;
-                  final isAvailable = _isTimeSlotAvailable(timeSlot);
-
-                  return GestureDetector(
-                    onTap:
-                        isAvailable
-                            ? () {
-                              setState(() {
-                                _selectedTimeSlot = timeSlot;
-                              });
-                            }
-                            : null,
-                    child: Container(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: 16.w,
-                        vertical: 8.h,
-                      ),
-                      decoration: BoxDecoration(
-                        color:
-                            isSelected
-                                ? AppColors.primary
-                                : isAvailable
-                                ? AppColors.grey50
-                                : AppColors.grey100,
-                        borderRadius: BorderRadius.circular(8.r),
-                        border: Border.all(
-                          color:
-                              isSelected
-                                  ? AppColors.primary
-                                  : AppColors.grey200,
-                        ),
-                      ),
-                      child: Text(
-                        timeSlot,
-                        style: TextStyle(
-                          fontSize: 14.sp,
-                          fontWeight:
-                              isSelected ? FontWeight.w600 : FontWeight.normal,
-                          color:
-                              isSelected
-                                  ? Colors.white
-                                  : isAvailable
-                                  ? AppColors.textPrimary
-                                  : AppColors.textSecondary,
-                        ),
-                      ),
-                    ),
-                  );
-                }).toList(),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBookingButton() {
-    final bookingState = ref.watch(bookingProvider);
-    final canBook = _selectedDay != null && _selectedTimeSlot != null;
-
-    return Container(
-      padding: EdgeInsets.all(20.w),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(24.r),
-          topRight: Radius.circular(24.r),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.grey400.withOpacity(0.1),
-            blurRadius: 8,
-            offset: const Offset(0, -2),
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (_selectedDay != null && _selectedTimeSlot != null)
-            Container(
-              padding: EdgeInsets.all(12.w),
-              margin: EdgeInsets.only(bottom: 16.h),
-              decoration: BoxDecoration(
-                color: AppColors.primary.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12.r),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.event_available,
-                    size: 16.sp,
-                    color: AppColors.primary,
-                  ),
-                  SizedBox(width: 8.w),
-                  Text(
-                    '${_selectedDay!.month}월 ${_selectedDay!.day}일 $_selectedTimeSlot',
-                    style: TextStyle(
-                      fontSize: 14.sp,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.primary,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          CustomButton(
-            text: '예약하기',
-            onPressed: canBook ? _handleBooking : null,
-            isLoading: bookingState.isCreating,
-            icon: Icons.calendar_month,
-          ),
-        ],
-      ),
-    );
-  }
-
-  // === 헬퍼 메서드들 ===
-
-  bool _isTimeSlotAvailable(String timeSlot) {
-    // TODO: 실제 예약 가능 여부 확인 로직
-    // 현재는 모든 시간대를 사용 가능으로 처리
-    return true;
-  }
-
-  Future<void> _handleBooking() async {
-    if (_selectedDay == null || _selectedTimeSlot == null) return;
-
-    // BookingNotifier의 메서드 사용
-    ref.read(bookingProvider.notifier).selectCounselor(widget.counselorId);
-    ref.read(bookingProvider.notifier).selectDate(_selectedDay!);
-    ref.read(bookingProvider.notifier).selectMethod(_selectedMethod);
-
-    // 시간 슬롯을 DateTime으로 변환
-    final timeParts = _selectedTimeSlot!.split(':');
-    final hour = int.parse(timeParts[0]);
-    final minute = int.parse(timeParts[1]);
-    final selectedDateTime = DateTime(
-      _selectedDay!.year,
-      _selectedDay!.month,
-      _selectedDay!.day,
-      hour,
-      minute,
-    );
-    ref.read(bookingProvider.notifier).selectTime(selectedDateTime);
-
-    final success = await ref.read(bookingProvider.notifier).createBooking();
-
-    if (success && mounted) {
-      // 예약 성공 시 확정 화면으로 이동 (수정된 라우트 사용)
-      context.go(AppRoutes.getBookingConfirmRoute(widget.counselorId));
-    } else if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('예약에 실패했습니다. 다시 시도해주세요.'),
-          backgroundColor: AppColors.error,
-        ),
-      );
-    }
+  String _getKoreanWeekday(int weekday) {
+    const weekdays = ['월', '화', '수', '목', '금', '토', '일'];
+    return weekdays[weekday - 1];
   }
 }

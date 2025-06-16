@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/config/app_colors.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 // === 자가진단 검사 유형 ===
 enum SelfCheckTestType {
@@ -368,6 +369,13 @@ class SelfCheckResult {
   });
 
   factory SelfCheckResult.fromJson(Map<String, dynamic> json) {
+    DateTime parseDate(dynamic value) {
+      if (value is String) return DateTime.parse(value);
+      if (value is DateTime) return value;
+      if (value is Timestamp) return value.toDate();
+      throw Exception('Invalid date type for SelfCheckResult: $value');
+    }
+
     return SelfCheckResult(
       id: json['id'] as String,
       userId: json['userId'] as String,
@@ -386,11 +394,8 @@ class SelfCheckResult {
       categoryScores: Map<String, int>.from(json['categoryScores'] as Map),
       interpretation: json['interpretation'] as String?,
       recommendations: List<String>.from(json['recommendations'] as List),
-      completedAt: DateTime.parse(json['completedAt'] as String),
-      viewedAt:
-          json['viewedAt'] != null
-              ? DateTime.parse(json['viewedAt'] as String)
-              : null,
+      completedAt: parseDate(json['completedAt']),
+      viewedAt: json['viewedAt'] != null ? parseDate(json['viewedAt']) : null,
     );
   }
 

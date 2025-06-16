@@ -86,6 +86,20 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final user = await _authService.checkAutoLogin();
 
       if (user != null) {
+        // 온보딩 미완료 상태라면 안내 후 로그아웃
+        if (!(user.isOnboardingCompleted ?? false)) {
+          // 온보딩 미완료 안내 후 로그아웃 처리
+          state = state.copyWith(
+            user: null,
+            isLoading: false,
+            isLoggedIn: false,
+            status: AuthStatus.unauthenticated,
+            error: '회원가입(온보딩) 미완료 상태입니다. 회원가입을 완료해주세요.',
+          );
+          // 필요시: await logout();
+          debugPrint('ℹ️ 온보딩 미완료 계정 자동 로그아웃');
+          return;
+        }
         state = state.copyWith(
           user: user,
           isLoading: false,

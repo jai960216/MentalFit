@@ -27,6 +27,7 @@ class AppRoutes {
   static const String counselorList = '/counselor/list';
   static const String counselorDetail = '/counselor/detail';
   static const String counselorSearch = '/counselor/search';
+  static const String counselorRegister = '/counselor/register';
 
   // === 예약/예약 관리 === (수정됨)
   static const String bookingCalendar =

@@ -108,7 +108,8 @@ enum UserType {
   athlete('athlete', '선수'),
   general('general', '일반인'),
   guardian('guardian', '보호자'),
-  coach('coach', '지도자');
+  coach('coach', '지도자'),
+  master('master', '관리자');
 
   const UserType(this.value, this.displayName);
 

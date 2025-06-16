@@ -1,10 +1,21 @@
 import 'package:flutter/foundation.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/self_check_models.dart';
+import 'firestore_service.dart';
+
+const List<SelfCheckAnswer> likert5Answers = [
+  SelfCheckAnswer(id: 'likert5_1', text: '1점', score: 1, order: 1),
+  SelfCheckAnswer(id: 'likert5_2', text: '2점', score: 2, order: 2),
+  SelfCheckAnswer(id: 'likert5_3', text: '3점', score: 3, order: 3),
+  SelfCheckAnswer(id: 'likert5_4', text: '4점', score: 4, order: 4),
+  SelfCheckAnswer(id: 'likert5_5', text: '5점', score: 5, order: 5),
+];
 
 class SelfCheckService {
   static SelfCheckService? _instance;
-  List<SelfCheckTest>? _cachedTests;
-  List<SelfCheckResult>? _cachedResults;
+  late FirebaseFirestore _firestore;
+  late FirestoreService _firestoreService;
+  late CollectionReference _selfCheckResultsCollection;
 
   SelfCheckService._internal();
 
@@ -17,114 +28,273 @@ class SelfCheckService {
   /// 서비스 초기화
   Future<void> _initialize() async {
     try {
-      // 초기화 시 기본 데이터 캐싱
-      _cachedTests = _getMockTests();
-      _cachedResults = _getMockResults();
+      _firestore = FirebaseFirestore.instance;
+      _firestoreService = await FirestoreService.getInstance();
+      _selfCheckResultsCollection = _firestore.collection('self_check_results');
       debugPrint('SelfCheckService 초기화 완료');
     } catch (e) {
       debugPrint('SelfCheckService 초기화 오류: $e');
-      // 초기화 실패 시에도 기본 데이터는 생성
-      _cachedTests = _getEmergencyMockTests();
-      _cachedResults = [];
+      rethrow;
     }
   }
 
-  /// 사용 가능한 검사 목록 조회
-  Future<List<SelfCheckTest>> getAvailableTests() async {
-    try {
-      // 실제 API 호출 시뮬레이션
-      await Future.delayed(const Duration(milliseconds: 800));
+  // 앱 내 고정 스포츠 심리 검사 리스트
+  final List<SelfCheckTest> _availableTests = [
+    SelfCheckTest(
+      id: 'tops2',
+      type: SelfCheckTestType.tops2,
+      title: 'TOPS-2 (Test of Performance Strategies-2)',
+      description: '심리기술 사용(집중, 목표설정 등)을 경기 중/평상시로 나눠 측정. 엘리트 선수 대상 활용도 높음.',
+      category: SelfCheckCategory.performance,
+      questionCount: 2,
+      estimatedMinutes: 10,
+      questions: [
+        SelfCheckQuestion(
+          id: 'tops2_q1',
+          order: 1,
+          text: '경기 중 집중력을 유지하기 위해 어떤 전략을 사용합니까?',
+          answerType: AnswerType.likert5,
+          answers: likert5Answers,
+        ),
+        SelfCheckQuestion(
+          id: 'tops2_q2',
+          order: 2,
+          text: '평상시 목표를 설정하고 달성하기 위해 계획을 세웁니까?',
+          answerType: AnswerType.likert5,
+          answers: likert5Answers,
+        ),
+      ],
+      isActive: true,
+      createdAt: DateTime(2024, 1, 1),
+    ),
+    SelfCheckTest(
+      id: 'csai2',
+      type: SelfCheckTestType.csai2,
+      title: 'CSAI-2 (Competitive State Anxiety Inventory-2)',
+      description: '경기 전 불안의 인지적, 신체적 요소 + 자신감을 구분해 측정. 국내외 연구 다수.',
+      category: SelfCheckCategory.anxiety,
+      questionCount: 2,
+      estimatedMinutes: 7,
+      questions: [
+        SelfCheckQuestion(
+          id: 'csai2_q1',
+          order: 1,
+          text: '경기 전 불안감이 심하게 느껴집니까?',
+          answerType: AnswerType.likert5,
+          answers: likert5Answers,
+        ),
+        SelfCheckQuestion(
+          id: 'csai2_q2',
+          order: 2,
+          text: '경기 전 자신감이 충분합니까?',
+          answerType: AnswerType.likert5,
+          answers: likert5Answers,
+        ),
+      ],
+      isActive: true,
+      createdAt: DateTime(2024, 1, 1),
+    ),
+    SelfCheckTest(
+      id: 'poms',
+      type: SelfCheckTestType.psis, // 가장 유사한 것으로 매핑
+      title: 'POMS (Profile of Mood States)',
+      description: '분노, 피로, 긴장, 활력 등 6가지 기분 상태 측정. 훈련 및 경기 전후 심리 상태 분석에 유용.',
+      category: SelfCheckCategory.performance, // mood 없음, performance로 매핑
+      questionCount: 2,
+      estimatedMinutes: 8,
+      questions: [
+        SelfCheckQuestion(
+          id: 'poms_q1',
+          order: 1,
+          text: '최근 며칠간 피로감을 자주 느꼈습니까?',
+          answerType: AnswerType.likert5,
+          answers: likert5Answers,
+        ),
+        SelfCheckQuestion(
+          id: 'poms_q2',
+          order: 2,
+          text: '최근 며칠간 활력이 넘친다고 느꼈습니까?',
+          answerType: AnswerType.likert5,
+          answers: likert5Answers,
+        ),
+      ],
+      isActive: true,
+      createdAt: DateTime(2024, 1, 1),
+    ),
+    SelfCheckTest(
+      id: 'acsi28',
+      type: SelfCheckTestType.msci, // 가장 유사한 것으로 매핑
+      title: 'ACSI-28 (Athletic Coping Skills Inventory-28)',
+      description: '스트레스 대처능력 및 심리적 회복탄력성 측정. 스포츠 심리 상담 시 널리 사용.',
+      category: SelfCheckCategory.performance, // coping 없음, performance로 매핑
+      questionCount: 2,
+      estimatedMinutes: 10,
+      questions: [
+        SelfCheckQuestion(
+          id: 'acsi28_q1',
+          order: 1,
+          text: '스트레스를 효과적으로 관리할 수 있다고 느낍니까?',
+          answerType: AnswerType.likert5,
+          answers: likert5Answers,
+        ),
+        SelfCheckQuestion(
+          id: 'acsi28_q2',
+          order: 2,
+          text: '실패 후에도 빠르게 회복할 수 있습니까?',
+          answerType: AnswerType.likert5,
+          answers: likert5Answers,
+        ),
+      ],
+      isActive: true,
+      createdAt: DateTime(2024, 1, 1),
+    ),
+    SelfCheckTest(
+      id: 'scat',
+      type: SelfCheckTestType.csai2, // anxiety 관련으로 매핑
+      title: 'SCAT (Sport Competition Anxiety Test)',
+      description: '운동선수의 특성불안 수준 측정. CSAI-2보다 간단한 초기 도구.',
+      category: SelfCheckCategory.anxiety,
+      questionCount: 2,
+      estimatedMinutes: 5,
+      questions: [
+        SelfCheckQuestion(
+          id: 'scat_q1',
+          order: 1,
+          text: '경기 상황에서 긴장하거나 불안해합니까?',
+          answerType: AnswerType.likert5,
+          answers: likert5Answers,
+        ),
+        SelfCheckQuestion(
+          id: 'scat_q2',
+          order: 2,
+          text: '중요한 경기 전날 잠을 잘 이루지 못합니까?',
+          answerType: AnswerType.likert5,
+          answers: likert5Answers,
+        ),
+      ],
+      isActive: true,
+      createdAt: DateTime(2024, 1, 1),
+    ),
+    SelfCheckTest(
+      id: 'mtq48',
+      type: SelfCheckTestType.msci, // mental toughness 관련으로 매핑
+      title: 'MTQ48 (Mental Toughness Questionnaire)',
+      description: '자신감, 정서통제, 회복력 등 포함. 코칭, 멘탈 트레이닝에 활용.',
+      category: SelfCheckCategory.confidence, // confidence로 매핑
+      questionCount: 2,
+      estimatedMinutes: 8,
+      questions: [
+        SelfCheckQuestion(
+          id: 'mtq48_q1',
+          order: 1,
+          text: '압박 상황에서도 침착함을 유지할 수 있습니까?',
+          answerType: AnswerType.likert5,
+          answers: likert5Answers,
+        ),
+        SelfCheckQuestion(
+          id: 'mtq48_q2',
+          order: 2,
+          text: '실패 후에도 자신감을 잃지 않습니까?',
+          answerType: AnswerType.likert5,
+          answers: likert5Answers,
+        ),
+      ],
+      isActive: true,
+      createdAt: DateTime(2024, 1, 1),
+    ),
+    SelfCheckTest(
+      id: 'restq',
+      type: SelfCheckTestType.smq, // stress-recovery 관련으로 매핑
+      title: 'RESTQ-Sport (Recovery-Stress Questionnaire for Athletes)',
+      description: '스트레스-회복 균형 측정. 과훈련/번아웃 위험 사전 탐지에 유용.',
+      category: SelfCheckCategory.performance, // stress 없음, performance로 매핑
+      questionCount: 2,
+      estimatedMinutes: 9,
+      questions: [
+        SelfCheckQuestion(
+          id: 'restq_q1',
+          order: 1,
+          text: '최근 충분한 휴식을 취하고 있다고 느낍니까?',
+          answerType: AnswerType.likert5,
+          answers: likert5Answers,
+        ),
+        SelfCheckQuestion(
+          id: 'restq_q2',
+          order: 2,
+          text: '최근 스트레스를 많이 받고 있습니까?',
+          answerType: AnswerType.likert5,
+          answers: likert5Answers,
+        ),
+      ],
+      isActive: true,
+      createdAt: DateTime(2024, 1, 1),
+    ),
+  ];
 
-      // 캐시된 데이터가 있으면 반환
-      if (_cachedTests != null && _cachedTests!.isNotEmpty) {
-        debugPrint('캐시된 검사 목록 반환: ${_cachedTests!.length}개');
-        return List.from(_cachedTests!);
-      }
-
-      // 캐시가 없으면 새로 생성
-      _cachedTests = _getMockTests();
-      return List.from(_cachedTests!);
-    } catch (e) {
-      debugPrint('검사 목록 조회 오류: $e');
-      // 오류 발생 시 기본 Mock 데이터 반환
-      return _getEmergencyMockTests();
-    }
+  List<SelfCheckTest> getAvailableTests() {
+    return _availableTests;
   }
 
   /// 추천 검사 조회
   Future<List<SelfCheckTest>> getRecommendedTests() async {
     try {
-      final allTests = await getAvailableTests();
-      // 활성화된 검사 중 처음 2개를 추천으로 반환
-      final recommendedTests =
-          allTests.where((test) => test.isActive).take(2).toList();
+      final snapshot =
+          await _firestore
+              .collection('self_check_tests')
+              .where('isActive', isEqualTo: true)
+              .limit(2)
+              .get();
 
-      debugPrint('추천 검사 반환: ${recommendedTests.length}개');
-      return recommendedTests;
+      return snapshot.docs.map((doc) {
+        final data = doc.data();
+        data['id'] = doc.id;
+        return SelfCheckTest.fromJson(data);
+      }).toList();
     } catch (e) {
       debugPrint('추천 검사 조회 오류: $e');
-      // 오류 시 기본 추천 검사 반환
-      final emergencyTests = _getEmergencyMockTests();
-      return emergencyTests.take(1).toList();
+      return [];
     }
   }
 
-  /// 특정 검사 조회 - 🔥 핵심 개선 부분
+  /// 특정 검사 조회
   Future<SelfCheckTest> getTestById(String testId) async {
+    // 1. 앱 내 고정 데이터에서 먼저 찾기
+    final local = _availableTests.where((t) => t.id == testId).toList();
+    if (local.isNotEmpty) return local.first;
+
+    // 2. Firestore에서 찾기 (없으면 예외)
     try {
-      debugPrint('검사 조회 시작: $testId');
-
-      // 먼저 캐시에서 검색
-      if (_cachedTests != null) {
-        final test = _cachedTests!.cast<SelfCheckTest?>().firstWhere(
-          (test) => test?.id == testId,
-          orElse: () => null,
-        );
-
-        if (test != null) {
-          debugPrint('캐시에서 검사 발견: ${test.title}');
-          return test;
-        }
+      final doc =
+          await _firestore.collection('self_check_tests').doc(testId).get();
+      if (!doc.exists) {
+        throw Exception('검사를 찾을 수 없습니다: $testId');
       }
-
-      // 캐시에 없으면 전체 목록에서 다시 검색
-      final allTests = await getAvailableTests();
-      final foundTest = allTests.cast<SelfCheckTest?>().firstWhere(
-        (test) => test?.id == testId,
-        orElse: () => null,
-      );
-
-      if (foundTest != null) {
-        debugPrint('전체 목록에서 검사 발견: ${foundTest.title}');
-        return foundTest;
-      }
-
-      // 여전히 찾지 못한 경우, ID 기반으로 기본 검사 생성
-      debugPrint('검사를 찾을 수 없어 기본 검사 생성: $testId');
-      return _createDefaultTestById(testId);
+      final data = doc.data()!;
+      data['id'] = doc.id;
+      return SelfCheckTest.fromJson(data);
     } catch (e) {
-      debugPrint('검사 조회 심각한 오류: $e');
-      // 최후의 수단: 기본 검사 반환
-      return _createEmergencyTest(testId);
+      debugPrint('검사 조회 오류: $e');
+      rethrow;
     }
   }
 
   /// 최근 검사 결과 조회
   Future<List<SelfCheckResult>> getRecentResults({int limit = 10}) async {
     try {
-      await Future.delayed(const Duration(milliseconds: 500));
+      final snapshot =
+          await _selfCheckResultsCollection
+              .orderBy('completedAt', descending: true)
+              .limit(limit)
+              .get();
 
-      if (_cachedResults != null) {
-        final results = _cachedResults!.take(limit).toList();
-        debugPrint('최근 결과 반환: ${results.length}개');
-        return results;
-      }
-
-      _cachedResults = _getMockResults();
-      return _cachedResults!.take(limit).toList();
+      return snapshot.docs.map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        data['id'] = doc.id;
+        return SelfCheckResult.fromJson(data);
+      }).toList();
     } catch (e) {
       debugPrint('최근 결과 조회 오류: $e');
-      return []; // 빈 리스트 반환
+      return [];
     }
   }
 
@@ -135,357 +305,23 @@ class SelfCheckService {
   }) async {
     try {
       debugPrint('검사 제출 시작: $testId, 답변 수: ${answers.length}');
-      await Future.delayed(const Duration(milliseconds: 1500));
 
       final test = await getTestById(testId);
       final result = _calculateTestResult(test, answers);
 
-      // 결과를 캐시에 추가
-      _cachedResults ??= [];
-      _cachedResults!.insert(0, result);
+      // Firestore에 결과 저장
+      final resultData = result.toJson();
+      resultData['completedAt'] = Timestamp.fromDate(result.completedAt);
+
+      final docRef = await _selfCheckResultsCollection.add(resultData);
+      resultData['id'] = docRef.id;
 
       debugPrint('검사 제출 완료: ${result.id}');
-      return result;
+      return SelfCheckResult.fromJson(resultData);
     } catch (e) {
       debugPrint('검사 제출 오류: $e');
       throw Exception('검사 제출에 실패했습니다: ${e.toString()}');
     }
-  }
-
-  /// ID 기반 기본 검사 생성
-  SelfCheckTest _createDefaultTestById(String testId) {
-    // testId 패턴에 따라 적절한 검사 생성
-    if (testId.contains('tops2')) {
-      return _createTOPS2Test(testId);
-    } else if (testId.contains('csai2')) {
-      return _createCSAI2Test(testId);
-    } else {
-      return _createGenericTest(testId);
-    }
-  }
-
-  /// 긴급 상황용 기본 검사 생성
-  SelfCheckTest _createEmergencyTest(String testId) {
-    return SelfCheckTest(
-      id: testId,
-      type: SelfCheckTestType.tops2,
-      title: '기본 심리 검사',
-      description: '임시로 생성된 기본 검사입니다.',
-      category: SelfCheckCategory.performance,
-      questionCount: 5,
-      estimatedMinutes: 3,
-      questions: _generateBasicQuestions(),
-      isActive: true,
-      createdAt: DateTime.now(),
-      updatedAt: DateTime.now(),
-    );
-  }
-
-  /// 기본 질문 생성
-  List<SelfCheckQuestion> _generateBasicQuestions() {
-    return [
-      SelfCheckQuestion(
-        id: 'basic_q1',
-        order: 1,
-        text: '운동할 때 자신감을 느끼십니까?',
-        answerType: AnswerType.likert5,
-        answers: _generateLikert5Answers(),
-      ),
-      SelfCheckQuestion(
-        id: 'basic_q2',
-        order: 2,
-        text: '경기 전에 긴장을 잘 조절할 수 있습니까?',
-        answerType: AnswerType.likert5,
-        answers: _generateLikert5Answers(),
-      ),
-      SelfCheckQuestion(
-        id: 'basic_q3',
-        order: 3,
-        text: '목표를 향해 꾸준히 노력하고 있습니까?',
-        answerType: AnswerType.likert5,
-        answers: _generateLikert5Answers(),
-      ),
-      SelfCheckQuestion(
-        id: 'basic_q4',
-        order: 4,
-        text: '어려운 상황에서도 집중력을 유지할 수 있습니까?',
-        answerType: AnswerType.likert5,
-        answers: _generateLikert5Answers(),
-      ),
-      SelfCheckQuestion(
-        id: 'basic_q5',
-        order: 5,
-        text: '동료들과 잘 협력할 수 있습니까?',
-        answerType: AnswerType.likert5,
-        answers: _generateLikert5Answers(),
-      ),
-    ];
-  }
-
-  /// 5점 척도 답변 생성
-  List<SelfCheckAnswer> _generateLikert5Answers() {
-    return [
-      const SelfCheckAnswer(id: 'ans1', text: '전혀 그렇지 않다', score: 1, order: 1),
-      const SelfCheckAnswer(id: 'ans2', text: '그렇지 않다', score: 2, order: 2),
-      const SelfCheckAnswer(id: 'ans3', text: '보통이다', score: 3, order: 3),
-      const SelfCheckAnswer(id: 'ans4', text: '그렇다', score: 4, order: 4),
-      const SelfCheckAnswer(id: 'ans5', text: '매우 그렇다', score: 5, order: 5),
-    ];
-  }
-
-  /// TOPS2 검사 생성
-  SelfCheckTest _createTOPS2Test(String testId) {
-    return SelfCheckTest(
-      id: testId,
-      type: SelfCheckTestType.tops2,
-      title: 'TOPS-2 수행전략 검사',
-      description: '스포츠 수행 전략과 심리적 기술을 평가하는 검사입니다.',
-      category: SelfCheckCategory.performance,
-      questionCount: 20,
-      estimatedMinutes: 10,
-      questions: _generateTOPS2Questions(),
-      isActive: true,
-      createdAt: DateTime.now(),
-      updatedAt: DateTime.now(),
-    );
-  }
-
-  /// CSAI2 검사 생성
-  SelfCheckTest _createCSAI2Test(String testId) {
-    return SelfCheckTest(
-      id: testId,
-      type: SelfCheckTestType.csai2,
-      title: 'CSAI-2 경쟁불안 검사',
-      description: '경기 상황에서의 불안 수준을 측정하는 검사입니다.',
-      category: SelfCheckCategory.anxiety,
-      questionCount: 15,
-      estimatedMinutes: 8,
-      questions: _generateCSAI2Questions(),
-      isActive: true,
-      createdAt: DateTime.now(),
-      updatedAt: DateTime.now(),
-    );
-  }
-
-  /// 범용 검사 생성
-  SelfCheckTest _createGenericTest(String testId) {
-    return SelfCheckTest(
-      id: testId,
-      type: SelfCheckTestType.psis,
-      title: '심리적 기술 검사',
-      description: '스포츠 심리적 기술을 종합적으로 평가합니다.',
-      category: SelfCheckCategory.performance,
-      questionCount: 12,
-      estimatedMinutes: 6,
-      questions: _generateGenericQuestions(),
-      isActive: true,
-      createdAt: DateTime.now(),
-      updatedAt: DateTime.now(),
-    );
-  }
-
-  /// 비상용 Mock 검사 데이터 (최소한의 데이터)
-  List<SelfCheckTest> _getEmergencyMockTests() {
-    return [
-      SelfCheckTest(
-        id: 'emergency_test_001',
-        type: SelfCheckTestType.tops2,
-        title: '기본 심리 검사',
-        description: '기본적인 스포츠 심리 상태를 평가합니다.',
-        category: SelfCheckCategory.performance,
-        questionCount: 5,
-        estimatedMinutes: 3,
-        questions: _generateBasicQuestions(),
-        isActive: true,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      ),
-    ];
-  }
-
-  /// Mock 검사 데이터 생성
-  List<SelfCheckTest> _getMockTests() {
-    return [
-      SelfCheckTest(
-        id: 'tops2_test_001',
-        type: SelfCheckTestType.tops2,
-        title: 'TOPS-2 수행전략 검사',
-        description:
-            '스포츠 수행 전략과 심리적 기술을 평가하는 검사입니다. 운동선수의 정신력과 수행 능력을 종합적으로 분석합니다.',
-        category: SelfCheckCategory.performance,
-        questionCount: 64,
-        estimatedMinutes: 15,
-        questions: _generateMockQuestions(64, 'TOPS2'),
-        isActive: true,
-        createdAt: DateTime.now().subtract(const Duration(days: 30)),
-        updatedAt: DateTime.now().subtract(const Duration(days: 1)),
-      ),
-      SelfCheckTest(
-        id: 'csai2_test_001',
-        type: SelfCheckTestType.csai2,
-        title: 'CSAI-2 경쟁불안 검사',
-        description: '경기 상황에서의 불안 수준을 측정하는 검사입니다. 인지불안, 신체불안, 자신감을 각각 평가합니다.',
-        category: SelfCheckCategory.anxiety,
-        questionCount: 27,
-        estimatedMinutes: 8,
-        questions: _generateMockQuestions(27, 'CSAI2'),
-        isActive: true,
-        createdAt: DateTime.now().subtract(const Duration(days: 25)),
-        updatedAt: DateTime.now().subtract(const Duration(days: 2)),
-      ),
-      SelfCheckTest(
-        id: 'psis_test_001',
-        type: SelfCheckTestType.psis,
-        title: 'PSIS 스포츠 심리기술 검사',
-        description: '스포츠에 필요한 다양한 심리적 기술들을 종합적으로 평가합니다.',
-        category: SelfCheckCategory.concentration,
-        questionCount: 45,
-        estimatedMinutes: 12,
-        questions: _generateMockQuestions(45, 'PSIS'),
-        isActive: true,
-        createdAt: DateTime.now().subtract(const Duration(days: 20)),
-        updatedAt: DateTime.now().subtract(const Duration(days: 1)),
-      ),
-    ];
-  }
-
-  /// Mock 질문 생성
-  List<SelfCheckQuestion> _generateMockQuestions(int count, String prefix) {
-    final questions = <SelfCheckQuestion>[];
-
-    for (int i = 1; i <= count; i++) {
-      questions.add(
-        SelfCheckQuestion(
-          id: '${prefix.toLowerCase()}_q$i',
-          order: i,
-          text: _getQuestionText(prefix, i),
-          answerType: AnswerType.likert5,
-          answers: _generateLikert5Answers(),
-          category: _getQuestionCategory(prefix, i),
-        ),
-      );
-    }
-
-    return questions;
-  }
-
-  /// 검사별 질문 텍스트 생성
-  String _getQuestionText(String prefix, int questionNumber) {
-    switch (prefix) {
-      case 'TOPS2':
-        return _getTOPS2QuestionText(questionNumber);
-      case 'CSAI2':
-        return _getCSAI2QuestionText(questionNumber);
-      case 'PSIS':
-        return _getPSISQuestionText(questionNumber);
-      default:
-        return '질문 $questionNumber: 이 항목에 대해 어떻게 생각하십니까?';
-    }
-  }
-
-  /// TOPS2 질문 텍스트
-  String _getTOPS2QuestionText(int num) {
-    final tops2Questions = [
-      '목표를 설정할 때 구체적이고 명확하게 설정한다',
-      '경기 중 실수를 했을 때 빠르게 집중력을 회복한다',
-      '어려운 상황에서도 자신감을 유지한다',
-      '경기 전 긴장을 적절히 조절할 수 있다',
-      '팀원들과 효과적으로 소통한다',
-    ];
-
-    if (num <= tops2Questions.length) {
-      return tops2Questions[num - 1];
-    }
-    return '목표 달성을 위해 꾸준히 노력한다 ($num)';
-  }
-
-  /// CSAI2 질문 텍스트
-  String _getCSAI2QuestionText(int num) {
-    final csai2Questions = [
-      '경기 전에 걱정이 많아진다',
-      '경기 전에 몸이 긴장된다',
-      '경기에서 좋은 성과를 낼 자신이 있다',
-      '경기 결과에 대해 불안하다',
-      '경기 전에 심장이 빨리 뛴다',
-    ];
-
-    if (num <= csai2Questions.length) {
-      return csai2Questions[num - 1];
-    }
-    return '경기 상황에서 평정심을 유지한다 ($num)';
-  }
-
-  /// PSIS 질문 텍스트
-  String _getPSISQuestionText(int num) {
-    final psisQuestions = [
-      '집중력을 오래 유지할 수 있다',
-      '부정적인 생각을 긍정적으로 바꿀 수 있다',
-      '동기를 스스로 높일 수 있다',
-      '스트레스를 잘 관리한다',
-      '자신의 감정을 잘 조절한다',
-    ];
-
-    if (num <= psisQuestions.length) {
-      return psisQuestions[num - 1];
-    }
-    return '심리적 압박감을 잘 견딘다 ($num)';
-  }
-
-  /// 질문 카테고리 설정
-  String? _getQuestionCategory(String prefix, int questionNumber) {
-    switch (prefix) {
-      case 'TOPS2':
-        if (questionNumber <= 16) return '기본 기술';
-        if (questionNumber <= 32) return '심리 기술';
-        if (questionNumber <= 48) return '인지 전략';
-        return '수행 전략';
-      case 'CSAI2':
-        if (questionNumber <= 9) return '인지불안';
-        if (questionNumber <= 18) return '신체불안';
-        return '자신감';
-      case 'PSIS':
-        if (questionNumber <= 15) return '집중력';
-        if (questionNumber <= 30) return '자신감';
-        return '동기';
-      default:
-        return null;
-    }
-  }
-
-  /// TOPS2 전용 질문 생성
-  List<SelfCheckQuestion> _generateTOPS2Questions() {
-    return _generateMockQuestions(20, 'TOPS2');
-  }
-
-  /// CSAI2 전용 질문 생성
-  List<SelfCheckQuestion> _generateCSAI2Questions() {
-    return _generateMockQuestions(15, 'CSAI2');
-  }
-
-  /// 범용 질문 생성
-  List<SelfCheckQuestion> _generateGenericQuestions() {
-    return _generateMockQuestions(12, 'GENERIC');
-  }
-
-  /// Mock 결과 데이터 생성
-  List<SelfCheckResult> _getMockResults() {
-    final now = DateTime.now();
-    return [
-      SelfCheckResult(
-        id: 'result_001',
-        userId: 'user_123',
-        test: _getMockTests()[0],
-        answers: [],
-        totalScore: 240,
-        maxScore: 320,
-        percentage: 75.0,
-        riskLevel: RiskLevel.moderate,
-        categoryScores: {'기본 기술': 60, '심리 기술': 65, '인지 전략': 55, '수행 전략': 60},
-        interpretation: '전반적으로 양호한 수준입니다.',
-        recommendations: ['인지 전략 향상이 필요합니다', '정기적인 심리 훈련을 권장합니다'],
-        completedAt: now.subtract(const Duration(days: 3)),
-      ),
-    ];
   }
 
   /// 검사 결과 계산
@@ -600,5 +436,214 @@ class SelfCheckService {
     }
 
     return recommendations;
+  }
+
+  /// 기본 검사 데이터 초기화
+  Future<void> initializeDefaultTests() async {
+    try {
+      // 컬렉션이 비어있는지 확인
+      final snapshot =
+          await _firestore.collection('self_check_tests').limit(1).get();
+      if (snapshot.docs.isNotEmpty) {
+        debugPrint('기본 검사 데이터가 이미 존재합니다.');
+        return;
+      }
+
+      // 기본 검사 데이터 생성
+      final defaultTests = [
+        {
+          'type': SelfCheckTestType.tops2.code,
+          'title': 'TOPS-2 수행전략 검사',
+          'description':
+              '스포츠 수행 전략과 심리적 기술을 평가하는 검사입니다. 운동선수의 정신력과 수행 능력을 종합적으로 분석합니다.',
+          'category': SelfCheckCategory.performance.id,
+          'questionCount': 64,
+          'estimatedMinutes': 15,
+          'questions': _generateTOPS2Questions(),
+          'isActive': true,
+          'createdAt': Timestamp.now(),
+          'updatedAt': Timestamp.now(),
+        },
+        {
+          'type': SelfCheckTestType.csai2.code,
+          'title': 'CSAI-2 경쟁불안 검사',
+          'description':
+              '경기 상황에서의 불안 수준을 측정하는 검사입니다. 인지불안, 신체불안, 자신감을 각각 평가합니다.',
+          'category': SelfCheckCategory.anxiety.id,
+          'questionCount': 27,
+          'estimatedMinutes': 8,
+          'questions': _generateCSAI2Questions(),
+          'isActive': true,
+          'createdAt': Timestamp.now(),
+          'updatedAt': Timestamp.now(),
+        },
+        {
+          'type': SelfCheckTestType.psis.code,
+          'title': 'PSIS 스포츠 심리기술 검사',
+          'description': '스포츠에 필요한 다양한 심리적 기술들을 종합적으로 평가합니다.',
+          'category': SelfCheckCategory.concentration.id,
+          'questionCount': 45,
+          'estimatedMinutes': 12,
+          'questions': _generatePSISQuestions(),
+          'isActive': true,
+          'createdAt': Timestamp.now(),
+          'updatedAt': Timestamp.now(),
+        },
+      ];
+
+      // Firestore에 데이터 추가
+      final batch = _firestore.batch();
+      for (final test in defaultTests) {
+        final docRef = _firestore.collection('self_check_tests').doc();
+        batch.set(docRef, test);
+      }
+      await batch.commit();
+
+      debugPrint('기본 검사 데이터 초기화 완료');
+    } catch (e) {
+      debugPrint('기본 검사 데이터 초기화 오류: $e');
+      rethrow;
+    }
+  }
+
+  /// TOPS-2 질문 생성
+  List<Map<String, dynamic>> _generateTOPS2Questions() {
+    final questions = <Map<String, dynamic>>[];
+    final categories = ['기본 기술', '심리 기술', '인지 전략', '수행 전략'];
+
+    for (int i = 1; i <= 64; i++) {
+      final categoryIndex = ((i - 1) ~/ 16) % categories.length;
+      questions.add({
+        'id': 'tops2_q$i',
+        'order': i,
+        'text': _getTOPS2QuestionText(i),
+        'answerType': AnswerType.likert5.id,
+        'answers': _generateLikert5Answers(),
+        'category': categories[categoryIndex],
+      });
+    }
+    return questions;
+  }
+
+  /// CSAI-2 질문 생성
+  List<Map<String, dynamic>> _generateCSAI2Questions() {
+    final questions = <Map<String, dynamic>>[];
+    final categories = ['인지불안', '신체불안', '자신감'];
+
+    for (int i = 1; i <= 27; i++) {
+      final categoryIndex = ((i - 1) ~/ 9) % categories.length;
+      questions.add({
+        'id': 'csai2_q$i',
+        'order': i,
+        'text': _getCSAI2QuestionText(i),
+        'answerType': AnswerType.likert5.id,
+        'answers': _generateLikert5Answers(),
+        'category': categories[categoryIndex],
+      });
+    }
+    return questions;
+  }
+
+  /// PSIS 질문 생성
+  List<Map<String, dynamic>> _generatePSISQuestions() {
+    final questions = <Map<String, dynamic>>[];
+    final categories = ['집중력', '자신감', '동기'];
+
+    for (int i = 1; i <= 45; i++) {
+      final categoryIndex = ((i - 1) ~/ 15) % categories.length;
+      questions.add({
+        'id': 'psis_q$i',
+        'order': i,
+        'text': _getPSISQuestionText(i),
+        'answerType': AnswerType.likert5.id,
+        'answers': _generateLikert5Answers(),
+        'category': categories[categoryIndex],
+      });
+    }
+    return questions;
+  }
+
+  /// 5점 척도 답변 생성
+  List<Map<String, dynamic>> _generateLikert5Answers() {
+    return [
+      {'id': 'ans1', 'text': '전혀 그렇지 않다', 'score': 1, 'order': 1},
+      {'id': 'ans2', 'text': '그렇지 않다', 'score': 2, 'order': 2},
+      {'id': 'ans3', 'text': '보통이다', 'score': 3, 'order': 3},
+      {'id': 'ans4', 'text': '그렇다', 'score': 4, 'order': 4},
+      {'id': 'ans5', 'text': '매우 그렇다', 'score': 5, 'order': 5},
+    ];
+  }
+
+  /// TOPS-2 질문 텍스트
+  String _getTOPS2QuestionText(int num) {
+    final tops2Questions = [
+      '목표를 설정할 때 구체적이고 명확하게 설정한다',
+      '경기 중 실수를 했을 때 빠르게 집중력을 회복한다',
+      '어려운 상황에서도 자신감을 유지한다',
+      '경기 전 긴장을 적절히 조절할 수 있다',
+      '팀원들과 효과적으로 소통한다',
+      '부정적인 생각을 긍정적으로 바꿀 수 있다',
+      '스트레스 상황에서도 침착함을 유지한다',
+      '자신의 감정을 잘 조절할 수 있다',
+      '동기를 스스로 높일 수 있다',
+      '집중력을 오래 유지할 수 있다',
+      '심리적 압박감을 잘 견딘다',
+      '실패를 성공의 밑거름으로 삼는다',
+      '자신의 강점을 잘 활용한다',
+      '약점을 보완하기 위해 노력한다',
+      '팀원들과의 관계를 잘 유지한다',
+      '경기 전 준비를 철저히 한다',
+    ];
+
+    if (num <= tops2Questions.length) {
+      return tops2Questions[num - 1];
+    }
+    return '목표 달성을 위해 꾸준히 노력한다 ($num)';
+  }
+
+  /// CSAI-2 질문 텍스트
+  String _getCSAI2QuestionText(int num) {
+    final csai2Questions = [
+      '경기 전에 걱정이 많아진다',
+      '경기 전에 몸이 긴장된다',
+      '경기에서 좋은 성과를 낼 자신이 있다',
+      '경기 결과에 대해 불안하다',
+      '경기 전에 심장이 빨리 뛴다',
+      '경기 중에 집중력을 유지할 수 있다',
+      '경기 전에 자신의 실력을 의심한다',
+      '경기 중에 자신감을 유지할 수 있다',
+      '경기 전에 긴장을 조절할 수 있다',
+    ];
+
+    if (num <= csai2Questions.length) {
+      return csai2Questions[num - 1];
+    }
+    return '경기 상황에서 평정심을 유지한다 ($num)';
+  }
+
+  /// PSIS 질문 텍스트
+  String _getPSISQuestionText(int num) {
+    final psisQuestions = [
+      '집중력을 오래 유지할 수 있다',
+      '부정적인 생각을 긍정적으로 바꿀 수 있다',
+      '동기를 스스로 높일 수 있다',
+      '스트레스를 잘 관리한다',
+      '자신의 감정을 잘 조절한다',
+      '목표를 향해 꾸준히 노력한다',
+      '실패를 성공의 밑거름으로 삼는다',
+      '자신의 강점을 잘 활용한다',
+      '약점을 보완하기 위해 노력한다',
+      '팀원들과의 관계를 잘 유지한다',
+      '경기 전 준비를 철저히 한다',
+      '경기 중에 침착함을 유지한다',
+      '자신의 실력을 믿는다',
+      '어려운 상황에서도 포기하지 않는다',
+      '성공적인 결과를 기대한다',
+    ];
+
+    if (num <= psisQuestions.length) {
+      return psisQuestions[num - 1];
+    }
+    return '심리적 압박감을 잘 견딘다 ($num)';
   }
 }

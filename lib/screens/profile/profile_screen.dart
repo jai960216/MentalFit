@@ -183,6 +183,31 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                 child: _buildLogoutButton(),
               ),
 
+              SizedBox(height: 20.h),
+
+              // === 회원탈퇴 버튼 ===
+              FadeTransition(
+                opacity: _cardAnimation,
+                child: CustomButton(
+                  text: '회원탈퇴',
+                  icon: Icons.delete_outline,
+                  type: ButtonType.outline,
+                  onPressed:
+                      () => context.push(AppRoutes.settings), // 설정화면으로 이동
+                ),
+              ),
+
+              // === 관리자 전용: 상담사 등록 버튼 ===
+              if (user.userType == UserType.master) ...[
+                SizedBox(height: 16.h),
+                CustomButton(
+                  text: '상담사 등록',
+                  icon: Icons.person_add,
+                  type: ButtonType.outline,
+                  onPressed: () => context.push(AppRoutes.counselorRegister),
+                ),
+              ],
+
               SizedBox(height: 40.h),
             ],
           ),
@@ -352,7 +377,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
           icon: Icons.psychology_outlined,
           title: '자가진단',
           subtitle: '심리 상태 자가진단',
-          onTap: () => context.push(AppRoutes.selfCheckList),
+          onTap: () => context.push(AppRoutes.selfCheckHistory),
         ),
       ],
     );

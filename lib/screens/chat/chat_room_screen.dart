@@ -81,6 +81,28 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen>
 
   @override
   Widget build(BuildContext context) {
+    if (widget.chatRoomId.isEmpty) {
+      return Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: AppBar(
+          title: const Text('채팅'),
+          backgroundColor: AppColors.white,
+        ),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Text('채팅방 정보가 올바르지 않습니다.'),
+              ElevatedButton(
+                onPressed: () => context.pop(),
+                child: const Text('돌아가기'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     if (_isLoading) {
       return Scaffold(
         backgroundColor: AppColors.background,
@@ -231,6 +253,7 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen>
   }
 
   Widget _buildEmptyMessagesState() {
+    final isAI = _chatRoom?.isAIChat ?? false;
     return Center(
       child: Padding(
         padding: EdgeInsets.all(24.w),
@@ -238,13 +261,13 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen>
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              _chatRoom!.isAIChat ? Icons.smart_toy : Icons.person,
+              isAI ? Icons.smart_toy : Icons.person,
               size: 64.sp,
               color: AppColors.grey400,
             ),
             SizedBox(height: 16.h),
             Text(
-              _chatRoom!.isAIChat ? 'AI 상담사와 대화를 시작해보세요' : '상담사와 대화를 시작해보세요',
+              isAI ? 'AI 상담사와 대화를 시작해보세요' : '상담사와 대화를 시작해보세요',
               style: TextStyle(
                 fontSize: 16.sp,
                 fontWeight: FontWeight.w600,

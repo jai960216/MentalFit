@@ -1,26 +1,3 @@
-// === 사용자 유형 ===
-enum UserType {
-  athlete('athlete', '운동선수'),
-  coach('coach', '코치'),
-  parent('parent', '학부모'),
-  general('general', '일반인');
-
-  const UserType(this.value, this.displayName);
-
-  final String value;
-  final String displayName;
-
-  static UserType fromString(String value) {
-    return UserType.values.firstWhere(
-      (type) => type.value == value,
-      orElse: () => UserType.general,
-    );
-  }
-
-  @override
-  String toString() => displayName;
-}
-
 // === 소셜 로그인 유형 ===
 enum SocialLoginType {
   google('google', 'Google'),

@@ -155,10 +155,11 @@ class SelfCheckNotifier extends StateNotifier<SelfCheckState> {
 
     try {
       final service = await _getService();
-      final test = await service.getTestById(testId);
-
+      final test = await service.getAvailableTests().firstWhere(
+        (t) => t.id == testId,
+        orElse: () => throw Exception('검사를 찾을 수 없습니다: $testId'),
+      );
       debugPrint('SelfCheckNotifier: 검사 로드 성공 - ${test.title}');
-
       state = state.copyWith(
         currentTest: test,
         currentAnswers: [],
@@ -451,5 +452,23 @@ class SelfCheckNotifier extends StateNotifier<SelfCheckState> {
     }
 
     return true;
+  }
+
+  Future<void> loadRecentResults() async {
+    state = state.copyWith(isLoading: true, error: null);
+    try {
+      final service = await _getService();
+      final results = await service.getRecentResults(limit: 20);
+      state = state.copyWith(
+        recentResults: results,
+        isLoading: false,
+        error: null,
+      );
+    } catch (e) {
+      state = state.copyWith(
+        isLoading: false,
+        error: '결과를 불러오는 중 오류가 발생했습니다: $e',
+      );
+    }
   }
 }

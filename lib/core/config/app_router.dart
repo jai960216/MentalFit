@@ -36,6 +36,7 @@ import '../../screens/chat/chat_room_screen.dart';
 // Counselor
 import '../../screens/counselor/counselor_list_screen.dart';
 import '../../screens/counselor/counselor_detail_screen.dart';
+import '../../screens/counselor/counselor_register_screen.dart';
 
 // Booking
 import '../../screens/booking/booking_calendar_screen.dart';
@@ -46,6 +47,7 @@ import '../../screens/booking/booking_list_screen.dart';
 import '../../screens/self_check/self_check_list_screen.dart';
 import '../../screens/self_check/self_check_test_screen.dart';
 import '../../screens/self_check/self_check_result_screen.dart';
+import '../../screens/self_check/self_check_history_screen.dart';
 
 // === 에러 및 플레이스홀더 화면 ===
 import '../../shared/widgets/error_screen.dart';
@@ -53,6 +55,7 @@ import '../../shared/widgets/placeholder_screen.dart';
 
 // === 모델 임포트 ===
 import '../../shared/models/self_check_models.dart';
+import '../../shared/models/counselor_model.dart';
 
 class AppRouter {
   static final GoRouter router = GoRouter(
@@ -170,6 +173,11 @@ class AppRouter {
           return CounselorDetailScreen(counselorId: counselorId);
         },
       ),
+      GoRoute(
+        path: AppRoutes.counselorRegister,
+        name: 'counselor-register',
+        builder: (context, state) => const CounselorRegisterScreen(),
+      ),
 
       // === Booking Routes ===
       GoRoute(
@@ -196,13 +204,17 @@ class AppRouter {
         name: 'booking-confirm',
         builder: (context, state) {
           final counselorId = state.pathParameters['counselorId'];
-          if (counselorId == null) {
+          final appointment = state.extra as Appointment?;
+          if (counselorId == null || appointment == null) {
             return ErrorScreen(
-              error: '상담사 ID가 필요합니다.',
+              error: '상담사 ID 또는 예약 정보가 필요합니다.',
               onRetry: () => context.go(AppRoutes.counselorList),
             );
           }
-          return BookingConfirmScreen(counselorId: counselorId);
+          return BookingConfirmScreen(
+            counselorId: counselorId,
+            appointment: appointment,
+          );
         },
       ),
 
@@ -272,7 +284,7 @@ class AppRouter {
       GoRoute(
         path: AppRoutes.selfCheckHistory,
         name: 'self-check-history',
-        builder: (context, state) => const PlaceholderScreen(title: '자가진단 기록'),
+        builder: (context, state) => const SelfCheckHistoryScreen(),
       ),
 
       // === Profile Routes ===
@@ -377,6 +389,7 @@ class AppRouter {
       AppRoutes.privacy,
       AppRoutes.terms,
       AppRoutes.help,
+      AppRoutes.counselorRegister,
       '/404',
     ];
 

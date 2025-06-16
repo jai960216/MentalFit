@@ -4,11 +4,10 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/config/app_colors.dart';
 import '../../core/config/app_routes.dart';
-import '../../core/network/error_handler.dart';
-import '../../shared/widgets/custom_app_bar.dart';
-import '../../shared/widgets/loading_widget.dart';
 import '../../shared/models/self_check_models.dart';
 import '../../providers/self_check_provider.dart';
+import '../../shared/widgets/custom_app_bar.dart';
+import '../../shared/widgets/loading_widget.dart';
 
 class SelfCheckListScreen extends ConsumerStatefulWidget {
   const SelfCheckListScreen({super.key});
@@ -22,6 +21,7 @@ class _SelfCheckListScreenState extends ConsumerState<SelfCheckListScreen>
     with TickerProviderStateMixin {
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
+  bool _isInitialized = false;
 
   @override
   void initState() {
@@ -56,22 +56,25 @@ class _SelfCheckListScreenState extends ConsumerState<SelfCheckListScreen>
   Future<void> _loadData() async {
     try {
       await ref.read(selfCheckProvider.notifier).loadAvailableTests();
+      setState(() {
+        _isInitialized = true;
+      });
     } catch (e) {
+      debugPrint('검사 초기화 오류: $e');
       if (mounted) {
-        GlobalErrorHandler.showErrorSnackBar(
-          context,
-          e,
-          onRetry: _loadData,
-          customMessage: '데이터를 불러오는 중 오류가 발생했습니다.',
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('데이터를 불러오는 중 오류가 발생했습니다: $e'),
+            action: SnackBarAction(label: '다시 시도', onPressed: _loadData),
+          ),
         );
       }
     }
   }
 
-  // 🔥 핵심 개선: 테스트 시작 로직 강화
   Future<void> _startTest(SelfCheckTest test) async {
     try {
-      // 1. 로딩 상태 표시 (선택사항)
+      // 1. 로딩 상태 표시
       _showLoadingDialog();
 
       // 2. 검사 시작 전 프로바이더에 현재 검사 설정
@@ -85,7 +88,7 @@ class _SelfCheckListScreenState extends ConsumerState<SelfCheckListScreen>
         Navigator.of(context).pop();
 
         // 5. 테스트 화면으로 이동
-        await context.push(
+        context.push(
           '${AppRoutes.selfCheckTest}/${test.id}',
           extra: {'test': test},
         );
@@ -95,11 +98,14 @@ class _SelfCheckListScreenState extends ConsumerState<SelfCheckListScreen>
         // 로딩 다이얼로그가 열려있다면 닫기
         Navigator.of(context).pop();
 
-        GlobalErrorHandler.showErrorSnackBar(
-          context,
-          e,
-          customMessage: '자가진단을 시작할 수 없습니다. 다시 시도해주세요.',
-          onRetry: () => _startTest(test),
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('자가진단을 시작할 수 없습니다: $e'),
+            action: SnackBarAction(
+              label: '다시 시도',
+              onPressed: () => _startTest(test),
+            ),
+          ),
         );
       }
     }
@@ -247,54 +253,24 @@ class _SelfCheckListScreenState extends ConsumerState<SelfCheckListScreen>
         children: [
           Row(
             children: [
-              Icon(Icons.psychology, color: AppColors.white, size: 32.sp),
-              SizedBox(width: 12.w),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '자가진단',
-                      style: TextStyle(
-                        fontSize: 20.sp,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.white,
-                      ),
-                    ),
-                    SizedBox(height: 4.h),
-                    Text(
-                      '당신의 마음 상태를 확인해보세요',
-                      style: TextStyle(
-                        fontSize: 14.sp,
-                        color: AppColors.white.withValues(alpha: 0.9),
-                      ),
-                    ),
-                  ],
+              Icon(Icons.psychology, size: 24.sp, color: AppColors.white),
+              SizedBox(width: 8.w),
+              Text(
+                '자가진단',
+                style: TextStyle(
+                  fontSize: 20.sp,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.white,
                 ),
               ),
             ],
           ),
-          SizedBox(height: 16.h),
-          Container(
-            padding: EdgeInsets.all(12.w),
-            decoration: BoxDecoration(
-              color: AppColors.white.withValues(alpha: 0.2),
-              borderRadius: BorderRadius.circular(8.r),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.info_outline, color: AppColors.white, size: 16.sp),
-                SizedBox(width: 8.w),
-                Expanded(
-                  child: Text(
-                    '검사 결과는 참고용이며, 전문적인 상담이 필요한 경우 전문가와 상담하세요.',
-                    style: TextStyle(
-                      fontSize: 12.sp,
-                      color: AppColors.white.withValues(alpha: 0.9),
-                    ),
-                  ),
-                ),
-              ],
+          SizedBox(height: 12.h),
+          Text(
+            '심리 상태를 자가진단하고 관리하세요',
+            style: TextStyle(
+              fontSize: 14.sp,
+              color: AppColors.white.withOpacity(0.9),
             ),
           ),
         ],
@@ -302,35 +278,28 @@ class _SelfCheckListScreenState extends ConsumerState<SelfCheckListScreen>
     );
   }
 
-  Widget _buildRecommendedSection(List<SelfCheckTest> recommendedTests) {
+  Widget _buildRecommendedSection(List<SelfCheckTest> tests) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Icon(Icons.star, color: AppColors.warning, size: 20.sp),
-            SizedBox(width: 8.w),
-            Text(
-              '추천 검사',
-              style: TextStyle(
-                fontSize: 18.sp,
-                fontWeight: FontWeight.w600,
-                color: AppColors.textPrimary,
-              ),
-            ),
-          ],
+        Text(
+          '추천 검사',
+          style: TextStyle(
+            fontSize: 18.sp,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textPrimary,
+          ),
         ),
         SizedBox(height: 16.h),
         SizedBox(
           height: 200.h,
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
-            itemCount: recommendedTests.length,
+            itemCount: tests.length,
             itemBuilder: (context, index) {
-              final test = recommendedTests[index];
-              return Container(
-                width: 160.w,
-                margin: EdgeInsets.only(right: 16.w),
+              final test = tests[index];
+              return Padding(
+                padding: EdgeInsets.only(right: 16.w),
                 child: _buildRecommendedTestCard(test),
               );
             },
@@ -344,15 +313,15 @@ class _SelfCheckListScreenState extends ConsumerState<SelfCheckListScreen>
     return GestureDetector(
       onTap: () => _startTest(test),
       child: Container(
-        padding: EdgeInsets.all(16.w),
+        width: 280.w,
         decoration: BoxDecoration(
           color: AppColors.white,
-          borderRadius: BorderRadius.circular(12.r),
+          borderRadius: BorderRadius.circular(16.r),
           boxShadow: [
             BoxShadow(
               color: AppColors.black.withOpacity(0.05),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
             ),
           ],
         ),
@@ -360,72 +329,58 @@ class _SelfCheckListScreenState extends ConsumerState<SelfCheckListScreen>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
-              padding: EdgeInsets.all(8.w),
+              height: 100.h,
               decoration: BoxDecoration(
                 color: test.category.color.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8.r),
-              ),
-              child: Icon(
-                test.category.icon,
-                color: test.category.color,
-                size: 20.sp,
-              ),
-            ),
-            SizedBox(height: 12.h),
-            Text(
-              test.title,
-              style: TextStyle(
-                fontSize: 14.sp,
-                fontWeight: FontWeight.w600,
-                color: AppColors.textPrimary,
-              ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-            SizedBox(height: 8.h),
-            Text(
-              test.description,
-              style: TextStyle(
-                fontSize: 12.sp,
-                color: AppColors.textSecondary,
-                height: 1.3,
-              ),
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
-            ),
-            const Spacer(),
-            Row(
-              children: [
-                Icon(
-                  Icons.schedule,
-                  size: 12.sp,
-                  color: AppColors.textSecondary,
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(16.r),
+                  topRight: Radius.circular(16.r),
                 ),
-                SizedBox(width: 4.w),
-                Text(
-                  '${test.estimatedMinutes}분',
-                  style: TextStyle(
-                    fontSize: 10.sp,
-                    color: AppColors.textSecondary,
-                  ),
+              ),
+              child: Center(
+                child: Icon(
+                  test.category.icon,
+                  size: 40.sp,
+                  color: test.category.color,
                 ),
-                const Spacer(),
-                Container(
-                  padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
-                  decoration: BoxDecoration(
-                    color: test.category.color,
-                    borderRadius: BorderRadius.circular(12.r),
-                  ),
-                  child: Text(
-                    '추천',
+              ),
+            ),
+            Padding(
+              padding: EdgeInsets.all(16.w),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    test.title,
                     style: TextStyle(
-                      fontSize: 10.sp,
+                      fontSize: 16.sp,
                       fontWeight: FontWeight.w600,
-                      color: AppColors.white,
+                      color: AppColors.textPrimary,
                     ),
                   ),
-                ),
-              ],
+                  SizedBox(height: 8.h),
+                  Text(
+                    test.description,
+                    style: TextStyle(
+                      fontSize: 12.sp,
+                      color: AppColors.textSecondary,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  SizedBox(height: 16.h),
+                  Row(
+                    children: [
+                      _buildTestInfo(
+                        Icons.schedule,
+                        '약 ${test.estimatedMinutes}분',
+                      ),
+                      SizedBox(width: 16.w),
+                      _buildTestInfo(Icons.quiz, '${test.questions.length}문항'),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -433,16 +388,12 @@ class _SelfCheckListScreenState extends ConsumerState<SelfCheckListScreen>
     );
   }
 
-  Widget _buildAllTestsSection(List<SelfCheckTest> availableTests) {
-    if (availableTests.isEmpty) {
-      return _buildEmptyTestsState();
-    }
-
+  Widget _buildAllTestsSection(List<SelfCheckTest> tests) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          '전체 검사 목록',
+          '전체 검사',
           style: TextStyle(
             fontSize: 18.sp,
             fontWeight: FontWeight.w600,
@@ -450,65 +401,19 @@ class _SelfCheckListScreenState extends ConsumerState<SelfCheckListScreen>
           ),
         ),
         SizedBox(height: 16.h),
-        ...availableTests
-            .map(
-              (test) => Padding(
-                padding: EdgeInsets.only(bottom: 16.h),
-                child: _buildTestCard(test),
-              ),
-            )
-            .toList(),
+        ListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: tests.length,
+          itemBuilder: (context, index) {
+            final test = tests[index];
+            return Padding(
+              padding: EdgeInsets.only(bottom: 16.h),
+              child: _buildTestCard(test),
+            );
+          },
+        ),
       ],
-    );
-  }
-
-  Widget _buildEmptyTestsState() {
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.all(40.w),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(16.r),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.black.withOpacity(0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Icon(
-            Icons.psychology_outlined,
-            size: 48.sp,
-            color: AppColors.grey400,
-          ),
-          SizedBox(height: 16.h),
-          Text(
-            '사용 가능한 검사가 없습니다',
-            style: TextStyle(
-              fontSize: 16.sp,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textPrimary,
-            ),
-          ),
-          SizedBox(height: 8.h),
-          Text(
-            '곧 새로운 검사가 추가될 예정입니다',
-            style: TextStyle(fontSize: 14.sp, color: AppColors.textSecondary),
-          ),
-          SizedBox(height: 24.h),
-          ElevatedButton(
-            onPressed: _loadData,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: AppColors.white,
-            ),
-            child: const Text('새로고침'),
-          ),
-        ],
-      ),
     );
   }
 
@@ -516,15 +421,15 @@ class _SelfCheckListScreenState extends ConsumerState<SelfCheckListScreen>
     return GestureDetector(
       onTap: () => _startTest(test),
       child: Container(
-        padding: EdgeInsets.all(20.w),
+        padding: EdgeInsets.all(16.w),
         decoration: BoxDecoration(
           color: AppColors.white,
           borderRadius: BorderRadius.circular(16.r),
           boxShadow: [
             BoxShadow(
               color: AppColors.black.withOpacity(0.05),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
             ),
           ],
         ),
@@ -534,18 +439,18 @@ class _SelfCheckListScreenState extends ConsumerState<SelfCheckListScreen>
             Row(
               children: [
                 Container(
-                  padding: EdgeInsets.all(12.w),
+                  padding: EdgeInsets.all(8.w),
                   decoration: BoxDecoration(
                     color: test.category.color.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12.r),
+                    borderRadius: BorderRadius.circular(8.r),
                   ),
                   child: Icon(
                     test.category.icon,
-                    color: test.category.color,
                     size: 24.sp,
+                    color: test.category.color,
                   ),
                 ),
-                SizedBox(width: 16.w),
+                SizedBox(width: 12.w),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -560,31 +465,18 @@ class _SelfCheckListScreenState extends ConsumerState<SelfCheckListScreen>
                       ),
                       SizedBox(height: 4.h),
                       Text(
-                        test.category.name,
+                        test.description,
                         style: TextStyle(
                           fontSize: 12.sp,
-                          color: test.category.color,
-                          fontWeight: FontWeight.w500,
+                          color: AppColors.textSecondary,
                         ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ],
                   ),
                 ),
-                Icon(
-                  Icons.arrow_forward_ios,
-                  size: 16.sp,
-                  color: AppColors.grey400,
-                ),
               ],
-            ),
-            SizedBox(height: 16.h),
-            Text(
-              test.description,
-              style: TextStyle(
-                fontSize: 14.sp,
-                color: AppColors.textSecondary,
-                height: 1.4,
-              ),
             ),
             SizedBox(height: 16.h),
             Row(
@@ -644,126 +536,145 @@ class _SelfCheckListScreenState extends ConsumerState<SelfCheckListScreen>
     );
   }
 
-  Widget _buildRecentHistorySection(List<SelfCheckResult> recentResults) {
+  Widget _buildRecentHistorySection(List<SelfCheckResult> results) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Text(
-              '최근 검사 기록',
-              style: TextStyle(
-                fontSize: 18.sp,
-                fontWeight: FontWeight.w600,
-                color: AppColors.textPrimary,
-              ),
-            ),
-            const Spacer(),
-            TextButton(
-              onPressed: () => context.push(AppRoutes.selfCheckHistory),
-              child: Text(
-                '전체보기',
-                style: TextStyle(fontSize: 14.sp, color: AppColors.primary),
-              ),
-            ),
-          ],
+        Text(
+          '최근 검사 기록',
+          style: TextStyle(
+            fontSize: 18.sp,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textPrimary,
+          ),
         ),
         SizedBox(height: 16.h),
-        ...recentResults
-            .take(3)
-            .map(
-              (result) => Padding(
-                padding: EdgeInsets.only(bottom: 12.h),
-                child: _buildHistoryCard(result),
-              ),
-            ),
+        ListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: results.length,
+          itemBuilder: (context, index) {
+            final result = results[index];
+            return Padding(
+              padding: EdgeInsets.only(bottom: 16.h),
+              child: _buildResultCard(result),
+            );
+          },
+        ),
       ],
     );
   }
 
-  Widget _buildHistoryCard(SelfCheckResult result) {
-    return GestureDetector(
-      onTap: () => context.push('${AppRoutes.selfCheckResult}/${result.id}'),
-      child: Container(
-        padding: EdgeInsets.all(16.w),
-        decoration: BoxDecoration(
-          color: AppColors.white,
-          borderRadius: BorderRadius.circular(12.r),
-          border: Border.all(color: AppColors.grey200),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 8.w,
-              height: 40.h,
-              decoration: BoxDecoration(
-                color: result.riskLevel.color,
-                borderRadius: BorderRadius.circular(4.r),
-              ),
-            ),
-            SizedBox(width: 12.w),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    result.test.title,
-                    style: TextStyle(
-                      fontSize: 14.sp,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                  SizedBox(height: 4.h),
-                  Text(
-                    _formatDate(result.completedAt),
-                    style: TextStyle(
-                      fontSize: 12.sp,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Container(
-              padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
-              decoration: BoxDecoration(
-                color: result.riskLevel.color.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12.r),
-              ),
-              child: Text(
-                result.riskLevel.name,
-                style: TextStyle(
-                  fontSize: 10.sp,
-                  fontWeight: FontWeight.w600,
+  Widget _buildResultCard(SelfCheckResult result) {
+    return Container(
+      padding: EdgeInsets.all(16.w),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(16.r),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: EdgeInsets.all(8.w),
+                decoration: BoxDecoration(
+                  color: result.riskLevel.color.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8.r),
+                ),
+                child: Icon(
+                  result.test.category.icon,
+                  size: 24.sp,
                   color: result.riskLevel.color,
                 ),
               ),
-            ),
-            SizedBox(width: 8.w),
-            Icon(
-              Icons.arrow_forward_ios,
-              size: 12.sp,
-              color: AppColors.grey400,
-            ),
-          ],
-        ),
+              SizedBox(width: 12.w),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      result.test.title,
+                      style: TextStyle(
+                        fontSize: 16.sp,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    SizedBox(height: 4.h),
+                    Text(
+                      '${result.completedAt.year}년 ${result.completedAt.month}월 ${result.completedAt.day}일',
+                      style: TextStyle(
+                        fontSize: 12.sp,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 16.h),
+          Row(
+            children: [
+              _buildResultInfo(
+                Icons.assessment,
+                '${result.percentage.toStringAsFixed(1)}%',
+                result.riskLevel.color,
+              ),
+              SizedBox(width: 16.w),
+              _buildResultInfo(
+                Icons.warning,
+                result.riskLevel.name,
+                result.riskLevel.color,
+              ),
+              const Spacer(),
+              TextButton(
+                onPressed: () {
+                  context.push(
+                    '${AppRoutes.selfCheckResult}/${result.id}',
+                    extra: {'result': result},
+                  );
+                },
+                child: Text(
+                  '상세보기',
+                  style: TextStyle(
+                    fontSize: 12.sp,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.primary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
 
-  String _formatDate(DateTime date) {
-    final now = DateTime.now();
-    final difference = now.difference(date);
-
-    if (difference.inDays == 0) {
-      return '오늘';
-    } else if (difference.inDays == 1) {
-      return '어제';
-    } else if (difference.inDays < 7) {
-      return '${difference.inDays}일 전';
-    } else {
-      return '${date.year}.${date.month.toString().padLeft(2, '0')}.${date.day.toString().padLeft(2, '0')}';
-    }
+  Widget _buildResultInfo(IconData icon, String text, Color color) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 14.sp, color: color),
+        SizedBox(width: 4.w),
+        Text(
+          text,
+          style: TextStyle(
+            fontSize: 12.sp,
+            fontWeight: FontWeight.w500,
+            color: color,
+          ),
+        ),
+      ],
+    );
   }
 }

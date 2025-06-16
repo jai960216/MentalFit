@@ -8,6 +8,8 @@ import '../../shared/widgets/custom_button.dart';
 import '../../shared/widgets/custom_text_field.dart';
 import 'signup_models.dart';
 import 'signup_widgets.dart';
+import '../../providers/auth_provider.dart';
+import 'package:flutter_mentalfit/shared/models/user_model.dart'; // UserType 사용
 
 class SignupScreen extends ConsumerStatefulWidget {
   const SignupScreen({super.key});
@@ -28,7 +30,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
   bool _obscurePasswordConfirm = true;
   bool _agreeToTerms = false;
   bool _agreeToPrivacy = false;
-  UserType _selectedUserType = UserType.athlete;
+  UserType? _selectedUserType = UserType.general;
 
   @override
   void dispose() {
@@ -78,10 +80,24 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
       return;
     }
 
+    if (_selectedUserType == null) {
+      _showSnackBar('유저 유형을 선택하세요');
+      return;
+    }
+
     setState(() => _isLoading = true);
 
     try {
       await Future.delayed(const Duration(seconds: 2)); // Mock
+
+      await ref
+          .read(authProvider.notifier)
+          .register(
+            email: _emailController.text.trim(),
+            password: _passwordController.text,
+            name: _nameController.text.trim(),
+            userType: _selectedUserType!,
+          );
 
       if (mounted) {
         _showSnackBar('회원가입이 완료되었습니다!');
@@ -98,11 +114,22 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
     setState(() => _isLoading = true);
 
     try {
-      await Future.delayed(const Duration(seconds: 1)); // Mock
+      final result =
+          type == SocialLoginType.google
+              ? await ref.read(authProvider.notifier).signInWithGoogle()
+              : await ref.read(authProvider.notifier).signInWithKakao();
 
       if (mounted) {
         _showSnackBar('${type.displayName} 회원가입이 완료되었습니다!');
-        context.go(AppRoutes.onboardingBasicInfo);
+        if (result.success && result.user != null) {
+          if (result.user!.userType == null) {
+            context.go(AppRoutes.userTypeSelection);
+          } else if (result.user!.isOnboardingCompleted) {
+            context.go(AppRoutes.home);
+          } else {
+            context.go(AppRoutes.onboardingBasicInfo);
+          }
+        }
       }
     } catch (e) {
       if (mounted) _showSnackBar('소셜 회원가입 실패: $e', isError: true);
@@ -130,7 +157,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: _isLoading ? null : () => context.pop(),
+          onPressed: () => context.pop(),
         ),
       ),
       body: SafeArea(
@@ -146,11 +173,97 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                 WelcomeSection(),
                 SizedBox(height: 32.h),
 
-                UserTypeSection(
-                  selectedType: _selectedUserType,
-                  onTypeChanged:
-                      (type) => setState(() => _selectedUserType = type),
-                  isLoading: _isLoading,
+                Text(
+                  '유저 유형을 선택하세요',
+                  style: TextStyle(
+                    fontSize: 16.sp,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                SizedBox(height: 16.h),
+                Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.grey100,
+                    borderRadius: BorderRadius.circular(12.r),
+                  ),
+                  child: Column(
+                    children:
+                        UserType.values.map((type) {
+                          final isSelected = _selectedUserType == type;
+                          return GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                _selectedUserType = type;
+                              });
+                            },
+                            child: Container(
+                              width: double.infinity,
+                              padding: EdgeInsets.symmetric(
+                                horizontal: 20.w,
+                                vertical: 16.h,
+                              ),
+                              decoration: BoxDecoration(
+                                color:
+                                    isSelected
+                                        ? AppColors.primary
+                                        : Colors.transparent,
+                                borderRadius: BorderRadius.circular(12.r),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    _getUserTypeIcon(type),
+                                    size: 24.sp,
+                                    color:
+                                        isSelected
+                                            ? AppColors.white
+                                            : AppColors.textSecondary,
+                                  ),
+                                  SizedBox(width: 12.w),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          type.displayName,
+                                          style: TextStyle(
+                                            fontSize: 16.sp,
+                                            fontWeight: FontWeight.w600,
+                                            color:
+                                                isSelected
+                                                    ? AppColors.white
+                                                    : AppColors.textPrimary,
+                                          ),
+                                        ),
+                                        SizedBox(height: 4.h),
+                                        Text(
+                                          _getUserTypeDescription(type),
+                                          style: TextStyle(
+                                            fontSize: 12.sp,
+                                            color:
+                                                isSelected
+                                                    ? AppColors.white
+                                                        .withOpacity(0.8)
+                                                    : AppColors.textSecondary,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  if (isSelected)
+                                    Icon(
+                                      Icons.check_circle,
+                                      size: 20.sp,
+                                      color: AppColors.white,
+                                    ),
+                                ],
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                  ),
                 ),
                 SizedBox(height: 24.h),
 
@@ -212,5 +325,40 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
         ),
       ),
     );
+  }
+
+  // === 유저 타입 관련 헬퍼 메서드 ===
+  IconData _getUserTypeIcon(UserType type) {
+    switch (type) {
+      case UserType.athlete:
+        return Icons.directions_run;
+      case UserType.general:
+        return Icons.person;
+      case UserType.guardian:
+        return Icons.family_restroom;
+      case UserType.coach:
+        return Icons.sports;
+      case UserType.master:
+        return Icons.admin_panel_settings;
+      default:
+        return Icons.person;
+    }
+  }
+
+  String _getUserTypeDescription(UserType type) {
+    switch (type) {
+      case UserType.athlete:
+        return '프로/아마추어 스포츠 선수';
+      case UserType.general:
+        return '운동을 즐기는 일반인';
+      case UserType.guardian:
+        return '선수 자녀를 둔 부모님';
+      case UserType.coach:
+        return '스포츠 지도자 및 트레이너';
+      case UserType.master:
+        return '관리자(마스터)는 회원가입 불가, 안내 메시지 등 처리';
+      default:
+        return '';
+    }
   }
 }

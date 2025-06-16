@@ -54,7 +54,7 @@ class DefaultFirebaseOptions {
     appId: '1:1063603907093:android:7af1d1e58593d90e6dfc1c',
     messagingSenderId: '1063603907093',
     projectId: 'mental-fit-78d5a',
-    storageBucket: 'mental-fit-78d5a.firebasestorage.app',
+    storageBucket: 'mental-fit-78d5a.appspot.com',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
@@ -62,7 +62,7 @@ class DefaultFirebaseOptions {
     appId: '1:1063603907093:ios:554dea720b9f60086dfc1c',
     messagingSenderId: '1063603907093',
     projectId: 'mental-fit-78d5a',
-    storageBucket: 'mental-fit-78d5a.firebasestorage.app',
+    storageBucket: 'mental-fit-78d5a.appspot.com',
     iosBundleId: 'com.example.flutterMentalfit',
   );
 }

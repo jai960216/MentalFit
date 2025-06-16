@@ -4,6 +4,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/config/app_colors.dart';
 import '../../core/config/app_routes.dart';
+import '../../core/utils/image_cache_manager.dart';
 import '../../shared/widgets/custom_app_bar.dart';
 import '../../shared/widgets/loading_widget.dart';
 import '../../shared/models/user_model.dart';
@@ -17,61 +18,19 @@ class HomeScreen extends ConsumerStatefulWidget {
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends ConsumerState<HomeScreen>
-    with TickerProviderStateMixin {
-  late AnimationController _greetingController;
-  late AnimationController _cardController;
-  late Animation<double> _greetingAnimation;
-  late Animation<double> _cardAnimation;
-
+class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    _initializeAnimations();
     _loadInitialData();
-  }
-
-  void _initializeAnimations() {
-    _greetingController = AnimationController(
-      duration: const Duration(milliseconds: 800),
-      vsync: this,
-    );
-    _cardController = AnimationController(
-      duration: const Duration(milliseconds: 1000),
-      vsync: this,
-    );
-
-    _greetingAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _greetingController, curve: Curves.easeOut),
-    );
-
-    _cardAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(parent: _cardController, curve: Curves.easeOut));
-
-    // 순차적 애니메이션 시작
-    _greetingController.forward();
-    Future.delayed(const Duration(milliseconds: 300), () {
-      if (mounted) _cardController.forward();
-    });
   }
 
   Future<void> _loadInitialData() async {
     try {
-      // 필요한 초기 데이터 로딩
       await ref.read(authProvider.notifier).refreshUser();
     } catch (e) {
-      // 에러가 발생해도 앱 사용에 지장이 없도록 처리
       debugPrint('초기 데이터 로딩 오류: $e');
     }
-  }
-
-  @override
-  void dispose() {
-    _greetingController.dispose();
-    _cardController.dispose();
-    super.dispose();
   }
 
   // === 액션 핸들러들 ===
@@ -142,26 +101,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // === 인사말 및 날씨 ===
-                    FadeTransition(
-                      opacity: _greetingAnimation,
-                      child: _buildGreetingSection(user),
-                    ),
+                    _buildGreetingSection(user),
 
                     SizedBox(height: 24.h),
 
                     // === 빠른 액션 버튼들 ===
-                    FadeTransition(
-                      opacity: _cardAnimation,
-                      child: _buildQuickActions(),
-                    ),
+                    _buildQuickActions(),
 
                     SizedBox(height: 24.h),
 
                     // === 오늘의 멘탈 체크 ===
-                    FadeTransition(
-                      opacity: _cardAnimation,
-                      child: _buildTodayMentalCheck(),
-                    ),
+                    _buildTodayMentalCheck(),
 
                     SizedBox(height: 32.h),
                   ],
@@ -196,18 +146,27 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                 child: CircleAvatar(
                   radius: 24.r,
                   backgroundColor: AppColors.white.withOpacity(0.2),
-                  backgroundImage:
-                      user?.profileImageUrl != null
-                          ? NetworkImage(user!.profileImageUrl!)
-                          : null,
                   child:
-                      user?.profileImageUrl == null
-                          ? Icon(
+                      user?.profileImageUrl != null
+                          ? ClipRRect(
+                            borderRadius: BorderRadius.circular(24.r),
+                            child: ImageCacheManager.getOptimizedImage(
+                              imageUrl: user!.profileImageUrl!,
+                              width: 48.w,
+                              height: 48.w,
+                              fit: BoxFit.cover,
+                              placeholder: Icon(
+                                Icons.person,
+                                color: AppColors.white,
+                                size: 24.sp,
+                              ),
+                            ),
+                          )
+                          : Icon(
                             Icons.person,
                             color: AppColors.white,
                             size: 24.sp,
-                          )
-                          : null,
+                          ),
                 ),
               ),
 
@@ -380,20 +339,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   }
 
   Widget _buildQuickActionCard(QuickAction action) {
-    // 아이콘별 크기 조정
-    double getIconSize(IconData icon) {
-      switch (icon) {
-        case Icons.psychology:
-          return 18.sp; // 기본 크기
-        case Icons.person_search:
-          return 18.sp; // 기본 크기
-        case Icons.chat_bubble:
-          return 16.sp; // 채팅 아이콘은 살짝 작게
-        default:
-          return 18.sp;
-      }
-    }
-
     return GestureDetector(
       onTap: action.onTap,
       child: Container(
@@ -407,7 +352,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // 아이콘
             Container(
               width: 36.w,
               height: 36.w,
@@ -415,16 +359,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                 color: action.color.withOpacity(0.2),
                 borderRadius: BorderRadius.circular(8.r),
               ),
-              child: Icon(
-                action.icon,
-                color: action.color,
-                size: getIconSize(action.icon), // 개별 크기 적용
-              ),
+              child: Icon(action.icon, color: action.color, size: 20.sp),
             ),
-
             SizedBox(height: 6.h),
-
-            // 제목만 표시
             Text(
               action.title,
               style: TextStyle(

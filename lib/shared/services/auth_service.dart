@@ -352,6 +352,21 @@ class AuthService {
         });
       }
 
+      // Firestore에 정보가 없으면 Firebase Auth의 currentUser 정보로 임시 User 객체 반환
+      final firebaseUser = _auth.currentUser;
+      if (firebaseUser != null && firebaseUser.uid == uid) {
+        return app_user.User(
+          id: firebaseUser.uid,
+          email: firebaseUser.email ?? '',
+          name: firebaseUser.displayName ?? '사용자',
+          userType: app_user.UserType.general,
+          isOnboardingCompleted: false,
+          createdAt: firebaseUser.metadata.creationTime ?? DateTime.now(),
+          updatedAt: firebaseUser.metadata.lastSignInTime ?? DateTime.now(),
+          profileImageUrl: firebaseUser.photoURL,
+        );
+      }
+
       return null;
     } catch (e) {
       debugPrint('Firestore 사용자 정보 가져오기 실패: $e');

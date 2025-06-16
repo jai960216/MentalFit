@@ -421,24 +421,34 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        // Google 로그인
-        _SocialLoginButton(
-          onPressed: _isLoading ? null : _handleGoogleLogin,
-          icon: Icons.g_mobiledata, // 실제로는 Google 아이콘 사용
-          backgroundColor: AppColors.white,
-          iconColor: AppColors.error,
-          label: 'Google',
+        Expanded(
+          child: _SocialLoginButton(
+            onPressed: _isLoading ? null : _handleGoogleLogin,
+            icon: Icons.g_mobiledata, // 실제로는 Google 아이콘 사용
+            backgroundColor: AppColors.white,
+            iconColor: AppColors.error,
+            label: 'Google',
+          ),
         ),
-
-        SizedBox(width: 16.w),
-
-        // 카카오 로그인
-        _SocialLoginButton(
-          onPressed: _isLoading ? null : _handleKakaoLogin,
-          icon: Icons.chat_bubble, // 실제로는 카카오 아이콘 사용
-          backgroundColor: const Color(0xFFFEE500),
-          iconColor: AppColors.black,
-          label: 'Kakao',
+        SizedBox(width: 12.w),
+        Expanded(
+          child: _SocialLoginButton(
+            onPressed: _isLoading ? null : _handleKakaoLogin,
+            icon: Icons.chat_bubble, // 실제로는 카카오 아이콘 사용
+            backgroundColor: const Color(0xFFFEE500),
+            iconColor: AppColors.black,
+            label: 'Kakao',
+          ),
+        ),
+        SizedBox(width: 12.w),
+        Expanded(
+          child: _SocialLoginButton(
+            onPressed: null, // 아직 미구현
+            icon: Icons.apple,
+            backgroundColor: Colors.black,
+            iconColor: Colors.white,
+            label: 'Apple',
+          ),
         ),
       ],
     );
