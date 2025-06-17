@@ -204,17 +204,31 @@ class AppRouter {
         name: 'booking-confirm',
         builder: (context, state) {
           final counselorId = state.pathParameters['counselorId'];
-          final appointment = state.extra as Appointment?;
-          if (counselorId == null || appointment == null) {
+          final extra = state.extra;
+          if (counselorId == null || extra == null) {
             return ErrorScreen(
               error: '상담사 ID 또는 예약 정보가 필요합니다.',
               onRetry: () => context.go(AppRoutes.counselorList),
             );
           }
-          return BookingConfirmScreen(
-            counselorId: counselorId,
-            appointment: appointment,
-          );
+          if (extra is Appointment) {
+            return BookingConfirmScreen(
+              counselorId: counselorId,
+              appointment: extra,
+              bookingInfo: null,
+            );
+          } else if (extra is Map<String, dynamic>) {
+            return BookingConfirmScreen(
+              counselorId: counselorId,
+              appointment: null,
+              bookingInfo: extra,
+            );
+          } else {
+            return ErrorScreen(
+              error: '예약 정보 타입 오류',
+              onRetry: () => context.go(AppRoutes.counselorList),
+            );
+          }
         },
       ),
 

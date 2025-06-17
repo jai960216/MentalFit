@@ -509,6 +509,7 @@ class CounselorReview {
   final String content;
   final List<String>? tags;
   final DateTime createdAt;
+  final String appointmentId;
 
   const CounselorReview({
     required this.id,
@@ -519,6 +520,7 @@ class CounselorReview {
     required this.content,
     this.tags,
     required this.createdAt,
+    required this.appointmentId,
   });
 
   factory CounselorReview.fromJson(Map<String, dynamic> json) {
@@ -532,6 +534,7 @@ class CounselorReview {
       tags:
           json['tags'] != null ? List<String>.from(json['tags'] as List) : null,
       createdAt: DateTime.parse(json['createdAt'] as String),
+      appointmentId: json['appointmentId'] as String? ?? '',
     );
   }
 
@@ -545,6 +548,7 @@ class CounselorReview {
       'content': content,
       'tags': tags,
       'createdAt': createdAt.toIso8601String(),
+      'appointmentId': appointmentId,
     };
   }
 
@@ -572,6 +576,7 @@ class CounselorReview {
       tags:
           data['tags'] != null ? List<String>.from(data['tags'] as List) : null,
       createdAt: Counselor._parseFirestoreTimestamp(data['createdAt']),
+      appointmentId: data['appointmentId'] as String? ?? '',
     );
   }
 
@@ -584,6 +589,7 @@ class CounselorReview {
       'content': content,
       'tags': tags,
       'createdAt': Timestamp.fromDate(createdAt),
+      'appointmentId': appointmentId,
     };
   }
 

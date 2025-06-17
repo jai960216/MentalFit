@@ -189,80 +189,86 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                   ),
                   child: Column(
                     children:
-                        UserType.values.map((type) {
-                          final isSelected = _selectedUserType == type;
-                          return GestureDetector(
-                            onTap: () {
-                              setState(() {
-                                _selectedUserType = type;
-                              });
-                            },
-                            child: Container(
-                              width: double.infinity,
-                              padding: EdgeInsets.symmetric(
-                                horizontal: 20.w,
-                                vertical: 16.h,
-                              ),
-                              decoration: BoxDecoration(
-                                color:
-                                    isSelected
-                                        ? AppColors.primary
-                                        : Colors.transparent,
-                                borderRadius: BorderRadius.circular(12.r),
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    _getUserTypeIcon(type),
-                                    size: 24.sp,
+                        UserType.values
+                            .where((type) => type != UserType.master)
+                            .map((type) {
+                              final isSelected = _selectedUserType == type;
+                              return GestureDetector(
+                                onTap: () => _handleUserTypeSelection(type),
+                                child: Container(
+                                  padding: EdgeInsets.symmetric(
+                                    vertical: 12.h,
+                                    horizontal: 16.w,
+                                  ),
+                                  decoration: BoxDecoration(
                                     color:
                                         isSelected
-                                            ? AppColors.white
-                                            : AppColors.textSecondary,
-                                  ),
-                                  SizedBox(width: 12.w),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          type.displayName,
-                                          style: TextStyle(
-                                            fontSize: 16.sp,
-                                            fontWeight: FontWeight.w600,
-                                            color:
-                                                isSelected
-                                                    ? AppColors.white
-                                                    : AppColors.textPrimary,
-                                          ),
-                                        ),
-                                        SizedBox(height: 4.h),
-                                        Text(
-                                          _getUserTypeDescription(type),
-                                          style: TextStyle(
-                                            fontSize: 12.sp,
-                                            color:
-                                                isSelected
-                                                    ? AppColors.white
-                                                        .withOpacity(0.8)
-                                                    : AppColors.textSecondary,
-                                          ),
-                                        ),
-                                      ],
+                                            ? AppColors.primary.withOpacity(
+                                              0.08,
+                                            )
+                                            : Colors.transparent,
+                                    borderRadius: BorderRadius.circular(12.r),
+                                    border: Border.all(
+                                      color:
+                                          isSelected
+                                              ? AppColors.primary
+                                              : AppColors.grey200,
                                     ),
                                   ),
-                                  if (isSelected)
-                                    Icon(
-                                      Icons.check_circle,
-                                      size: 20.sp,
-                                      color: AppColors.white,
-                                    ),
-                                ],
-                              ),
-                            ),
-                          );
-                        }).toList(),
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        _getUserTypeIcon(type),
+                                        color:
+                                            isSelected
+                                                ? AppColors.primary
+                                                : AppColors.grey600,
+                                        size: 24.sp,
+                                      ),
+                                      SizedBox(width: 12.w),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              type.displayName,
+                                              style: TextStyle(
+                                                fontSize: 16.sp,
+                                                fontWeight: FontWeight.w600,
+                                                color:
+                                                    isSelected
+                                                        ? AppColors.primary
+                                                        : AppColors.textPrimary,
+                                              ),
+                                            ),
+                                            SizedBox(height: 4.h),
+                                            Text(
+                                              _getUserTypeDescription(type),
+                                              style: TextStyle(
+                                                fontSize: 14.sp,
+                                                color:
+                                                    isSelected
+                                                        ? AppColors.primary
+                                                        : AppColors
+                                                            .textSecondary,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      if (isSelected)
+                                        Icon(
+                                          Icons.check_circle,
+                                          color: AppColors.primary,
+                                          size: 24.sp,
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            })
+                            .toList(),
                   ),
                 ),
                 SizedBox(height: 24.h),
@@ -356,9 +362,20 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
       case UserType.coach:
         return '스포츠 지도자 및 트레이너';
       case UserType.master:
-        return '관리자(마스터)는 회원가입 불가, 안내 메시지 등 처리';
+        return '관리자 계정은 별도 승인 절차가 필요합니다';
       default:
         return '';
     }
+  }
+
+  // === 유저 타입 선택 처리 ===
+  void _handleUserTypeSelection(UserType type) {
+    if (type == UserType.master) {
+      _showSnackBar('관리자 계정은 별도 승인 절차가 필요합니다.', isError: true);
+      return;
+    }
+    setState(() {
+      _selectedUserType = type;
+    });
   }
 }

@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
-import 'package:sign_in_with_apple/sign_in_with_apple.dart';
+// import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'auth_service.dart';
 import '../models/user_model.dart';
 import 'firestore_service.dart';
@@ -155,67 +155,52 @@ class SocialAuthService {
   }
 
   // === Apple 로그인 ===
-  Future<AuthResult> signInWithApple() async {
-    try {
-      debugPrint('🔥 Apple 로그인 시작...');
-
-      // Apple 로그인 요청
-      final appleCredential = await SignInWithApple.getAppleIDCredential(
-        scopes: [
-          AppleIDAuthorizationScopes.email,
-          AppleIDAuthorizationScopes.fullName,
-        ],
-      );
-
-      debugPrint('✅ Apple 인증 완료');
-
-      // Firebase 인증 자격증명 생성
-      final oauthCredential = firebase_auth.OAuthProvider(
-        'apple.com',
-      ).credential(
-        idToken: appleCredential.identityToken,
-        accessToken: appleCredential.authorizationCode,
-      );
-
-      debugPrint('✅ Firebase 인증 자격증명 생성 완료');
-
-      // Firebase Auth로 로그인
-      final userCredential = await _firebaseAuth.signInWithCredential(
-        oauthCredential,
-      );
-
-      if (userCredential.user != null) {
-        debugPrint('✅ Firebase Auth 로그인 완료: ${userCredential.user!.uid}');
-
-        // AuthService를 통해 사용자 정보 처리
-        final appUser = await _authService.getCurrentUser();
-
-        if (appUser != null) {
-          debugPrint('✅ 기존 사용자 로그인 성공: ${appUser.email}');
-          return AuthResult.success(appUser);
-        } else {
-          debugPrint('🔧 새 사용자 - Firestore에 정보 생성 중...');
-
-          // 새 사용자인 경우 Firestore에 정보 생성
-          final newUser = await _createFirestoreUser(userCredential.user!);
-          debugPrint('✅ 새 사용자 생성 완료: ${newUser.email}');
-          return AuthResult.success(newUser);
-        }
-      }
-
-      debugPrint('❌ Firebase Auth 로그인 실패');
-      return AuthResult.failure('Apple 로그인에 실패했습니다.');
-    } on SignInWithAppleAuthorizationException catch (e) {
-      debugPrint('❌ Apple 로그인 오류: ${e.code} - ${e.message}');
-      return AuthResult.failure(_getAppleAuthErrorMessage(e));
-    } on firebase_auth.FirebaseAuthException catch (e) {
-      debugPrint('❌ Firebase Auth 오류: ${e.code} - ${e.message}');
-      return AuthResult.failure(_getFirebaseAuthErrorMessage(e));
-    } catch (e) {
-      debugPrint('❌ Apple 로그인 오류: $e');
-      return AuthResult.failure('Apple 로그인 중 오류가 발생했습니다: $e');
-    }
-  }
+  // Future<AuthResult> signInWithApple() async {
+  //   try {
+  //     debugPrint('🔥 Apple 로그인 시작...');
+  //     final appleCredential = await SignInWithApple.getAppleIDCredential(
+  //       scopes: [
+  //         AppleIDAuthorizationScopes.email,
+  //         AppleIDAuthorizationScopes.fullName,
+  //       ],
+  //     );
+  //     debugPrint('✅ Apple 인증 완료');
+  //     final oauthCredential = firebase_auth.OAuthProvider(
+  //       'apple.com',
+  //     ).credential(
+  //       idToken: appleCredential.identityToken,
+  //       accessToken: appleCredential.authorizationCode,
+  //     );
+  //     debugPrint('✅ Firebase 인증 자격증명 생성 완료');
+  //     final userCredential = await _firebaseAuth.signInWithCredential(
+  //       oauthCredential,
+  //     );
+  //     if (userCredential.user != null) {
+  //       debugPrint('✅ Firebase Auth 로그인 완료: ${userCredential.user!.uid}');
+  //       final appUser = await _authService.getCurrentUser();
+  //       if (appUser != null) {
+  //         debugPrint('✅ 기존 사용자 로그인 성공: ${appUser.email}');
+  //         return AuthResult.success(appUser);
+  //       } else {
+  //         debugPrint('🔧 새 사용자 - Firestore에 정보 생성 중...');
+  //         final newUser = await _createFirestoreUser(userCredential.user!);
+  //         debugPrint('✅ 새 사용자 생성 완료: ${newUser.email}');
+  //         return AuthResult.success(newUser);
+  //       }
+  //     }
+  //     debugPrint('❌ Firebase Auth 로그인 실패');
+  //     return AuthResult.failure('Apple 로그인에 실패했습니다.');
+  //   } on SignInWithAppleAuthorizationException catch (e) {
+  //     debugPrint('❌ Apple 로그인 오류: ${e.code} - ${e.message}');
+  //     return AuthResult.failure(_getAppleAuthErrorMessage(e));
+  //   } on firebase_auth.FirebaseAuthException catch (e) {
+  //     debugPrint('❌ Firebase Auth 오류: ${e.code} - ${e.message}');
+  //     return AuthResult.failure(_getFirebaseAuthErrorMessage(e));
+  //   } catch (e) {
+  //     debugPrint('❌ Apple 로그인 오류: $e');
+  //     return AuthResult.failure('Apple 로그인 중 오류가 발생했습니다: $e');
+  //   }
+  // }
 
   // === Firestore에 새 사용자 생성 ===
   Future<User> _createFirestoreUser(firebase_auth.User firebaseUser) async {
@@ -325,22 +310,22 @@ class SocialAuthService {
   }
 
   // === Apple 로그인 에러 메시지 변환 ===
-  String _getAppleAuthErrorMessage(SignInWithAppleAuthorizationException e) {
-    switch (e.code) {
-      case AuthorizationErrorCode.canceled:
-        return 'Apple 로그인이 취소되었습니다.';
-      case AuthorizationErrorCode.invalidResponse:
-        return 'Apple 로그인 응답이 올바르지 않습니다.';
-      case AuthorizationErrorCode.notHandled:
-        return 'Apple 로그인 처리가 되지 않았습니다.';
-      case AuthorizationErrorCode.notInteractive:
-        return 'Apple 로그인 상호작용이 불가능합니다.';
-      case AuthorizationErrorCode.unknown:
-        return '알 수 없는 Apple 로그인 오류가 발생했습니다.';
-      default:
-        return e.message ?? 'Apple 로그인 중 오류가 발생했습니다.';
-    }
-  }
+  // String _getAppleAuthErrorMessage(SignInWithAppleAuthorizationException e) {
+  //   switch (e.code) {
+  //     case AuthorizationErrorCode.canceled:
+  //       return 'Apple 로그인이 취소되었습니다.';
+  //     case AuthorizationErrorCode.invalidResponse:
+  //       return 'Apple 로그인 응답이 올바르지 않습니다.';
+  //     case AuthorizationErrorCode.notHandled:
+  //       return 'Apple 로그인 처리가 되지 않았습니다.';
+  //     case AuthorizationErrorCode.notInteractive:
+  //       return 'Apple 로그인 상호작용이 불가능합니다.';
+  //     case AuthorizationErrorCode.unknown:
+  //       return '알 수 없는 Apple 로그인 오류가 발생했습니다.';
+  //     default:
+  //       return e.message ?? 'Apple 로그인 중 오류가 발생했습니다.';
+  //   }
+  // }
 
   // === 로그아웃 ===
   Future<void> signOutGoogle() async {

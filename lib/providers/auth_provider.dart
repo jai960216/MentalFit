@@ -329,29 +329,29 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   /// === Apple 소셜 로그인 ===
-  Future<AuthResult> signInWithApple() async {
-    if (!_initialized) await _initializeServices();
+  // Future<AuthResult> signInWithApple() async {
+  //   if (!_initialized) await _initializeServices();
 
-    _updateLoadingState();
+  //   _updateLoadingState();
 
-    try {
-      final result = await _socialAuthService.signInWithApple();
+  //   try {
+  //     final result = await _socialAuthService.signInWithApple();
 
-      if (result.success && result.user != null) {
-        _updateSuccessState(result.user!);
-        debugPrint('✅ Apple 로그인 성공: ${result.user!.email}');
-      } else {
-        _updateErrorState(result.error ?? 'Apple 로그인에 실패했습니다.');
-        debugPrint('❌ Apple 로그인 실패: ${result.error}');
-      }
+  //     if (result.success && result.user != null) {
+  //       _updateSuccessState(result.user!);
+  //       debugPrint('✅ Apple 로그인 성공: ${result.user!.email}');
+  //     } else {
+  //       _updateErrorState(result.error ?? 'Apple 로그인에 실패했습니다.');
+  //       debugPrint('❌ Apple 로그인 실패: ${result.error}');
+  //     }
 
-      return result;
-    } catch (e) {
-      _updateErrorState('Apple 로그인 중 오류가 발생했습니다: $e');
-      debugPrint('❌ Apple 로그인 중 오류: $e');
-      return AuthResult.failure(e.toString());
-    }
-  }
+  //     return result;
+  //   } catch (e) {
+  //     _updateErrorState('Apple 로그인 중 오류가 발생했습니다: $e');
+  //     debugPrint('❌ Apple 로그인 중 오류: $e');
+  //     return AuthResult.failure(e.toString());
+  //   }
+  // }
 
   /// === 로그아웃 ===
   Future<void> logout() async {

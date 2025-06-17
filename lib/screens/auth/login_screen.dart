@@ -165,40 +165,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     }
   }
 
-  Future<void> _handleAppleLogin() async {
-    setState(() => _isLoading = true);
-
-    try {
-      final result = await ref.read(authProvider.notifier).signInWithApple();
-
-      if (result.success && result.user != null) {
-        if (mounted) {
-          // 온보딩 완료 여부에 따라 라우팅
-          if (result.user!.isOnboardingCompleted) {
-            context.go(AppRoutes.home);
-          } else {
-            context.go(AppRoutes.onboardingBasicInfo);
-          }
-        }
-      } else {
-        if (mounted) {
-          GlobalErrorHandler.showErrorSnackBar(
-            context,
-            result.error ?? 'Apple 로그인에 실패했습니다.',
-          );
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        GlobalErrorHandler.showErrorSnackBar(context, e);
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
-    }
-  }
-
   // === 비밀번호 찾기 ===
   Future<void> _handleForgotPassword() async {
     final emailController = TextEditingController();
@@ -483,17 +449,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             label: 'Kakao',
           ),
         ),
-        SizedBox(width: 12.w),
-        if (Platform.isIOS)
-          Expanded(
-            child: _SocialLoginButton(
-              onPressed: _isLoading ? null : _handleAppleLogin,
-              icon: Icons.apple,
-              backgroundColor: Colors.black,
-              iconColor: Colors.white,
-              label: 'Apple',
-            ),
-          ),
+        // SizedBox(width: 12.w),
+        // if (Platform.isIOS)
+        //   Expanded(
+        //     child: _SocialLoginButton(
+        //       onPressed: _isLoading ? null : _handleAppleLogin,
+        //       icon: Icons.apple,
+        //       backgroundColor: Colors.black,
+        //       iconColor: Colors.white,
+        //       label: 'Apple',
+        //     ),
+        //   ),
       ],
     );
   }

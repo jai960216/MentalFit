@@ -721,7 +721,7 @@ class _CounselorListScreenState extends ConsumerState<CounselorListScreen>
                       ),
                       SizedBox(width: 8.w),
                       Text(
-                        counselor.consultationText,
+                        '${counselor.reviewCount}+ 리뷰',
                         style: TextStyle(
                           fontSize: 14.sp,
                           color: AppColors.textSecondary,

@@ -11,12 +11,14 @@ import '../../providers/counselor_provider.dart';
 
 class BookingConfirmScreen extends ConsumerStatefulWidget {
   final String counselorId;
-  final Appointment appointment;
+  final Appointment? appointment;
+  final Map<String, dynamic>? bookingInfo;
 
   const BookingConfirmScreen({
     super.key,
     required this.counselorId,
-    required this.appointment,
+    this.appointment,
+    this.bookingInfo,
   });
 
   @override
@@ -70,6 +72,7 @@ class _BookingConfirmScreenState extends ConsumerState<BookingConfirmScreen>
   @override
   Widget build(BuildContext context) {
     final appointment = widget.appointment;
+    final bookingInfo = widget.bookingInfo;
     final counselor =
         ref.watch(counselorDetailProvider(widget.counselorId)).counselor;
     if (counselor == null) {
@@ -91,7 +94,10 @@ class _BookingConfirmScreenState extends ConsumerState<BookingConfirmScreen>
                     children: [
                       _buildSuccessIcon(),
                       SizedBox(height: 32.h),
-                      _buildBookingInfoCard(appointment, counselor),
+                      if (appointment != null)
+                        _buildBookingInfoCard(appointment, counselor)
+                      else if (bookingInfo != null)
+                        _buildBookingInfoCardFromMap(bookingInfo, counselor),
                       SizedBox(height: 24.h),
                       _buildPaymentInfo(counselor),
                       SizedBox(height: 24.h),
@@ -428,18 +434,6 @@ class _BookingConfirmScreenState extends ConsumerState<BookingConfirmScreen>
                 colors: [AppColors.primary, AppColors.secondary],
               ),
             ),
-            SizedBox(height: 12.h),
-            TextButton(
-              onPressed: _isProcessing ? null : _handlePaymentLater,
-              child: Text(
-                '나중에 결제하기',
-                style: TextStyle(
-                  fontSize: 16.sp,
-                  color: AppColors.textSecondary,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
           ],
         ),
       ),
@@ -449,9 +443,26 @@ class _BookingConfirmScreenState extends ConsumerState<BookingConfirmScreen>
   Future<void> _handlePayment() async {
     setState(() => _isProcessing = true);
     try {
-      await Future.delayed(const Duration(seconds: 2)); // 결제 시뮬레이션
-      if (mounted) {
-        _showSuccessDialog();
+      // 예약 정보 세팅 (bookingInfo에서 전달받은 예약 정보 사용)
+      final info = widget.bookingInfo;
+      if (info != null) {
+        ref.read(bookingProvider.notifier)
+          ..selectCounselor(widget.counselorId)
+          ..selectDate(info['selectedDate'] as DateTime)
+          ..selectTime(info['selectedTime'] as DateTime)
+          ..selectMethod(info['selectedMethod'])
+          ..setDuration(info['durationMinutes'] as int)
+          ..setNotes(info['notes'] as String? ?? '');
+      }
+      // 결제 시뮬레이션
+      await Future.delayed(const Duration(seconds: 2));
+      // 결제 성공 시 예약 생성
+      final success = await ref.read(bookingProvider.notifier).createBooking();
+      if (success && mounted) {
+        // 예약 목록(내 예약)으로 바로 이동 (GoRouter)
+        context.go('/booking/list');
+      } else if (mounted) {
+        _showErrorDialog('예약 생성에 실패했습니다.');
       }
     } catch (e) {
       if (mounted) {
@@ -462,84 +473,6 @@ class _BookingConfirmScreenState extends ConsumerState<BookingConfirmScreen>
         setState(() => _isProcessing = false);
       }
     }
-  }
-
-  Future<void> _handlePaymentLater() async {
-    if (mounted) {
-      context.go(AppRoutes.home);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('예약 정보가 저장되었습니다. 상담 전까지 결제를 완료해주세요.'),
-          backgroundColor: AppColors.warning,
-          action: SnackBarAction(
-            label: '예약 목록',
-            textColor: Colors.white,
-            onPressed: () => context.push(AppRoutes.bookingList),
-          ),
-        ),
-      );
-    }
-  }
-
-  void _showSuccessDialog() {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder:
-          (context) => AlertDialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16.r),
-            ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.check_circle, size: 60.sp, color: AppColors.success),
-                SizedBox(height: 16.h),
-                Text(
-                  '결제가 완료되었습니다!',
-                  style: TextStyle(
-                    fontSize: 18.sp,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textPrimary,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                SizedBox(height: 8.h),
-                Text(
-                  '예약이 확정되었습니다.\n상담사가 곧 연락드릴 예정입니다.',
-                  style: TextStyle(
-                    fontSize: 14.sp,
-                    color: AppColors.textSecondary,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ],
-            ),
-            actions: [
-              Column(
-                children: [
-                  SizedBox(
-                    width: double.infinity,
-                    child: TextButton(
-                      onPressed: () => _navigateToHome(),
-                      child: const Text('홈으로'),
-                    ),
-                  ),
-                  SizedBox(height: 8.h),
-                  SizedBox(
-                    width: double.infinity,
-                    child: CustomButton(
-                      text: '예약 목록',
-                      onPressed: () => _navigateToBookingList(),
-                      height: 40.h,
-                      textSize: 18.sp,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-    );
   }
 
   void _showErrorDialog(String message) {
@@ -566,18 +499,6 @@ class _BookingConfirmScreenState extends ConsumerState<BookingConfirmScreen>
             ],
           ),
     );
-  }
-
-  void _navigateToHome() {
-    Navigator.of(context).pop();
-    ref.read(bookingProvider.notifier).reset();
-    context.go(AppRoutes.home);
-  }
-
-  void _navigateToBookingList() {
-    Navigator.of(context).pop();
-    ref.read(bookingProvider.notifier).reset();
-    context.push(AppRoutes.bookingList);
   }
 
   String _formatDateTime(DateTime dateTime) {
@@ -612,6 +533,83 @@ class _BookingConfirmScreenState extends ConsumerState<BookingConfirmScreen>
       default:
         return Icons.help_outline;
     }
+  }
+
+  // bookingInfo(Map)에서 예약 정보 카드 생성
+  Widget _buildBookingInfoCardFromMap(
+    Map<String, dynamic> info,
+    Counselor counselor,
+  ) {
+    final scheduledDate = info['selectedDate'] as DateTime?;
+    final selectedTime = info['selectedTime'] as DateTime?;
+    final method = info['selectedMethod'];
+    final durationMinutes = info['durationMinutes'] as int?;
+    final notes = info['notes'] as String?;
+    final dateTime =
+        scheduledDate != null && selectedTime != null
+            ? DateTime(
+              scheduledDate.year,
+              scheduledDate.month,
+              scheduledDate.day,
+              selectedTime.hour,
+              selectedTime.minute,
+            )
+            : null;
+    return Container(
+      padding: EdgeInsets.all(24.w),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16.r),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.cardShadow,
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '예약 정보',
+            style: TextStyle(
+              fontSize: 20.sp,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          SizedBox(height: 20.h),
+          _buildInfoRow(
+            icon: Icons.person,
+            label: '상담사',
+            value: '${counselor.name} (${counselor.title})',
+          ),
+          SizedBox(height: 16.h),
+          _buildInfoRow(
+            icon: Icons.schedule,
+            label: '예약 일시',
+            value: dateTime != null ? _formatDateTime(dateTime) : '-',
+          ),
+          SizedBox(height: 16.h),
+          _buildInfoRow(
+            icon: _getMethodIcon(method),
+            label: '상담 방식',
+            value: method != null ? method.displayName : '-',
+          ),
+          SizedBox(height: 16.h),
+          _buildInfoRow(
+            icon: Icons.timer,
+            label: '상담 시간',
+            value: durationMinutes != null ? '$durationMinutes분' : '-',
+          ),
+          if (notes != null && notes.isNotEmpty) ...[
+            SizedBox(height: 16.h),
+            _buildInfoRow(icon: Icons.note, label: '요청 사항', value: notes),
+          ],
+        ],
+      ),
+    );
   }
 }
 

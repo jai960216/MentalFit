@@ -198,63 +198,29 @@ class _CounselorDetailScreenState extends ConsumerState<CounselorDetailScreen>
                             ),
                             decoration: BoxDecoration(
                               color: AppColors.success.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(12.r),
+                              borderRadius: BorderRadius.circular(8.r),
                             ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Container(
-                                  width: 8.w,
-                                  height: 8.w,
-                                  decoration: BoxDecoration(
-                                    color: AppColors.success,
-                                    shape: BoxShape.circle,
-                                  ),
-                                ),
-                                SizedBox(width: 4.w),
-                                Text(
-                                  '온라인',
-                                  style: TextStyle(
-                                    fontSize: 12.sp,
-                                    color: AppColors.success,
-                                  ),
-                                ),
-                              ],
+                            child: const Text(
+                              '온라인',
+                              style: TextStyle(color: AppColors.success),
                             ),
                           ),
                       ],
                     ),
-                    SizedBox(height: 4.h),
                     Text(
                       counselor.title,
                       style: TextStyle(
-                        fontSize: 16.sp,
+                        fontSize: 14.sp,
                         color: AppColors.textSecondary,
                       ),
                     ),
                     SizedBox(height: 8.h),
                     Row(
                       children: [
-                        Icon(Icons.star, size: 16.w, color: AppColors.warning),
-                        SizedBox(width: 4.w),
+                        Icon(Icons.star, color: Colors.amber, size: 16),
+                        SizedBox(width: 4),
                         Text(
-                          counselor.ratingText,
-                          style: TextStyle(
-                            fontSize: 14.sp,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                        SizedBox(width: 8.w),
-                        Text(
-                          '•',
-                          style: TextStyle(
-                            fontSize: 14.sp,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                        SizedBox(width: 8.w),
-                        Text(
-                          counselor.consultationText,
+                          '${counselor.ratingText} · ${counselor.reviewCount}+ 상담',
                           style: TextStyle(
                             fontSize: 14.sp,
                             color: AppColors.textSecondary,
@@ -333,9 +299,10 @@ class _CounselorDetailScreenState extends ConsumerState<CounselorDetailScreen>
     if (reviewsState.reviews.isEmpty)
       return const Center(child: Text('아직 리뷰가 없습니다'));
 
-    return ListView.builder(
+    return ListView.separated(
       padding: EdgeInsets.all(20.w),
       itemCount: reviewsState.reviews.length,
+      separatorBuilder: (context, index) => SizedBox(height: 16.h),
       itemBuilder: (context, index) {
         final review = reviewsState.reviews[index];
         return _card(

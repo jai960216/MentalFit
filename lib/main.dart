@@ -5,12 +5,21 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'core/config/app_theme.dart';
 import 'core/config/app_router.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+import 'shared/models/ai_chat_models.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Firebase 초기화
+  // 1. dotenv를 가장 먼저 로드
+  await dotenv.load();
+
+  // 2. 그 다음 Firebase, Hive 등 초기화
   await Firebase.initializeApp();
+  await Hive.initFlutter();
+  Hive.registerAdapter(AIChatRoomAdapter());
+  Hive.registerAdapter(AIChatMessageAdapter());
 
   runApp(const ProviderScope(child: MentalFitApp()));
 }

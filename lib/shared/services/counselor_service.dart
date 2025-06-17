@@ -628,6 +628,40 @@ class CounselorService {
   Future<void> deleteCounselor(String id) async {
     await _counselorsRef.doc(id).delete();
   }
+
+  // === 🔥 상담사 리뷰 작성 ===
+  Future<ApiResponse<void>> addCounselorReview(CounselorReview review) async {
+    try {
+      // 리뷰 저장
+      final docRef = await _reviewsRef.add(review.toFirestore());
+      debugPrint('✅ 리뷰 저장 완료: \\${docRef.id}');
+
+      // 상담사 평점/리뷰수 갱신
+      final reviewsSnapshot =
+          await _reviewsRef
+              .where('counselorId', isEqualTo: review.counselorId)
+              .get();
+      final reviews =
+          reviewsSnapshot.docs
+              .map((doc) => CounselorReview.fromFirestore(doc))
+              .toList();
+      final avgRating =
+          reviews.isNotEmpty
+              ? reviews.map((r) => r.rating).reduce((a, b) => a + b) /
+                  reviews.length
+              : review.rating;
+      final reviewCount = reviews.length;
+      await _counselorsRef.doc(review.counselorId).update({
+        'rating': avgRating,
+        'reviewCount': reviewCount,
+        'updatedAt': Timestamp.fromDate(DateTime.now()),
+      });
+      return ApiResponse.success(null);
+    } catch (e) {
+      debugPrint('❌ 리뷰 저장 오류: $e');
+      return ApiResponse.failure('리뷰 저장에 실패했습니다: $e');
+    }
+  }
 }
 
 // === API 응답 래퍼 클래스 ===

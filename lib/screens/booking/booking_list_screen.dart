@@ -8,6 +8,9 @@ import '../../shared/widgets/custom_button.dart';
 import '../../shared/models/counselor_model.dart';
 import '../../providers/booking_provider.dart';
 import '../../shared/services/counselor_service.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'review_dialog.dart';
+import '../../providers/counselor_provider.dart';
 
 class BookingListScreen extends ConsumerStatefulWidget {
   const BookingListScreen({super.key});
@@ -56,7 +59,28 @@ class _BookingListScreenState extends ConsumerState<BookingListScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: _buildAppBar(),
+      appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go('/');
+            }
+          },
+        ),
+        title: const Text('내 예약'),
+        backgroundColor: AppColors.white,
+        elevation: 0,
+        bottom: TabBar(
+          controller: _tabController,
+          labelColor: AppColors.primary,
+          unselectedLabelColor: AppColors.textSecondary,
+          indicatorColor: AppColors.primary,
+          tabs: const [Tab(text: '예정'), Tab(text: '완료'), Tab(text: '취소')],
+        ),
+      ),
       body: FadeTransition(
         opacity: _fadeAnimation,
         child: Consumer(
@@ -80,25 +104,6 @@ class _BookingListScreenState extends ConsumerState<BookingListScreen>
         ),
       ),
       floatingActionButton: _buildFloatingActionButton(),
-    );
-  }
-
-  PreferredSizeWidget _buildAppBar() {
-    return AppBar(
-      title: const Text('내 예약'),
-      backgroundColor: AppColors.white,
-      elevation: 0,
-      leading: IconButton(
-        icon: const Icon(Icons.arrow_back),
-        onPressed: () => context.pop(),
-      ),
-      bottom: TabBar(
-        controller: _tabController,
-        labelColor: AppColors.primary,
-        unselectedLabelColor: AppColors.textSecondary,
-        indicatorColor: AppColors.primary,
-        tabs: const [Tab(text: '예정'), Tab(text: '완료'), Tab(text: '취소')],
-      ),
     );
   }
 
@@ -385,6 +390,15 @@ class _BookingListScreenState extends ConsumerState<BookingListScreen>
     bool showActions,
     bool showReview,
   ) {
+    // 리뷰 작성 여부 확인 (리뷰 목록에서 appointmentId와 userId로 판별)
+    final myUserId = FirebaseAuth.instance.currentUser?.uid;
+    final reviewsState = ref.watch(
+      counselorReviewsProvider(appointment.counselorId),
+    );
+    final hasReview = reviewsState.reviews.any(
+      (r) => r.userId == myUserId && r.appointmentId == appointment.id,
+    );
+
     return Container(
       padding: EdgeInsets.fromLTRB(16.w, 16.w, 16.w, 16.w),
       child: Row(
@@ -438,14 +452,24 @@ class _BookingListScreenState extends ConsumerState<BookingListScreen>
             SizedBox(width: 8.w),
             Expanded(
               flex: 2,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.success,
-                  foregroundColor: Colors.white,
-                ),
-                onPressed: () => _writeReview(appointment),
-                child: const Text('리뷰 작성'),
-              ),
+              child:
+                  hasReview
+                      ? ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.grey200,
+                          foregroundColor: AppColors.textSecondary,
+                        ),
+                        onPressed: null,
+                        child: const Text('리뷰작성 완료'),
+                      )
+                      : ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.success,
+                          foregroundColor: Colors.white,
+                        ),
+                        onPressed: () => _writeReview(appointment),
+                        child: const Text('리뷰 작성'),
+                      ),
             ),
           ],
         ],
@@ -774,7 +798,17 @@ class _BookingListScreenState extends ConsumerState<BookingListScreen>
   }
 
   void _writeReview(Appointment appointment) {
-    _showInfoDialog('리뷰 작성', '리뷰 작성 기능은 추후 업데이트될 예정입니다.');
+    showDialog(
+      context: context,
+      builder:
+          (context) => ReviewDialog(
+            appointment: appointment,
+            onReviewSubmitted: () async {
+              await _loadAppointments();
+              if (mounted) _showSuccessSnackBar('리뷰가 등록되었습니다!');
+            },
+          ),
+    );
   }
 
   // === 다이얼로그 및 스낵바 유틸리티 ===

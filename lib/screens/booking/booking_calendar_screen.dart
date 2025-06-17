@@ -810,26 +810,26 @@ class _BookingCalendarScreenState extends ConsumerState<BookingCalendarScreen>
   Future<void> _handleBooking() async {
     if (_selectedDay == null || _selectedTime == null) return;
 
-    // 예약 정보 설정
+    // 예약 정보 설정 (예약 생성 X)
     ref.read(bookingProvider.notifier)
       ..selectCounselor(widget.counselorId)
       ..selectDate(_selectedDay!)
       ..selectTime(_selectedTime!)
       ..selectMethod(_selectedMethod);
 
-    // 예약 생성
-    final success = await ref.read(bookingProvider.notifier).createBooking();
-
-    if (success && mounted) {
-      // 예약 성공 시 예약 정보 extra로 전달
-      final appointment = ref.read(bookingProvider).createdAppointment;
-      if (appointment != null) {
-        context.push(
-          '${AppRoutes.bookingConfirm}/${widget.counselorId}',
-          extra: appointment,
-        );
-      }
-    }
+    // 예약확인/결제 화면으로 이동 (임시 예약 정보 전달)
+    final bookingState = ref.read(bookingProvider);
+    context.push(
+      '${AppRoutes.bookingConfirm}/${widget.counselorId}',
+      extra: {
+        'counselorId': widget.counselorId,
+        'selectedDate': bookingState.selectedDate,
+        'selectedTime': bookingState.selectedTime,
+        'selectedMethod': bookingState.selectedMethod,
+        'durationMinutes': bookingState.durationMinutes,
+        'notes': bookingState.notes,
+      },
+    );
   }
 
   void _showHelpDialog() {

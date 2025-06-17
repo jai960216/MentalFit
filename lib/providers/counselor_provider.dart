@@ -299,18 +299,16 @@ class CounselorReviewsNotifier extends StateNotifier<CounselorReviewsState> {
     state = state.copyWith(isLoading: true, error: null);
 
     try {
-      final reviews = await _counselorService!.getCounselorReviews(
-        counselorId,
-        page: 1,
-      );
-      state = state.copyWith(
-        reviews: reviews,
-        isLoading: false,
-        currentPage: 1,
-      );
+      final reviews = await _counselorService!.getCounselorReviews(counselorId);
+      state = state.copyWith(reviews: reviews, isLoading: false);
     } catch (e) {
       state = state.copyWith(isLoading: false, error: e.toString());
     }
+  }
+
+  // 리뷰 등록 후 목록 새로고침
+  Future<void> refreshReviews() async {
+    await loadReviews();
   }
 
   // === 더 많은 리뷰 로드 ===

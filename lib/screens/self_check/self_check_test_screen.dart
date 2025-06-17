@@ -24,11 +24,9 @@ class SelfCheckTestScreen extends ConsumerStatefulWidget {
 class _SelfCheckTestScreenState extends ConsumerState<SelfCheckTestScreen>
     with TickerProviderStateMixin {
   late AnimationController _fadeController;
-  late AnimationController _slideController;
   late AnimationController _progressController;
 
   late Animation<double> _fadeAnimation;
-  late Animation<Offset> _slideAnimation;
   late Animation<double> _progressAnimation;
 
   String? _selectedAnswerId;
@@ -43,12 +41,7 @@ class _SelfCheckTestScreenState extends ConsumerState<SelfCheckTestScreen>
 
   void _initializeAnimations() {
     _fadeController = AnimationController(
-      duration: const Duration(milliseconds: 600),
-      vsync: this,
-    );
-
-    _slideController = AnimationController(
-      duration: const Duration(milliseconds: 400),
+      duration: const Duration(milliseconds: 300),
       vsync: this,
     );
 
@@ -61,11 +54,6 @@ class _SelfCheckTestScreenState extends ConsumerState<SelfCheckTestScreen>
       begin: 0.0,
       end: 1.0,
     ).animate(CurvedAnimation(parent: _fadeController, curve: Curves.easeOut));
-
-    _slideAnimation = Tween<Offset>(
-      begin: const Offset(1.0, 0.0),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(parent: _slideController, curve: Curves.easeOut));
 
     _progressAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _progressController, curve: Curves.easeInOut),
@@ -101,7 +89,6 @@ class _SelfCheckTestScreenState extends ConsumerState<SelfCheckTestScreen>
 
       if (mounted) {
         _fadeController.forward();
-        _slideController.forward();
         _progressController.forward();
       }
     } catch (e) {
@@ -154,7 +141,6 @@ class _SelfCheckTestScreenState extends ConsumerState<SelfCheckTestScreen>
   @override
   void dispose() {
     _fadeController.dispose();
-    _slideController.dispose();
     _progressController.dispose();
     super.dispose();
   }
@@ -180,11 +166,11 @@ class _SelfCheckTestScreenState extends ConsumerState<SelfCheckTestScreen>
 
     if (hasNext) {
       // 애니메이션 리셋 후 재시작
-      await _slideController.reverse();
       setState(() {
         _selectedAnswerId = null;
       });
-      _slideController.forward();
+      _fadeController.reset();
+      _fadeController.forward();
     } else {
       // 마지막 질문 완료 - 결과 제출
       _submitTest();
@@ -195,11 +181,11 @@ class _SelfCheckTestScreenState extends ConsumerState<SelfCheckTestScreen>
     final hasPrevious = ref.read(selfCheckProvider.notifier).previousQuestion();
 
     if (hasPrevious) {
-      await _slideController.reverse();
       setState(() {
         _selectedAnswerId = null;
       });
-      _slideController.forward();
+      _fadeController.reset();
+      _fadeController.forward();
     }
   }
 
@@ -337,30 +323,19 @@ class _SelfCheckTestScreenState extends ConsumerState<SelfCheckTestScreen>
               Expanded(
                 child: FadeTransition(
                   opacity: _fadeAnimation,
-                  child: SlideTransition(
-                    position: _slideAnimation,
-                    child: SingleChildScrollView(
-                      padding: EdgeInsets.all(24.w),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // === 질문 카테고리 ===
-                          if (currentQuestion.category != null)
-                            _buildQuestionCategory(currentQuestion.category!),
-
-                          SizedBox(height: 16.h),
-
-                          // === 질문 내용 ===
-                          _buildQuestionText(currentQuestion),
-
-                          SizedBox(height: 32.h),
-
-                          // === 답변 옵션들 ===
-                          _buildAnswerOptions(currentQuestion),
-
-                          SizedBox(height: 40.h),
-                        ],
-                      ),
+                  child: SingleChildScrollView(
+                    padding: EdgeInsets.all(24.w),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (currentQuestion.category != null)
+                          _buildQuestionCategory(currentQuestion.category!),
+                        SizedBox(height: 16.h),
+                        _buildQuestionText(currentQuestion),
+                        SizedBox(height: 32.h),
+                        _buildAnswerOptions(currentQuestion),
+                        SizedBox(height: 40.h),
+                      ],
                     ),
                   ),
                 ),

@@ -39,7 +39,7 @@ class SelfCheckService {
   }
 
   // 앱 내 고정 스포츠 심리 검사 리스트
-  final List<SelfCheckTest> _availableTests = [
+  List<SelfCheckTest> get _availableTests => [
     SelfCheckTest(
       id: 'tops2',
       type: SelfCheckTestType.tops2,
@@ -73,24 +73,21 @@ class SelfCheckService {
       title: 'CSAI-2 (Competitive State Anxiety Inventory-2)',
       description: '경기 전 불안의 인지적, 신체적 요소 + 자신감을 구분해 측정. 국내외 연구 다수.',
       category: SelfCheckCategory.anxiety,
-      questionCount: 2,
+      questionCount: 27,
       estimatedMinutes: 7,
-      questions: [
-        SelfCheckQuestion(
-          id: 'csai2_q1',
-          order: 1,
-          text: '경기 전 불안감이 심하게 느껴집니까?',
-          answerType: AnswerType.likert5,
-          answers: likert5Answers,
-        ),
-        SelfCheckQuestion(
-          id: 'csai2_q2',
-          order: 2,
-          text: '경기 전 자신감이 충분합니까?',
-          answerType: AnswerType.likert5,
-          answers: likert5Answers,
-        ),
-      ],
+      questions:
+          _generateCSAI2Questions()
+              .map(
+                (q) => SelfCheckQuestion(
+                  id: q['id'],
+                  order: q['order'],
+                  text: q['text'],
+                  answerType: AnswerType.likert5,
+                  answers: likert5Answers,
+                  category: q['category'],
+                ),
+              )
+              .toList(),
       isActive: true,
       createdAt: DateTime(2024, 1, 1),
     ),
@@ -529,7 +526,6 @@ class SelfCheckService {
   List<Map<String, dynamic>> _generateCSAI2Questions() {
     final questions = <Map<String, dynamic>>[];
     final categories = ['인지불안', '신체불안', '자신감'];
-
     for (int i = 1; i <= 27; i++) {
       final categoryIndex = ((i - 1) ~/ 9) % categories.length;
       questions.add({
@@ -604,17 +600,37 @@ class SelfCheckService {
   /// CSAI-2 질문 텍스트
   String _getCSAI2QuestionText(int num) {
     final csai2Questions = [
-      '경기 전에 걱정이 많아진다',
-      '경기 전에 몸이 긴장된다',
-      '경기에서 좋은 성과를 낼 자신이 있다',
-      '경기 결과에 대해 불안하다',
-      '경기 전에 심장이 빨리 뛴다',
-      '경기 중에 집중력을 유지할 수 있다',
-      '경기 전에 자신의 실력을 의심한다',
-      '경기 중에 자신감을 유지할 수 있다',
-      '경기 전에 긴장을 조절할 수 있다',
+      // 인지적 불안(1~9)
+      '나는 이번 시합이 신경이 쓰인다.',
+      '나는 지금 이 순간 내 자신의 능력에 대해 의심스럽다.',
+      '나는 이번 시합이 잘 풀리지 않을 것 같은 예감이 든다.',
+      '나는 이 순간 패배에 대한 걱정이 된다.',
+      '나는 이번 시합이 부담이 된다.',
+      '나는 형편없는 시합이 될까 걱정된다.',
+      '나는 지금 내 목표에 도달할 수 있을지 걱정이 된다.',
+      '나는 다른 사람이 내 경기를 보고 실망할까봐 걱정이 된다.',
+      '나는 지금 이 순간 집중을 할 수 없을 것 같아 걱정이다.',
+      // 신체적 불안(10~18)
+      '나는 지금 이 순간 이 경기에 신경이 쓰인다.',
+      '나는 지금 이 순간 마음이 초조하다.',
+      '나의 온몸이 긴장되어 있다.',
+      '나는 지금 속이 거북하다.',
+      '지금 나의 몸은 편안하게 이완되어 있다. (역채점)',
+      '나는 지금 이 순간 내 심장이 마구 뛰는 것을 느낀다.',
+      '나는 지금 이 순간 속이 철렁한다.',
+      '나는 지금 이 순간 손에 땀이 난다.',
+      '나는 지금 이 순간 몸이 뻣뻣해짐을 느낀다.',
+      // 자신감(19~27)
+      '나는 지금 마음이 홀가분하다.',
+      '나는 지금 이 순간 안락한 기분을 느낀다.',
+      '나는 이번 시합에 자신감이 있다.',
+      '나는 지금 이 순간 마음이 든든하다.',
+      '나는 지금 이 도전을 감당할 자신이 있다.',
+      '나는 시합이 잘될 것을 확신한다.',
+      '나는 지금 내 마음이 편안해 있음을 느낀다.',
+      '나는 목표에 도달하는 나를 상상하기 때문에 자신이 있다.',
+      '나는 지금 이 순간 정신적 압박을 이겨낼 자신이 있다.',
     ];
-
     if (num <= csai2Questions.length) {
       return csai2Questions[num - 1];
     }
