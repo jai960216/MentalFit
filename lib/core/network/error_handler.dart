@@ -1,64 +1,62 @@
 import 'package:flutter/material.dart';
-import 'api_exception.dart';
+import '../config/app_colors.dart';
+
+class ApiException implements Exception {
+  final String code;
+  final String message;
+  final dynamic data;
+
+  ApiException({required this.code, required this.message, this.data});
+
+  @override
+  String toString() => 'ApiException(code: $code, message: $message)';
+}
 
 class ErrorHandler {
-  static ErrorHandler? _instance;
+  static final ErrorHandler instance = ErrorHandler._internal();
+  ErrorHandler._internal();
 
-  // 싱글톤 패턴
-  ErrorHandler._();
-
-  static ErrorHandler get instance {
-    _instance ??= ErrorHandler._();
-    return _instance!;
-  }
+  // 에러 메시지 매핑
+  final Map<String, String> _errorMessages = {
+    'NETWORK_ERROR': '인터넷 연결을 확인해주세요',
+    'AUTH_ERROR': '인증에 실패했습니다',
+    'PERMISSION_DENIED': '권한이 거부되었습니다',
+    'INVALID_INPUT': '잘못된 입력입니다',
+    'SERVER_ERROR': '서버 오류가 발생했습니다',
+    'UNKNOWN_ERROR': '알 수 없는 오류가 발생했습니다',
+  };
 
   // 에러 처리 메인 메서드
   void handleError(
-    BuildContext? context,
+    BuildContext context,
     dynamic error, {
     VoidCallback? onRetry,
     bool showSnackBar = true,
     bool showDialog = false,
     String? customMessage,
   }) {
-    final apiException = _convertToApiException(error);
-    final errorMessage = customMessage ?? apiException.userMessage;
+    final String message = _getErrorMessage(error, customMessage);
 
-    // 로깅
-    _logError(apiException);
-
-    // UI에 에러 표시
-    if (context != null) {
-      if (showDialog) {
-        _showErrorDialog(context, errorMessage, onRetry);
-      } else if (showSnackBar) {
-        _showErrorSnackBar(context, errorMessage, onRetry);
-      }
+    if (showSnackBar) {
+      _showErrorSnackBar(context, message, onRetry);
     }
 
-    // 특별한 에러 타입별 추가 처리
-    _handleSpecialErrors(context, apiException);
+    if (showDialog) {
+      _showErrorDialog(context, message, onRetry);
+    }
   }
 
-  // 에러를 ApiException으로 변환
-  ApiException _convertToApiException(dynamic error) {
+  // 에러 메시지 가져오기
+  String _getErrorMessage(dynamic error, String? customMessage) {
+    if (customMessage != null) return customMessage;
+
     if (error is ApiException) {
-      return error;
-    } else {
-      return ApiExceptionFactory.fromException(
-        error is Exception ? error : Exception(error.toString()),
-      );
+      return _errorMessages[error.code] ?? error.message;
     }
-  }
 
-  // 에러 로깅
-  void _logError(ApiException error) {
-    debugPrint('=== API ERROR ===');
-    debugPrint('Code: ${error.code}');
-    debugPrint('Message: ${error.message}');
-    debugPrint('Status Code: ${error.statusCode}');
-    debugPrint('Details: ${error.details}');
-    debugPrint('=================');
+    if (error is String) return error;
+
+    return _errorMessages['UNKNOWN_ERROR']!;
   }
 
   // 스낵바로 에러 표시
@@ -70,13 +68,13 @@ class ErrorHandler {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: Colors.red,
+        backgroundColor: AppColors.error,
         behavior: SnackBarBehavior.floating,
         action:
             onRetry != null
                 ? SnackBarAction(
                   label: '다시 시도',
-                  textColor: Colors.white,
+                  textColor: AppColors.white,
                   onPressed: onRetry,
                 )
                 : null,
@@ -95,11 +93,11 @@ class ErrorHandler {
       context: context,
       builder:
           (context) => AlertDialog(
-            title: const Row(
+            title: Row(
               children: [
-                Icon(Icons.error, color: Colors.red),
-                SizedBox(width: 8),
-                Text('오류'),
+                Icon(Icons.error, color: AppColors.error, size: 24),
+                const SizedBox(width: 8),
+                const Text('오류'),
               ],
             ),
             content: Text(message),
@@ -120,58 +118,9 @@ class ErrorHandler {
           ),
     );
   }
-
-  // 특별한 에러 타입별 처리
-  void _handleSpecialErrors(BuildContext? context, ApiException error) {
-    switch (error.runtimeType) {
-      case UnauthorizedException:
-        _handleUnauthorizedError(context);
-        break;
-      case NetworkException:
-        _handleNetworkError(context);
-        break;
-      case ServerException:
-        _handleServerError(context);
-        break;
-      case ValidationException:
-        _handleValidationError(context, error as ValidationException);
-        break;
-    }
-  }
-
-  // 인증 에러 처리
-  void _handleUnauthorizedError(BuildContext? context) {
-    // TODO: 로그인 화면으로 이동
-    debugPrint('인증 에러: 로그인 화면으로 이동 필요');
-  }
-
-  // 네트워크 에러 처리
-  void _handleNetworkError(BuildContext? context) {
-    // TODO: 오프라인 모드 활성화
-    debugPrint('네트워크 에러: 오프라인 모드 활성화');
-  }
-
-  // 서버 에러 처리
-  void _handleServerError(BuildContext? context) {
-    // TODO: 서버 상태 확인 페이지 표시
-    debugPrint('서버 에러: 서버 상태 확인 필요');
-  }
-
-  // 유효성 검사 에러 처리
-  void _handleValidationError(
-    BuildContext? context,
-    ValidationException error,
-  ) {
-    if (context != null) {
-      final errors = error.getAllErrors();
-      final errorMessage = errors.isNotEmpty ? errors.first : error.userMessage;
-
-      _showErrorSnackBar(context, errorMessage, null);
-    }
-  }
 }
 
-// 글로벌 에러 핸들러 유틸리티
+// 전역 에러 핸들러
 class GlobalErrorHandler {
   static void handleError(
     dynamic error, {
@@ -181,17 +130,18 @@ class GlobalErrorHandler {
     bool showDialog = false,
     String? customMessage,
   }) {
-    ErrorHandler.instance.handleError(
-      context,
-      error,
-      onRetry: onRetry,
-      showSnackBar: showSnackBar,
-      showDialog: showDialog,
-      customMessage: customMessage,
-    );
+    if (context != null) {
+      ErrorHandler.instance.handleError(
+        context,
+        error,
+        onRetry: onRetry,
+        showSnackBar: showSnackBar,
+        showDialog: showDialog,
+        customMessage: customMessage,
+      );
+    }
   }
 
-  // 간편한 스낵바 표시
   static void showErrorSnackBar(
     BuildContext context,
     dynamic error, {
@@ -208,7 +158,6 @@ class GlobalErrorHandler {
     );
   }
 
-  // 간편한 다이얼로그 표시
   static void showErrorDialog(
     BuildContext context,
     dynamic error, {
@@ -223,6 +172,31 @@ class GlobalErrorHandler {
       showDialog: true,
       customMessage: customMessage,
     );
+  }
+}
+
+// 비동기 에러 핸들러
+class AsyncErrorHandler {
+  static Future<T?> safeCall<T>(
+    Future<T> future, {
+    BuildContext? context,
+    VoidCallback? onRetry,
+    String? customMessage,
+    T? fallbackValue,
+  }) async {
+    try {
+      return await future;
+    } catch (error) {
+      if (context != null) {
+        GlobalErrorHandler.handleError(
+          error,
+          context: context,
+          onRetry: onRetry,
+          customMessage: customMessage,
+        );
+      }
+      return fallbackValue;
+    }
   }
 }
 
@@ -311,46 +285,6 @@ class _ErrorBoundaryState extends State<ErrorBoundary> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     // ErrorWidget.builder는 더 이상 사용되지 않으므로 제거
-  }
-}
-
-// 비동기 에러 핸들러
-class AsyncErrorHandler {
-  static void handleAsyncError(
-    Future future, {
-    BuildContext? context,
-    VoidCallback? onRetry,
-    String? customMessage,
-  }) {
-    future.catchError((error) {
-      GlobalErrorHandler.handleError(
-        error,
-        context: context,
-        onRetry: onRetry,
-        customMessage: customMessage,
-      );
-    });
-  }
-
-  // Future 래퍼
-  static Future<T?> safeCall<T>(
-    Future<T> future, {
-    BuildContext? context,
-    VoidCallback? onRetry,
-    String? customMessage,
-    T? fallbackValue,
-  }) async {
-    try {
-      return await future;
-    } catch (error) {
-      GlobalErrorHandler.handleError(
-        error,
-        context: context,
-        onRetry: onRetry,
-        customMessage: customMessage,
-      );
-      return fallbackValue;
-    }
   }
 }
 

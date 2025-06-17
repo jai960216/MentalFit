@@ -1,31 +1,42 @@
 import 'package:flutter/material.dart';
 
 class AppColors {
-  // Primary Colors (로고 기반)
-  static const Color primary = Color(0xFF1E88E5); // 메인 블루
-  static const Color secondary = Color(0xFF00BCD4); // 시안 블루
-  static const Color accent = Color(0xFF4FC3F7); // 라이트 블루
+  // 기본 색상
+  static const Color primary = Color(0xFF2196F3);
+  static const Color secondary = Color(0xFF03A9F4);
+  static const Color accent = Color(0xFF00BCD4);
 
-  // Background Colors
-  static const Color background = Color(0xFFF5F9FF); // 연한 배경
-  static const Color surface = Color(0xFFFFFFFF); // 카드/표면
-
-  // Text Colors
-  static const Color textPrimary = Color(0xFF212121); // 메인 텍스트
-  static const Color textSecondary = Color(0xFF757575); // 보조 텍스트
-  static const Color textHint = Color(0xFFBDBDBD); // 힌트 텍스트
-
-  // Functional Colors
-  static const Color success = Color(0xFF4CAF50); // 성공
-  static const Color warning = Color(0xFFFF9800); // 경고
-  static const Color error = Color(0xFFF44336); // 에러
-  static const Color info = Color(0xFF2196F3); // 정보
-
-  // Neutral Colors
+  // 배경 색상
+  static const Color background = Color(0xFFF5F5F5);
+  static const Color surface = Color(0xFFFFFFFF);
   static const Color white = Color(0xFFFFFFFF);
-  static const Color black = Color(0xFF000000);
 
-  // Grey Scale
+  // 텍스트 색상
+  static const Color textPrimary = Color(0xFF212121);
+  static const Color textSecondary = Color(0xFF757575);
+  static const Color textHint = Color(0xFFBDBDBD);
+
+  // 상태 색상
+  static const Color success = Color(0xFF4CAF50);
+  static const Color warning = Color(0xFFFFC107);
+  static const Color error = Color(0xFFF44336);
+  static const Color info = Color(0xFF2196F3);
+
+  // 상태 배경 색상
+  static const Color successLight = Color(0xFFE8F5E8);
+  static const Color warningLight = Color(0xFFFFF3E0);
+  static const Color errorLight = Color(0xFFFFEBEE);
+  static const Color infoLight = Color(0xFFE3F2FD);
+
+  // 구분선 색상
+  static const Color divider = Color(0xFFE0E0E0);
+  static const Color border = Color(0xFFE0E0E0);
+
+  // 그림자 색상
+  static const Color shadow = Color(0x1A000000);
+  static const Color cardShadow = Color(0x0D000000);
+
+  // 그레이스케일
   static const Color grey50 = Color(0xFFFAFAFA);
   static const Color grey100 = Color(0xFFF5F5F5);
   static const Color grey200 = Color(0xFFEEEEEE);
@@ -37,22 +48,7 @@ class AppColors {
   static const Color grey800 = Color(0xFF424242);
   static const Color grey900 = Color(0xFF212121);
 
-  // 추가 색상들
-  static const Color lightBlue50 = Color(0xFFE1F5FE);
-  static const Color lightBlue100 = Color(0xFFB3E5FC);
-  static const Color lightBlue200 = Color(0xFF81D4FA);
-
-  // 상태 색상 (더 세분화)
-  static const Color successLight = Color(0xFFE8F5E8);
-  static const Color warningLight = Color(0xFFFFF3E0);
-  static const Color errorLight = Color(0xFFFFEBEE);
-  static const Color infoLight = Color(0xFFE3F2FD);
-
-  // 🔥 누락된 색상들 추가
-  static const Color border = Color(0xFFE0E0E0); // 테두리 색상
-  static const Color shadow = Color(0x1A000000); // 그림자 색상
-
-  // Gradient Colors
+  // 그라데이션
   static const LinearGradient primaryGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
@@ -65,7 +61,103 @@ class AppColors {
     colors: [background, white],
   );
 
-  // 카드 그림자 색상
-  static const Color shadowColor = Color(0x1A000000);
-  static const Color cardShadow = Color(0x0D000000);
+  // 투명도
+  static Color withOpacity(Color color, double opacity) {
+    return color.withOpacity(opacity);
+  }
+
+  // 테마 데이터
+  static ThemeData get lightTheme {
+    return ThemeData(
+      primaryColor: primary,
+      scaffoldBackgroundColor: background,
+      colorScheme: const ColorScheme.light(
+        primary: primary,
+        secondary: secondary,
+        surface: surface,
+        background: background,
+        error: error,
+      ),
+      textTheme: const TextTheme(
+        bodyLarge: TextStyle(color: textPrimary),
+        bodyMedium: TextStyle(color: textPrimary),
+        bodySmall: TextStyle(color: textSecondary),
+      ),
+      appBarTheme: const AppBarTheme(
+        backgroundColor: white,
+        foregroundColor: textPrimary,
+        elevation: 0,
+      ),
+      cardTheme: CardThemeData(
+        color: white,
+        elevation: 2,
+        shadowColor: cardShadow,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: primary,
+          foregroundColor: white,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: primary,
+          side: const BorderSide(color: primary),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(foregroundColor: primary),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: grey50,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: grey300),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: grey300),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: primary),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: error),
+        ),
+      ),
+    );
+  }
+
+  // Material Colors
+  static const Color black = Colors.black;
+  static const Color transparent = Colors.transparent;
+
+  // Blue Colors
+  static const Color lightBlue50 = Color(0xFFE3F2FD);
+  static const Color lightBlue100 = Color(0xFFBBDEFB);
+  static const Color lightBlue200 = Color(0xFF90CAF9);
+  static const Color lightBlue300 = Color(0xFF64B5F6);
+  static const Color lightBlue400 = Color(0xFF42A5F5);
+  static const Color lightBlue500 = Color(0xFF2196F3);
+  static const Color lightBlue600 = Color(0xFF1E88E5);
+  static const Color lightBlue700 = Color(0xFF1976D2);
+  static const Color lightBlue800 = Color(0xFF1565C0);
+  static const Color lightBlue900 = Color(0xFF0D47A1);
+
+  // Status Colors
+  static const Color disabled = Color(0xFFBDBDBD);
+  static const Color pending = Color(0xFFFFA000);
+  static const Color completed = Color(0xFF43A047);
+  static const Color cancelled = Color(0xFFE53935);
 }

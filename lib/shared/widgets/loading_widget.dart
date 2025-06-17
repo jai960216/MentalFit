@@ -5,25 +5,32 @@ import '../../core/config/app_colors.dart';
 // === 기본 로딩 위젯 ===
 class LoadingWidget extends StatelessWidget {
   final String? message;
+  final double size;
   final Color? color;
-  final double? size;
+  final bool isFullScreen;
 
-  const LoadingWidget({super.key, this.message, this.color, this.size});
+  const LoadingWidget({
+    super.key,
+    this.message,
+    this.size = 24,
+    this.color,
+    this.isFullScreen = false,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Center(
+    final loadingIndicator = Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           SizedBox(
-            width: size ?? 40.w,
-            height: size ?? 40.w,
+            width: size.w,
+            height: size.w,
             child: CircularProgressIndicator(
+              strokeWidth: 2.w,
               valueColor: AlwaysStoppedAnimation<Color>(
                 color ?? AppColors.primary,
               ),
-              strokeWidth: 3.0,
             ),
           ),
           if (message != null) ...[
@@ -37,6 +44,15 @@ class LoadingWidget extends StatelessWidget {
         ],
       ),
     );
+
+    if (isFullScreen) {
+      return Scaffold(
+        backgroundColor: AppColors.background,
+        body: loadingIndicator,
+      );
+    }
+
+    return loadingIndicator;
   }
 }
 

@@ -250,16 +250,13 @@ class _AiChatRoomScreenState extends State<AiChatRoomScreen> {
                       vertical: 12.h,
                     ),
                     decoration: BoxDecoration(
-                      color: isUser ? AppColors.primary : Colors.grey[100],
+                      color: AppColors.primary,
                       borderRadius: BorderRadius.circular(16.r),
                     ),
                     constraints: BoxConstraints(maxWidth: 0.75.sw),
                     child: Text(
                       message.text,
-                      style: TextStyle(
-                        color: isUser ? Colors.white : AppColors.textPrimary,
-                        fontSize: 14.sp,
-                      ),
+                      style: TextStyle(color: Colors.white, fontSize: 14.sp),
                     ),
                   ),
                 );
