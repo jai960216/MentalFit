@@ -76,56 +76,88 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
+  /// 상태 업데이트 헬퍼 메서드
+  void _updateState({
+    User? user,
+    bool? isLoading,
+    String? error,
+    bool? isLoggedIn,
+    AuthStatus? status,
+  }) {
+    state = state.copyWith(
+      user: user,
+      isLoading: isLoading,
+      error: error,
+      isLoggedIn: isLoggedIn,
+      status: status,
+    );
+  }
+
+  /// 성공 상태 업데이트
+  void _updateSuccessState(User user) {
+    _updateState(
+      user: user,
+      isLoading: false,
+      isLoggedIn: true,
+      status: AuthStatus.authenticated,
+      error: null,
+    );
+  }
+
+  /// 에러 상태 업데이트
+  void _updateErrorState(
+    String errorMessage, {
+    AuthStatus status = AuthStatus.error,
+  }) {
+    _updateState(isLoading: false, error: errorMessage, status: status);
+  }
+
+  /// 로딩 상태 업데이트
+  void _updateLoadingState() {
+    _updateState(isLoading: true, error: null, status: AuthStatus.loading);
+  }
+
+  /// 로그아웃 상태 업데이트
+  void _updateLogoutState() {
+    _updateState(
+      user: null,
+      isLoading: false,
+      isLoggedIn: false,
+      status: AuthStatus.unauthenticated,
+      error: null,
+    );
+  }
+
   /// === 자동 로그인 체크 ===
   Future<void> checkAutoLogin() async {
     if (!_initialized) await _initializeServices();
 
-    state = state.copyWith(isLoading: true, status: AuthStatus.loading);
+    _updateLoadingState();
 
     try {
       final user = await _authService.checkAutoLogin();
 
       if (user != null) {
-        // 온보딩 미완료 상태라면 안내 후 로그아웃
         if (!(user.isOnboardingCompleted ?? false)) {
-          // 온보딩 미완료 안내 후 로그아웃 처리
-          state = state.copyWith(
+          _updateState(
             user: null,
             isLoading: false,
             isLoggedIn: false,
             status: AuthStatus.unauthenticated,
             error: '회원가입(온보딩) 미완료 상태입니다. 회원가입을 완료해주세요.',
           );
-          // 필요시: await logout();
           debugPrint('ℹ️ 온보딩 미완료 계정 자동 로그아웃');
           return;
         }
-        state = state.copyWith(
-          user: user,
-          isLoading: false,
-          isLoggedIn: true,
-          status: AuthStatus.authenticated,
-          error: null,
-        );
+        _updateSuccessState(user);
         debugPrint('✅ 자동 로그인 성공: ${user.email}');
       } else {
-        state = state.copyWith(
-          user: null,
-          isLoading: false,
-          isLoggedIn: false,
-          status: AuthStatus.unauthenticated,
-          error: null,
-        );
+        _updateLogoutState();
         debugPrint('ℹ️ 자동 로그인 불가: 로그인 필요');
       }
     } catch (e) {
+      _updateErrorState('자동 로그인 확인 중 오류가 발생했습니다: $e');
       debugPrint('❌ 자동 로그인 체크 실패: $e');
-      state = state.copyWith(
-        isLoading: false,
-        isLoggedIn: false,
-        status: AuthStatus.error,
-        error: '자동 로그인 확인 중 오류가 발생했습니다: $e',
-      );
     }
   }
 
@@ -136,41 +168,23 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }) async {
     if (!_initialized) await _initializeServices();
 
-    state = state.copyWith(
-      isLoading: true,
-      error: null,
-      status: AuthStatus.loading,
-    );
+    _updateLoadingState();
 
     try {
       final result = await _authService.login(email: email, password: password);
 
       if (result.success && result.user != null) {
-        state = state.copyWith(
-          user: result.user,
-          isLoading: false,
-          isLoggedIn: true,
-          status: AuthStatus.authenticated,
-          error: null,
-        );
+        _updateSuccessState(result.user!);
         debugPrint('✅ 로그인 성공: ${result.user!.email}');
       } else {
-        state = state.copyWith(
-          isLoading: false,
-          status: AuthStatus.error,
-          error: result.error,
-        );
+        _updateErrorState(result.error ?? '로그인에 실패했습니다.');
         debugPrint('❌ 로그인 실패: ${result.error}');
       }
 
       return result;
     } catch (e) {
+      _updateErrorState('로그인 중 오류가 발생했습니다: $e');
       debugPrint('❌ 로그인 중 오류: $e');
-      state = state.copyWith(
-        isLoading: false,
-        status: AuthStatus.error,
-        error: '로그인 중 오류가 발생했습니다: $e',
-      );
       return AuthResult.failure(e.toString());
     }
   }
@@ -314,32 +328,45 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
+  /// === Apple 소셜 로그인 ===
+  Future<AuthResult> signInWithApple() async {
+    if (!_initialized) await _initializeServices();
+
+    _updateLoadingState();
+
+    try {
+      final result = await _socialAuthService.signInWithApple();
+
+      if (result.success && result.user != null) {
+        _updateSuccessState(result.user!);
+        debugPrint('✅ Apple 로그인 성공: ${result.user!.email}');
+      } else {
+        _updateErrorState(result.error ?? 'Apple 로그인에 실패했습니다.');
+        debugPrint('❌ Apple 로그인 실패: ${result.error}');
+      }
+
+      return result;
+    } catch (e) {
+      _updateErrorState('Apple 로그인 중 오류가 발생했습니다: $e');
+      debugPrint('❌ Apple 로그인 중 오류: $e');
+      return AuthResult.failure(e.toString());
+    }
+  }
+
   /// === 로그아웃 ===
   Future<void> logout() async {
     if (!_initialized) await _initializeServices();
 
-    state = state.copyWith(isLoading: true);
+    _updateLoadingState();
 
     try {
-      // 모든 소셜 로그인 로그아웃
       await _socialAuthService.signOutAll();
-
-      // Firebase Auth 로그아웃
       await _authService.logout();
-
-      state = const AuthState(
-        status: AuthStatus.unauthenticated,
-        isLoading: false,
-      );
-
+      _updateLogoutState();
       debugPrint('✅ 로그아웃 완료');
     } catch (e) {
       debugPrint('❌ 로그아웃 중 오류: $e');
-      // 로그아웃은 실패해도 로컬 상태는 초기화
-      state = const AuthState(
-        status: AuthStatus.unauthenticated,
-        isLoading: false,
-      );
+      _updateLogoutState(); // 로그아웃은 실패해도 로컬 상태는 초기화
     }
   }
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
+import 'dart:io' show Platform;
 import '../../core/config/app_colors.dart';
 import '../../core/config/app_routes.dart';
 import '../../core/network/error_handler.dart';
@@ -150,6 +151,40 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           GlobalErrorHandler.showErrorSnackBar(
             context,
             result.error ?? 'Kakao 로그인에 실패했습니다.',
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        GlobalErrorHandler.showErrorSnackBar(context, e);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _handleAppleLogin() async {
+    setState(() => _isLoading = true);
+
+    try {
+      final result = await ref.read(authProvider.notifier).signInWithApple();
+
+      if (result.success && result.user != null) {
+        if (mounted) {
+          // 온보딩 완료 여부에 따라 라우팅
+          if (result.user!.isOnboardingCompleted) {
+            context.go(AppRoutes.home);
+          } else {
+            context.go(AppRoutes.onboardingBasicInfo);
+          }
+        }
+      } else {
+        if (mounted) {
+          GlobalErrorHandler.showErrorSnackBar(
+            context,
+            result.error ?? 'Apple 로그인에 실패했습니다.',
           );
         }
       }
@@ -313,7 +348,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               ),
             ],
           ),
-          child: Icon(Icons.psychology, size: 40.sp, color: AppColors.primary),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(20.r),
+            child: Image.asset(
+              'assets/images/app_icon.png',
+              width: 60.w,
+              height: 60.w,
+              fit: BoxFit.contain,
+            ),
+          ),
         ),
         SizedBox(height: 24.h),
         Text(
@@ -424,7 +467,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         Expanded(
           child: _SocialLoginButton(
             onPressed: _isLoading ? null : _handleGoogleLogin,
-            icon: Icons.g_mobiledata, // 실제로는 Google 아이콘 사용
+            icon: Icons.g_mobiledata,
             backgroundColor: AppColors.white,
             iconColor: AppColors.error,
             label: 'Google',
@@ -434,22 +477,23 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         Expanded(
           child: _SocialLoginButton(
             onPressed: _isLoading ? null : _handleKakaoLogin,
-            icon: Icons.chat_bubble, // 실제로는 카카오 아이콘 사용
+            icon: Icons.chat_bubble,
             backgroundColor: const Color(0xFFFEE500),
             iconColor: AppColors.black,
             label: 'Kakao',
           ),
         ),
         SizedBox(width: 12.w),
-        Expanded(
-          child: _SocialLoginButton(
-            onPressed: null, // 아직 미구현
-            icon: Icons.apple,
-            backgroundColor: Colors.black,
-            iconColor: Colors.white,
-            label: 'Apple',
+        if (Platform.isIOS)
+          Expanded(
+            child: _SocialLoginButton(
+              onPressed: _isLoading ? null : _handleAppleLogin,
+              icon: Icons.apple,
+              backgroundColor: Colors.black,
+              iconColor: Colors.white,
+              label: 'Apple',
+            ),
           ),
-        ),
       ],
     );
   }

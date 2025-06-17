@@ -70,12 +70,38 @@ class ApiClient {
         onError: (error, handler) async {
           // 401 에러 시 토큰 갱신 시도
           if (error.response?.statusCode == 401) {
-            // 여기서는 간단하게 로그아웃 처리
+            try {
+              // 토큰 갱신 시도
+              final authHeader = await _tokenManager.getAuthorizationHeader();
+              if (authHeader != null) {
+                // 원래 요청 재시도
+                final response = await _retryRequest(error.requestOptions);
+                return handler.resolve(response);
+              }
+            } catch (e) {
+              debugPrint('토큰 갱신 실패: $e');
+            }
+            // 토큰 갱신 실패 시 로그아웃
             await _tokenManager.clearTokens();
           }
           handler.next(error);
         },
       ),
+    );
+  }
+
+  // 요청 재시도 메서드
+  Future<Response<dynamic>> _retryRequest(RequestOptions requestOptions) async {
+    final options = Options(
+      method: requestOptions.method,
+      headers: requestOptions.headers,
+    );
+
+    return _dio.request<dynamic>(
+      requestOptions.path,
+      data: requestOptions.data,
+      queryParameters: requestOptions.queryParameters,
+      options: options,
     );
   }
 
@@ -225,7 +251,17 @@ class ApiClient {
           errorMessage = '네트워크 연결을 확인해주세요.';
           break;
         case DioExceptionType.badResponse:
-          errorMessage = '서버 응답 오류: ${error.response?.statusCode}';
+          final statusCode = error.response?.statusCode;
+          final data = error.response?.data;
+
+          if (data is Map<String, dynamic> && data.containsKey('message')) {
+            errorMessage = data['message'];
+          } else {
+            errorMessage = '서버 응답 오류: $statusCode';
+          }
+          break;
+        case DioExceptionType.cancel:
+          errorMessage = '요청이 취소되었습니다.';
           break;
         default:
           errorMessage = '네트워크 오류가 발생했습니다.';

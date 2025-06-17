@@ -145,6 +145,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
           padding: EdgeInsets.all(20.w),
           child: Column(
             children: [
+              SizedBox(height: 32.h),
               // === 프로필 헤더 ===
               FadeTransition(
                 opacity: _cardAnimation,

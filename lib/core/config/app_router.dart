@@ -362,6 +362,17 @@ class AppRouter {
     }
   }
 
+  // 동적 라우트 패턴 상수 추가
+  static final _dynamicRoutePatterns = {
+    'chatRoom': RegExp(r'^/chat/room/[^/]+$'),
+    'counselorDetail': RegExp(r'^/counselor/detail/[^/]+$'),
+    'bookingCalendar': RegExp(r'^/booking/calendar/[^/]+$'),
+    'bookingConfirm': RegExp(r'^/booking/confirm/[^/]+$'),
+    'recordDetail': RegExp(r'^/records/detail/[^/]+$'),
+    'selfCheckTest': RegExp(r'^/self-check/test/[^/]+$'),
+    'selfCheckResult': RegExp(r'^/self-check/result/[^/]+$'),
+  };
+
   /// 유효한 라우트인지 확인
   static bool _isValidRoute(String path) {
     final validBasePaths = [
@@ -399,16 +410,8 @@ class AppRouter {
     }
 
     // 동적 경로 패턴 매칭
-    final dynamicRoutePatterns = [
-      RegExp(r'^/chat/room/[^/]+$'),
-      RegExp(r'^/counselor/detail/[^/]+$'),
-      RegExp(r'^/booking/calendar/[^/]+$'),
-      RegExp(r'^/booking/confirm/[^/]+$'),
-      RegExp(r'^/records/detail/[^/]+$'),
-      RegExp(r'^/self-check/test/[^/]+$'),
-      RegExp(r'^/self-check/result/[^/]+$'),
-    ];
-
-    return dynamicRoutePatterns.any((pattern) => pattern.hasMatch(path));
+    return _dynamicRoutePatterns.values.any(
+      (pattern) => pattern.hasMatch(path),
+    );
   }
 }
