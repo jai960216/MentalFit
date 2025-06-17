@@ -28,6 +28,7 @@ import '../../screens/home/home_screen.dart';
 
 // AI Counseling
 import '../../screens/ai_counseling/ai_counseling_screen.dart';
+import '../../screens/ai_counseling/ai_chat_room_screen.dart';
 
 // Chat
 import '../../screens/chat/chat_list_screen.dart';
@@ -134,9 +135,19 @@ class AppRouter {
 
       // === Chat Routes ===
       GoRoute(
-        path: AppRoutes.chatList,
-        name: 'chat-list',
-        builder: (context, state) => const ChatListScreen(),
+        path: '${AppRoutes.aiChatRoom}/:roomId',
+        name: 'ai-chat-room',
+        builder: (context, state) {
+          final roomId = state.pathParameters['roomId'];
+          if (roomId == null ||
+              !(roomId == 'new' || roomId.startsWith('ai-'))) {
+            return ErrorScreen(
+              error: 'AI 채팅방 ID가 올바르지 않습니다.',
+              onRetry: () => context.go(AppRoutes.aiCounseling),
+            );
+          }
+          return AiChatRoomScreen(roomId: roomId);
+        },
       ),
       GoRoute(
         path: '${AppRoutes.chatRoom}/:roomId',
@@ -338,6 +349,13 @@ class AppRouter {
         builder: (context, state) => const PlaceholderScreen(title: '도움말'),
       ),
 
+      // === Chat List Route 추가 ===
+      GoRoute(
+        path: AppRoutes.chatList, // '/chat/list'
+        name: 'chat-list',
+        builder: (context, state) => ChatListScreen(),
+      ),
+
       // === 404 Not Found Route ===
       GoRoute(
         path: '/404',
@@ -378,7 +396,8 @@ class AppRouter {
 
   // 동적 라우트 패턴 상수 추가
   static final _dynamicRoutePatterns = {
-    'chatRoom': RegExp(r'^/chat/room/[^/]+$'),
+    'aiChatRoom': RegExp(r'^/chat/ai/[^/]+$'),
+    'chatRoom': RegExp(r'^/chat/room/(?!ai-)[^/]+$'),
     'counselorDetail': RegExp(r'^/counselor/detail/[^/]+$'),
     'bookingCalendar': RegExp(r'^/booking/calendar/[^/]+$'),
     'bookingConfirm': RegExp(r'^/booking/confirm/[^/]+$'),

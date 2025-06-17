@@ -14,7 +14,7 @@ class AIChatLocalService {
   // 상담방 생성
   static Future<AIChatRoom> createRoom(String topic) async {
     final box = await _roomBox();
-    final id = const Uuid().v4();
+    final id = 'ai-${const Uuid().v4()}';
     final room = AIChatRoom(
       id: id,
       topic: topic,
@@ -87,6 +87,56 @@ class AIChatLocalService {
     final msgs = box.values.where((m) => m.roomId == roomId).toList();
     for (final m in msgs) {
       await m.delete();
+    }
+  }
+
+  // === AI 챗방 ID 마이그레이션 ===
+  static Future<void> migrateRoomIds() async {
+    final box = await _roomBox();
+    final msgBox = await _messageBox();
+    final rooms = box.values.toList();
+    for (final room in rooms) {
+      if (!room.id.startsWith('ai-')) {
+        final oldId = room.id;
+        final newId = 'ai-$oldId';
+        // 방 id 변경
+        final migratedRoom = AIChatRoom(
+          id: newId,
+          topic: room.topic,
+          createdAt: room.createdAt,
+          lastMessage: room.lastMessage,
+          lastMessageAt: room.lastMessageAt,
+        );
+        await box.put(newId, migratedRoom);
+        await box.delete(oldId);
+        // 메시지 roomId도 변경
+        final msgs = msgBox.values.where((m) => m.roomId == oldId).toList();
+        for (final m in msgs) {
+          m.roomId = newId;
+          await m.save();
+        }
+      }
+    }
+    // box를 닫았다가 다시 열어 캐시 초기화
+    await box.close();
+    await msgBox.close();
+    await _roomBox();
+    await _messageBox();
+  }
+
+  // === AI 챗방 topic 마이그레이션 ===
+  static Future<void> migrateRoomTopics() async {
+    final box = await _roomBox();
+    final rooms = box.values.toList();
+    for (final room in rooms) {
+      String newTopic = room.topic;
+      if (newTopic == 'anxiety_stress') newTopic = 'anxiety';
+      if (newTopic == 'rehab') newTopic = 'injury';
+      if (newTopic == '일반 상담') newTopic = 'general';
+      if (room.topic != newTopic) {
+        room.topic = newTopic;
+        await room.save();
+      }
     }
   }
 }

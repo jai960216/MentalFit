@@ -2,17 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import '../../core/config/app_colors.dart';
 import '../../shared/models/ai_chat_models.dart';
+import '../../shared/services/ai_chat_local_service.dart';
 
 class AiCounselingHistoryList extends StatelessWidget {
   final List<AIChatRoom> aiRooms;
   final List<Map<String, dynamic>> topics;
   final String Function(String topicId) getTopicTitle;
   final Function(AIChatRoom room) onEnterRoom;
+  final Function()? onRoomDeleted;
   const AiCounselingHistoryList({
     required this.aiRooms,
     required this.topics,
     required this.getTopicTitle,
     required this.onEnterRoom,
+    this.onRoomDeleted,
     super.key,
   });
 
@@ -45,7 +48,7 @@ class AiCounselingHistoryList extends StatelessWidget {
             ),
             SizedBox(height: 8.h),
             Text(
-              '주제를 선택해 전문 상담사와 대화를 시작해보세요',
+              '주제를 선택해 AI와와 대화를 시작해보세요',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 14.sp, color: AppColors.textHint),
             ),
@@ -55,7 +58,7 @@ class AiCounselingHistoryList extends StatelessWidget {
     }
     return ListView.separated(
       shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
+      physics: const AlwaysScrollableScrollPhysics(),
       itemCount: aiRooms.length,
       separatorBuilder: (_, __) => SizedBox(height: 12.h),
       itemBuilder: (context, idx) {
@@ -65,64 +68,112 @@ class AiCounselingHistoryList extends StatelessWidget {
           (t) => t['id'] == room.topic,
           orElse: () => topics[0],
         );
-        return Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12.r),
-            border: Border.all(color: AppColors.grey200),
-          ),
-          child: ListTile(
-            onTap: () => onEnterRoom(room),
-            contentPadding: EdgeInsets.symmetric(
-              horizontal: 16.w,
-              vertical: 8.h,
+        return Dismissible(
+          key: ValueKey(room.id),
+          direction: DismissDirection.endToStart,
+          background: Container(
+            alignment: Alignment.centerRight,
+            padding: EdgeInsets.only(right: 20.w),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  Colors.transparent,
+                  Colors.red.withOpacity(0.1),
+                  Colors.red.withOpacity(0.8),
+                ],
+                stops: const [0.0, 0.7, 1.0],
+                begin: Alignment.centerLeft,
+                end: Alignment.centerRight,
+              ),
+              borderRadius: BorderRadius.circular(12.r),
             ),
-            leading: Container(
-              width: 40.w,
-              height: 40.w,
+            child: Container(
+              width: 56.w,
+              height: 56.w,
               decoration: BoxDecoration(
-                color: topic['color'].withOpacity(0.1),
-                borderRadius: BorderRadius.circular(10.r),
+                color: Colors.red.withOpacity(0.9),
+                borderRadius: BorderRadius.circular(12.r),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.red.withOpacity(0.3),
+                    blurRadius: 8,
+                    offset: const Offset(-2, 2),
+                  ),
+                ],
               ),
-              child: Icon(topic['icon'], color: topic['color'], size: 20.sp),
-            ),
-            title: Text(
-              topicTitle,
-              style: TextStyle(
-                fontWeight: FontWeight.w600,
-                fontSize: 15.sp,
-                color: AppColors.textPrimary,
+              child: Icon(
+                Icons.delete_outline_rounded,
+                color: Colors.white,
+                size: 24.sp,
               ),
             ),
-            subtitle: Padding(
-              padding: EdgeInsets.only(top: 4.h),
-              child: Text(
-                room.lastMessage ?? '새로운 상담',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+          ),
+          onDismissed: (_) async {
+            await AIChatLocalService.deleteRoom(room.id);
+            if (onRoomDeleted != null) onRoomDeleted!();
+          },
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12.r),
+              border: Border.all(color: AppColors.grey200),
+            ),
+            child: ListTile(
+              onTap: () => onEnterRoom(room),
+              contentPadding: EdgeInsets.symmetric(
+                horizontal: 16.w,
+                vertical: 8.h,
+              ),
+              leading: Container(
+                width: 40.w,
+                height: 40.w,
+                decoration: BoxDecoration(
+                  color: topic['color'].withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10.r),
+                ),
+                child: Icon(topic['icon'], color: topic['color'], size: 20.sp),
+              ),
+              title: Text(
+                topicTitle,
                 style: TextStyle(
-                  fontSize: 13.sp,
-                  color: AppColors.textSecondary,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 15.sp,
+                  color: AppColors.textPrimary,
                 ),
               ),
-            ),
-            trailing: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  room.lastMessageAt != null
-                      ? '${room.lastMessageAt!.month}/${room.lastMessageAt!.day}'
-                      : '',
-                  style: TextStyle(fontSize: 12.sp, color: AppColors.textHint),
+              subtitle: Padding(
+                padding: EdgeInsets.only(top: 4.h),
+                child: Text(
+                  room.lastMessage ?? '새로운 상담',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 13.sp,
+                    color: AppColors.textSecondary,
+                  ),
                 ),
-                SizedBox(height: 2.h),
-                Icon(
-                  Icons.chevron_right_rounded,
-                  size: 18.sp,
-                  color: AppColors.textHint,
-                ),
-              ],
+              ),
+              trailing: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    room.lastMessageAt != null
+                        ? '${room.lastMessageAt!.month}/${room.lastMessageAt!.day}'
+                        : '',
+                    style: TextStyle(
+                      fontSize: 12.sp,
+                      color: AppColors.textHint,
+                    ),
+                  ),
+                  SizedBox(height: 2.h),
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    size: 18.sp,
+                    color: AppColors.textHint,
+                  ),
+                ],
+              ),
             ),
           ),
         );
