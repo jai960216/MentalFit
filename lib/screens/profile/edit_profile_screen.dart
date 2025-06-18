@@ -12,6 +12,7 @@ import '../../shared/widgets/custom_button.dart';
 import '../../shared/widgets/custom_text_field.dart';
 import '../../shared/widgets/loading_widget.dart';
 import '../../providers/auth_provider.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 
 class EditProfileScreen extends ConsumerStatefulWidget {
   const EditProfileScreen({super.key});
@@ -148,15 +149,31 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen>
       if (pickedFile != null) {
         setState(() {
           _selectedProfileImage = File(pickedFile.path);
-          // 나중에 서버 업로드 후 URL을 받으면 _selectedProfileImageUrl 설정
         });
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('프로필 이미지가 선택되었습니다'),
-            backgroundColor: AppColors.success,
-          ),
-        );
+        // Firebase Storage에 이미지 업로드
+        final user = ref.read(authProvider).user;
+        if (user != null) {
+          final storageRef = FirebaseStorage.instance
+              .ref()
+              .child('profile_images')
+              .child('${user.id}_${DateTime.now().millisecondsSinceEpoch}.jpg');
+
+          final uploadTask = storageRef.putFile(_selectedProfileImage!);
+          final snapshot = await uploadTask;
+          final downloadUrl = await snapshot.ref.getDownloadURL();
+
+          setState(() {
+            _selectedProfileImageUrl = downloadUrl;
+          });
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('프로필 이미지가 업로드되었습니다'),
+              backgroundColor: AppColors.success,
+            ),
+          );
+        }
       }
     } catch (e) {
       GlobalErrorHandler.showErrorSnackBar(context, e);

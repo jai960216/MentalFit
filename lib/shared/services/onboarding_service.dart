@@ -336,12 +336,9 @@ class OnboardingService {
     final confidenceLevel = data.confidenceLevel ?? 5;
     final motivationLevel = data.motivationLevel ?? 5;
 
+    // 모든 항목을 10점 만점 기준으로 계산
     final overallScore =
-        (confidenceLevel +
-            motivationLevel +
-            (10 - stressLevel) +
-            (10 - anxietyLevel)) /
-        4;
+        (stressLevel + anxietyLevel + confidenceLevel + motivationLevel) / 4;
 
     String riskLevel;
     String summary;

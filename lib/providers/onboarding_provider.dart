@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../shared/models/onboarding_model.dart';
+import 'package:flutter/foundation.dart';
 
 // 온보딩 상태 관리
 class OnboardingNotifier extends StateNotifier<OnboardingData> {
@@ -82,6 +83,50 @@ class OnboardingNotifier extends StateNotifier<OnboardingData> {
         state = state.copyWith(preferredTimes: value as List<String>?);
         break;
     }
+  }
+
+  // 회원가입 정보를 온보딩에 반영하는 메서드
+  void setSignupInfo({
+    required String name,
+    String? birthDate,
+    String? sport,
+    String? goal,
+  }) {
+    state = state.copyWith(
+      name: name,
+      birthDate: birthDate,
+      sport: sport,
+      goal: goal,
+    );
+    debugPrint('✅ 회원가입 정보를 온보딩에 반영: $name');
+  }
+
+  // 회원가입 완료 여부 확인
+  bool get isSignupInfoComplete => state.name != null && state.name!.isNotEmpty;
+
+  // 온보딩 단계별 완료 상태 업데이트
+  void updateStepCompletion(int step, bool isCompleted) {
+    final currentSteps = state.completedSteps ?? [];
+    if (isCompleted && !currentSteps.contains(step)) {
+      state = state.copyWith(completedSteps: [...currentSteps, step]);
+    } else if (!isCompleted && currentSteps.contains(step)) {
+      state = state.copyWith(
+        completedSteps: currentSteps.where((s) => s != step).toList(),
+      );
+    }
+  }
+
+  // 현재 온보딩 단계 가져오기
+  int get currentStep {
+    final completedSteps = state.completedSteps ?? [];
+    if (completedSteps.isEmpty) return 1;
+    return completedSteps.last + 1;
+  }
+
+  // 온보딩 완료 여부 확인
+  bool get isOnboardingComplete {
+    final completedSteps = state.completedSteps ?? [];
+    return completedSteps.length >= 4; // 총 4단계
   }
 
   // 온보딩 완료

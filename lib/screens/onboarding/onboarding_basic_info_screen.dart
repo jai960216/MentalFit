@@ -219,7 +219,7 @@ class _OnboardingBasicInfoScreenState
         backgroundColor: AppColors.white,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: _isLoading ? null : () => context.pop(),
+          onPressed: _isLoading ? null : () => context.go(AppRoutes.login),
         ),
       ),
       body: SafeArea(
@@ -368,7 +368,9 @@ class _OnboardingBasicInfoScreenState
           ),
           child: Column(
             children:
-                UserType.values.map((type) {
+                UserType.values.where((type) => type != UserType.master).map((
+                  type,
+                ) {
                   final isSelected = _selectedUserType == type;
                   return GestureDetector(
                     onTap:
