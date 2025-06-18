@@ -52,7 +52,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     context.push(AppRoutes.counselorList);
   }
 
-  void _handleChatListTap() {
+  void _handleChatTap() {
     context.push(AppRoutes.chatList);
   }
 
@@ -286,7 +286,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         subtitle: '',
         icon: Icons.chat_bubble,
         color: AppColors.accent,
-        onTap: _handleChatListTap,
+        onTap: _handleChatTap,
       ),
     ];
 

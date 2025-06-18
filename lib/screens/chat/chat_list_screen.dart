@@ -11,6 +11,9 @@ import '../../shared/models/chat_room_model.dart';
 import '../../shared/models/user_model.dart';
 import '../../providers/chat_provider.dart';
 import '../../providers/auth_provider.dart';
+import '../ai_counseling/ai_counseling_history_list.dart';
+import '../../shared/services/ai_chat_local_service.dart';
+import '../../shared/models/ai_chat_models.dart';
 
 class ChatListScreen extends ConsumerStatefulWidget {
   const ChatListScreen({super.key});
@@ -28,7 +31,7 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 2, vsync: this);
     WidgetsBinding.instance.addPostFrameCallback((_) => _initialize());
   }
 
@@ -50,7 +53,7 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen>
         } catch (e) {
           debugPrint('초기화 시도 $attempts 실패: $e');
           if (attempts < 3) {
-            await Future.delayed(Duration(seconds: attempts)); // 점진적 지연
+            await Future.delayed(Duration(seconds: attempts));
           }
         }
       }
@@ -69,7 +72,7 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen>
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _isInitialized = true); // 실패해도 UI는 표시
+        setState(() => _isInitialized = true);
         GlobalErrorHandler.showErrorSnackBar(context, e);
       }
     } finally {
@@ -106,7 +109,6 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen>
       body: TabBarView(
         controller: _tabController,
         children: [
-          _buildTab(state, user, 'all'),
           _buildTab(state, user, 'ai'),
           _buildTab(state, user, 'counselor'),
         ],
@@ -142,7 +144,7 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen>
       ],
       bottom: TabBar(
         controller: _tabController,
-        tabs: const [Tab(text: '전체'), Tab(text: 'AI 상담'), Tab(text: '상담사')],
+        tabs: const [Tab(text: 'AI 상담'), Tab(text: '상담사')],
       ),
     );
   }
@@ -159,6 +161,100 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen>
   }
 
   Widget _buildTab(ChatListState state, User? user, String tabType) {
+    if (tabType == 'ai') {
+      final List<Map<String, dynamic>> topics = [
+        {
+          'id': 'anxiety',
+          'title': '불안/스트레스',
+          'description': '경기 전 불안과 스트레스 관리',
+          'icon': Icons.psychology,
+          'color': Colors.blue,
+        },
+        {
+          'id': 'confidence',
+          'title': '자신감/동기부여',
+          'description': '자신감 향상과 동기부여',
+          'icon': Icons.emoji_events,
+          'color': Colors.orange,
+        },
+        {
+          'id': 'focus',
+          'title': '집중력/수행력',
+          'description': '경기 중 집중력 향상',
+          'icon': Icons.center_focus_strong,
+          'color': Colors.green,
+        },
+        {
+          'id': 'teamwork',
+          'title': '팀워크/리더십',
+          'description': '팀 내 관계와 리더십',
+          'icon': Icons.group,
+          'color': Colors.purple,
+        },
+        {
+          'id': 'injury',
+          'title': '부상/재활',
+          'description': '부상 후 심리적 회복',
+          'icon': Icons.healing,
+          'color': Colors.red,
+        },
+        {
+          'id': 'performance',
+          'title': '경기력 향상',
+          'description': '전체적인 경기력 개선',
+          'icon': Icons.trending_up,
+          'color': Colors.teal,
+        },
+      ];
+      String getTopicTitle(String topicId) {
+        final topic = topics.firstWhere(
+          (t) => t['id'] == topicId,
+          orElse: () => topics[0],
+        );
+        return topic['title'] as String;
+      }
+
+      return Padding(
+        padding: EdgeInsets.all(16.w),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                icon: Icon(Icons.smart_toy),
+                label: Text('AI 상담 시작'),
+                onPressed: () => context.push(AppRoutes.aiCounseling),
+              ),
+            ),
+            SizedBox(height: 24.h),
+            Expanded(
+              child: FutureBuilder<List<AIChatRoom>>(
+                future: AIChatLocalService.getRooms(),
+                builder: (context, snapshot) {
+                  final aiRooms = snapshot.data ?? [];
+                  return AiCounselingHistoryList(
+                    aiRooms: aiRooms,
+                    topics: topics,
+                    getTopicTitle: getTopicTitle,
+                    onEnterRoom: (room) {
+                      context.push(
+                        '${AppRoutes.aiChatRoom}/${room.id}',
+                        extra: {
+                          'type': 'ai',
+                          'topicId': room.topic,
+                          'title': getTopicTitle(room.topic),
+                        },
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      );
+    }
     // 탭에 따른 채팅방 필터링
     List<ChatRoom> rooms;
     switch (tabType) {
@@ -191,17 +287,13 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen>
     // 3. 에러 + 빈 데이터
     if (state.error != null && rooms.isEmpty) {
       ChatRoomType errorType =
-          tabType == 'ai'
-              ? ChatRoomType.ai
-              : tabType == 'counselor'
-              ? ChatRoomType.counselor
-              : ChatRoomType.ai;
+          tabType == 'ai' ? ChatRoomType.ai : ChatRoomType.counselor;
 
       return ChatErrorWidgets.buildErrorState(
         errorType,
         state.error!,
         _refresh,
-        _createNewAIChat,
+        tabType == 'ai' ? () => context.push(AppRoutes.aiCounseling) : () {},
         () => context.push(AppRoutes.counselorList),
       );
     }
@@ -209,15 +301,11 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen>
     // 4. 빈 상태
     if (rooms.isEmpty) {
       ChatRoomType emptyType =
-          tabType == 'ai'
-              ? ChatRoomType.ai
-              : tabType == 'counselor'
-              ? ChatRoomType.counselor
-              : ChatRoomType.ai;
+          tabType == 'ai' ? ChatRoomType.ai : ChatRoomType.counselor;
 
       return ChatErrorWidgets.buildEmptyState(
         emptyType,
-        _createNewAIChat,
+        tabType == 'ai' ? () => context.push(AppRoutes.aiCounseling) : () {},
         () => context.push(AppRoutes.counselorList),
       );
     }
@@ -248,8 +336,11 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen>
   }
 
   void _enterChatRoom(ChatRoom chatRoom) {
-    // 읽음 처리는 채팅방 진입 시 자동으로 처리됨
-    context.push('${AppRoutes.chatRoom}/${chatRoom.id}');
+    if (chatRoom.type == ChatRoomType.ai) {
+      context.push(AppRoutes.aiCounseling);
+    } else {
+      context.push('${AppRoutes.chatRoom}/${chatRoom.id}');
+    }
   }
 
   void _showChatRoomOptions(ChatRoom chatRoom) {
@@ -337,7 +428,7 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen>
                   subtitle: const Text('AI와 즉시 대화를 시작합니다'),
                   onTap: () {
                     Navigator.pop(context);
-                    _createNewAIChat();
+                    context.push(AppRoutes.aiCounseling);
                   },
                 ),
                 ListTile(
@@ -353,20 +444,5 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen>
             ),
           ),
     );
-  }
-
-  void _createNewAIChat() async {
-    try {
-      final chatRoomId =
-          await ref.read(chatListProvider.notifier).createAIChatRoom();
-
-      if (mounted && chatRoomId != null) {
-        context.push('${AppRoutes.chatRoom}/$chatRoomId');
-      }
-    } catch (e) {
-      if (mounted) {
-        GlobalErrorHandler.showErrorSnackBar(context, e);
-      }
-    }
   }
 }

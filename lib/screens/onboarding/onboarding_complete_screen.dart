@@ -91,14 +91,83 @@ class _OnboardingCompleteScreenState
     }
   }
 
-  // Mock 분석 데이터 생성
+  // Mock 분석 데이터 생성 - 수정된 버전
   OnboardingAnalysis _createMockAnalysis(OnboardingData data) {
+    // 디버깅용 로그 추가
+    debugPrint(
+      '[OnboardingAnalysis] data: stress=${data.stressLevel}, anxiety=${data.anxietyLevel}, confidence=${data.confidenceLevel}, motivation=${data.motivationLevel}',
+    );
+
+    final stressLevel = data.stressLevel ?? 5;
+    final anxietyLevel = data.anxietyLevel ?? 5;
+    final confidenceLevel = data.confidenceLevel ?? 5;
+    final motivationLevel = data.motivationLevel ?? 5;
+
+    // ✅ 수정: 올바른 평균 계산
+    // 스트레스와 불안은 낮을수록 좋고, 자신감과 동기는 높을수록 좋음
+    // 하지만 여기서는 단순히 4개 항목의 평균을 구함
+    final overallScore =
+        (stressLevel + anxietyLevel + confidenceLevel + motivationLevel) / 4.0;
+
+    // 또는 가중치를 고려한 계산을 원한다면:
+    // final overallScore = ((10 - stressLevel) + (10 - anxietyLevel) + confidenceLevel + motivationLevel) / 4.0;
+
+    // 상태 평가 로직
+    String recommendation;
+    List<String> strengths = [];
+    List<String> improvements = [];
+
+    // 개별 점수 분석
+    if (confidenceLevel >= 7) {
+      strengths.add('높은 자신감');
+    } else if (confidenceLevel <= 4) {
+      improvements.add('자신감 향상');
+    }
+
+    if (motivationLevel >= 7) {
+      strengths.add('강한 동기');
+    } else if (motivationLevel <= 4) {
+      improvements.add('동기 부여');
+    }
+
+    if (stressLevel <= 4) {
+      strengths.add('낮은 스트레스');
+    } else if (stressLevel >= 7) {
+      improvements.add('스트레스 관리');
+    }
+
+    if (anxietyLevel <= 4) {
+      strengths.add('안정적인 심리상태');
+    } else if (anxietyLevel >= 7) {
+      improvements.add('불안감 완화');
+    }
+
+    // 기본값 설정
+    if (strengths.isEmpty) {
+      strengths.add('긍정적인 마인드');
+    }
+    if (improvements.isEmpty) {
+      improvements.add('지속적인 관리');
+    }
+
+    // 종합 추천사항
+    if (overallScore >= 7.5) {
+      recommendation =
+          '전반적으로 매우 안정적인 심리 상태를 보이고 있습니다. 현재 상태를 유지하며 꾸준한 관리를 권장합니다.';
+    } else if (overallScore >= 6.0) {
+      recommendation = '대체로 양호한 상태이나 일부 영역에서 개선이 필요합니다. 정기적인 상담을 통한 관리를 권장합니다.';
+    } else if (overallScore >= 4.0) {
+      recommendation = '전반적으로 관리가 필요한 상태입니다. 정기적인 상담과 운동을 권장합니다.';
+    } else {
+      recommendation = '심리적 지원이 필요한 상태입니다. 전문가와의 상담을 적극 권장합니다.';
+    }
+
     return OnboardingAnalysis(
-      overallScore: 5.3,
-      stressLevel: data.stressLevel ?? 5,
-      recommendation: '전반적으로 관리가 필요한 상태입니다. 정기적인 상담과 운동을 권장합니다.',
-      strengths: ['긍정적인 마인드', '목표 의식'],
-      improvements: ['스트레스 관리', '수면 패턴 개선'],
+      overallScore: double.parse(overallScore.toStringAsFixed(1)),
+      stressLevel: stressLevel,
+      recommendation: recommendation,
+      strengths: strengths,
+      improvements: improvements,
     );
   }
 
@@ -178,6 +247,13 @@ class _OnboardingCompleteScreenState
         title: const Text('분석 결과'),
         backgroundColor: AppColors.white,
         automaticallyImplyLeading: false,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed:
+              _isCompleting
+                  ? null
+                  : () => context.go(AppRoutes.onboardingPreferences),
+        ),
       ),
       body: SafeArea(
         child: Column(

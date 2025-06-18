@@ -181,7 +181,10 @@ class _OnboardingPreferencesScreenState
         backgroundColor: AppColors.white,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: _isLoading ? null : () => context.pop(),
+          onPressed:
+              _isLoading
+                  ? null
+                  : () => context.go(AppRoutes.onboardingMentalCheck),
         ),
       ),
       body: SafeArea(

@@ -153,11 +153,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
     final confirmed = await _showDeleteAccountDialog();
     if (!confirmed) return;
 
+    // 비밀번호 입력 다이얼로그
+    final password = await _showPasswordInputDialog();
+    if (password == null || password.isEmpty) return;
+
     setState(() => _isDeletingAccount = true);
 
     try {
-      // TODO: 실제로는 비밀번호 확인이 필요
-      final success = await ref.read(authProvider.notifier).deleteAccount('');
+      final success = await ref
+          .read(authProvider.notifier)
+          .deleteAccount(password);
 
       if (success && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -167,6 +172,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
           ),
         );
         context.go(AppRoutes.login);
+      } else if (mounted) {
+        GlobalErrorHandler.showErrorSnackBar(
+          context,
+          '계정 삭제에 실패했습니다. 비밀번호를 다시 확인해주세요.',
+        );
       }
     } catch (e) {
       if (mounted) {
@@ -177,6 +187,37 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
         setState(() => _isDeletingAccount = false);
       }
     }
+  }
+
+  // 비밀번호 입력 다이얼로그
+  Future<String?> _showPasswordInputDialog() async {
+    final controller = TextEditingController();
+    final result = await showDialog<String>(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('비밀번호 확인'),
+            content: TextField(
+              controller: controller,
+              obscureText: true,
+              decoration: const InputDecoration(
+                labelText: '비밀번호',
+                hintText: '계정 비밀번호를 입력하세요',
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, null),
+                child: const Text('취소'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, controller.text),
+                child: const Text('확인'),
+              ),
+            ],
+          ),
+    );
+    return result;
   }
 
   Future<bool> _showDeleteAccountDialog() async {

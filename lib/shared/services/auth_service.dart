@@ -90,17 +90,29 @@ class AuthService {
       );
 
       if (credential.user != null) {
-        // 사용자 표시명 업데이트
-        await credential.user!.updateDisplayName(name);
+        try {
+          // 사용자 표시명 업데이트
+          await credential.user!.updateDisplayName(name);
 
-        // Firestore에 사용자 정보 저장
-        final appUser = await _createUserInFirestore(
-          credential.user!,
-          name: name,
-          userType: userType,
-        );
+          // Firestore에 사용자 정보 저장
+          final appUser = await _createUserInFirestore(
+            credential.user!,
+            name: name,
+            userType: userType,
+          );
 
-        return AuthResult.success(appUser);
+          // Firestore 저장 확인
+          final savedUser = await _getUserFromFirestore(credential.user!.uid);
+          if (savedUser == null) {
+            throw Exception('Firestore에 사용자 정보 저장 실패');
+          }
+
+          return AuthResult.success(appUser);
+        } catch (e) {
+          // Firestore 저장 실패 시 Firebase Auth 사용자 삭제
+          await credential.user!.delete();
+          throw Exception('사용자 정보 저장 실패: $e');
+        }
       }
 
       return AuthResult.failure('회원가입에 실패했습니다.');
@@ -241,8 +253,11 @@ class AuthService {
       };
 
       if (name != null) updateData['name'] = name;
-      if (profileImageUrl != null)
+      if (profileImageUrl != null) {
         updateData['profileImageUrl'] = profileImageUrl;
+        // Firebase Auth 프로필 이미지 업데이트
+        await firebaseUser.updatePhotoURL(profileImageUrl);
+      }
       if (birthDate != null) updateData['birthDate'] = birthDate;
       if (sport != null) updateData['sport'] = sport;
       if (goal != null) updateData['goal'] = goal;
@@ -250,9 +265,6 @@ class AuthService {
       // Firebase Auth 프로필 업데이트
       if (name != null) {
         await firebaseUser.updateDisplayName(name);
-      }
-      if (profileImageUrl != null) {
-        await firebaseUser.updatePhotoURL(profileImageUrl);
       }
 
       // Firestore 문서 업데이트
@@ -262,9 +274,13 @@ class AuthService {
           .update(updateData);
 
       // 업데이트된 사용자 정보 반환
-      return await getCurrentUser();
+      final updatedUser = await getCurrentUser();
+      if (updatedUser != null) {
+        debugPrint('✅ 프로필 업데이트 성공: ${updatedUser.name}');
+      }
+      return updatedUser;
     } catch (e) {
-      debugPrint('프로필 업데이트 실패: $e');
+      debugPrint('❌ 프로필 업데이트 실패: $e');
       return null;
     }
   }

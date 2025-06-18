@@ -38,102 +38,106 @@ class FirestoreService {
 
   // === 사용자 관련 메서드 ===
 
-  /// 사용자 정보 저장/업데이트
+  /// 사용자 저장 (재시도 로직 포함)
   Future<bool> saveUser(User user) async {
-    try {
-      final userData = user.toJson();
+    int retryCount = 0;
+    const maxRetries = 3;
 
-      // DateTime을 Timestamp로 변환
-      userData['createdAt'] = Timestamp.fromDate(user.createdAt);
-      userData['updatedAt'] = Timestamp.fromDate(user.updatedAt);
+    while (retryCount < maxRetries) {
+      try {
+        final userDoc = _firestore.collection('users').doc(user.id);
 
-      // birthDate가 String이면 DateTime으로 파싱 후 Timestamp로 변환
-      if (user.birthDate != null && user.birthDate!.isNotEmpty) {
-        try {
-          final birthDateTime = DateTime.parse(user.birthDate!);
-          userData['birthDate'] = Timestamp.fromDate(birthDateTime);
-        } catch (e) {
-          debugPrint('❌ birthDate 파싱 오류: $e, 원본 값: ${user.birthDate}');
-          // 파싱 실패 시 문자열 그대로 저장
-          userData['birthDate'] = user.birthDate;
+        // 사용자 데이터를 Map으로 변환
+        final userData = {
+          'email': user.email,
+          'name': user.name,
+          'userType': user.userType.value,
+          'isOnboardingCompleted': user.isOnboardingCompleted ?? false,
+          'profileImageUrl': user.profileImageUrl,
+          'birthDate': user.birthDate,
+          'sport': user.sport,
+          'goal': user.goal,
+          'createdAt': user.createdAt,
+          'updatedAt': DateTime.now(),
+        };
+
+        // Firestore에 저장
+        await userDoc.set(userData, SetOptions(merge: true));
+
+        // 저장 확인
+        final savedDoc = await userDoc.get();
+        if (savedDoc.exists) {
+          debugPrint('✅ Firestore 사용자 저장 성공: ${user.email}');
+          return true;
+        } else {
+          throw Exception('저장 후 문서 확인 실패');
         }
+      } catch (e) {
+        retryCount++;
+        debugPrint('❌ Firestore 저장 시도 $retryCount 실패: $e');
+
+        if (retryCount >= maxRetries) {
+          debugPrint('❌ Firestore 저장 최종 실패: $e');
+          return false;
+        }
+
+        // 재시도 전 잠시 대기
+        await Future.delayed(Duration(milliseconds: 500 * retryCount));
       }
-
-      await _usersCollection
-          .doc(user.id)
-          .set(userData, SetOptions(merge: true));
-
-      debugPrint('✅ 사용자 정보 저장 완료: ${user.id}');
-      return true;
-    } catch (e) {
-      debugPrint('❌ 사용자 정보 저장 실패: $e');
-      return false;
     }
+
+    return false;
   }
 
-  /// 사용자 정보 조회
+  /// 사용자 조회
   Future<User?> getUser(String userId) async {
     try {
-      final doc = await _usersCollection.doc(userId).get();
+      final doc = await _firestore.collection('users').doc(userId).get();
 
       if (doc.exists && doc.data() != null) {
-        final data = doc.data() as Map<String, dynamic>;
-
-        // Timestamp를 DateTime으로 변환
-        if (data['createdAt'] is Timestamp) {
-          data['createdAt'] =
-              (data['createdAt'] as Timestamp).toDate().toIso8601String();
-        }
-        if (data['updatedAt'] is Timestamp) {
-          data['updatedAt'] =
-              (data['updatedAt'] as Timestamp).toDate().toIso8601String();
-        }
-
-        // birthDate 처리 - Timestamp면 String으로, 이미 String이면 그대로
-        if (data['birthDate'] is Timestamp) {
-          data['birthDate'] =
-              (data['birthDate'] as Timestamp).toDate().toIso8601String().split(
-                'T',
-              )[0];
-        } else if (data['birthDate'] is String) {
-          // 이미 String이면 그대로 사용 (YYYY-MM-DD 형식 유지)
-          data['birthDate'] = data['birthDate'];
-        }
-
-        return User.fromJson({'id': userId, ...data});
+        final data = doc.data()!;
+        return User.fromJson({
+          'id': userId,
+          ...data,
+          // Timestamp를 DateTime으로 변환
+          'createdAt':
+              (data['createdAt'] as Timestamp?)?.toDate().toIso8601String(),
+          'updatedAt':
+              (data['updatedAt'] as Timestamp?)?.toDate().toIso8601String(),
+        });
       }
 
+      debugPrint('❌ Firestore에서 사용자를 찾을 수 없음: $userId');
       return null;
     } catch (e) {
-      debugPrint('❌ 사용자 정보 조회 실패: $e');
+      debugPrint('❌ Firestore 사용자 조회 오류: $e');
       return null;
     }
   }
 
-  /// 사용자 정보 삭제
+  /// 사용자 삭제
   Future<bool> deleteUser(String userId) async {
     try {
-      await _usersCollection.doc(userId).delete();
-      debugPrint('✅ 사용자 정보 삭제 완료: $userId');
+      await _firestore.collection('users').doc(userId).delete();
+      debugPrint('✅ Firestore 사용자 삭제 성공: $userId');
       return true;
     } catch (e) {
-      debugPrint('❌ 사용자 정보 삭제 실패: $e');
+      debugPrint('❌ Firestore 사용자 삭제 실패: $e');
       return false;
     }
   }
 
-  /// 사용자의 온보딩 완료 상태 업데이트
+  /// 온보딩 상태 업데이트
   Future<bool> updateOnboardingStatus(String userId, bool isCompleted) async {
     try {
-      await _usersCollection.doc(userId).update({
+      await _firestore.collection('users').doc(userId).update({
         'isOnboardingCompleted': isCompleted,
-        'updatedAt': Timestamp.now(),
+        'updatedAt': DateTime.now(),
       });
-
-      debugPrint('✅ 온보딩 상태 업데이트 완료: $userId -> $isCompleted');
+      debugPrint('✅ Firestore 온보딩 상태 업데이트 성공: $userId');
       return true;
     } catch (e) {
-      debugPrint('❌ 온보딩 상태 업데이트 실패: $e');
+      debugPrint('❌ Firestore 온보딩 상태 업데이트 실패: $e');
       return false;
     }
   }
@@ -145,7 +149,7 @@ class FirestoreService {
   ) async {
     try {
       // 업데이트 시간 추가
-      updates['updatedAt'] = Timestamp.now();
+      updates['updatedAt'] = DateTime.now();
 
       await _usersCollection.doc(userId).update(updates);
 
@@ -318,14 +322,42 @@ class FirestoreService {
     }
   }
 
-  /// 서비스 상태 확인
-  Future<bool> isServiceHealthy() async {
+  /// 연결 상태 확인
+  Future<bool> checkConnection() async {
     try {
-      // 간단한 읽기 작업으로 연결 상태 확인
-      await _firestore.collection('_health_check').limit(1).get();
+      // Firestore 연결 테스트
+      await _firestore.collection('_connection_test').doc('test').get();
       return true;
     } catch (e) {
-      debugPrint('❌ Firestore 서비스 상태 확인 실패: $e');
+      debugPrint('❌ Firestore 연결 실패: $e');
+      return false;
+    }
+  }
+
+  /// 사용자 정보 업데이트
+  Future<bool> updateUser(String userId, Map<String, dynamic> data) async {
+    try {
+      final userDoc = _firestore.collection('users').doc(userId);
+
+      // updatedAt 필드 자동 업데이트
+      data['updatedAt'] = DateTime.now();
+
+      await userDoc.update(data);
+      debugPrint('✅ Firestore 사용자 정보 업데이트 성공: $userId');
+      return true;
+    } catch (e) {
+      debugPrint('❌ Firestore 사용자 정보 업데이트 실패: $e');
+      return false;
+    }
+  }
+
+  /// 사용자 존재 여부 확인
+  Future<bool> userExists(String userId) async {
+    try {
+      final doc = await _firestore.collection('users').doc(userId).get();
+      return doc.exists;
+    } catch (e) {
+      debugPrint('❌ Firestore 사용자 존재 여부 확인 실패: $e');
       return false;
     }
   }

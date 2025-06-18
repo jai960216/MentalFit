@@ -205,6 +205,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     );
 
     try {
+      // 1. Firebase Auth 회원가입 먼저 실행
       final result = await _authService.register(
         email: email,
         password: password,
@@ -213,6 +214,41 @@ class AuthNotifier extends StateNotifier<AuthState> {
       );
 
       if (result.success && result.user != null) {
+        // 2. Firestore 저장 확인 및 재시도
+        try {
+          await _firestoreService.saveUser(result.user!);
+          debugPrint('✅ Firestore 사용자 저장 완료: ${result.user!.email}');
+
+          // 3. 저장 확인을 위한 재조회
+          final savedUser = await _firestoreService.getUser(result.user!.id);
+          if (savedUser == null) {
+            // Firestore 저장 실패 시 재시도
+            debugPrint('🔄 Firestore 저장 재시도 중...');
+            await Future.delayed(const Duration(milliseconds: 500));
+            await _firestoreService.saveUser(result.user!);
+
+            // 재조회
+            final retrySavedUser = await _firestoreService.getUser(
+              result.user!.id,
+            );
+            if (retrySavedUser == null) {
+              throw Exception('Firestore 저장에 실패했습니다');
+            }
+          }
+        } catch (firestoreError) {
+          debugPrint('❌ Firestore 저장 오류: $firestoreError');
+          // Firestore 저장 실패해도 Firebase Auth는 성공했으므로 사용자에게 알림
+          state = state.copyWith(
+            user: result.user,
+            isLoading: false,
+            isLoggedIn: true,
+            status: AuthStatus.authenticated,
+            error: 'DB 저장 중 일부 오류가 발생했지만 회원가입은 완료되었습니다.',
+          );
+          return result;
+        }
+
+        // 4. 성공 상태 업데이트
         state = state.copyWith(
           user: result.user,
           isLoading: false,
@@ -452,6 +488,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
       // Firestore에도 업데이트
       _updateOnboardingStatusInFirestore(updatedUser);
+
+      // 인증 세션 꼬임 방지: 현재 Firebase Auth user와 id가 다르면 로그아웃
+      try {
+        final firebaseUserId = _authService.currentUserUid;
+        if (firebaseUserId != null && firebaseUserId != updatedUser.id) {
+          _authService.logout();
+        }
+      } catch (e) {
+        debugPrint('온보딩 후 세션 체크 오류: $e');
+      }
 
       debugPrint('✅ 온보딩 완료 표시');
     }

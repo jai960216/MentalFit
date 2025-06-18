@@ -18,12 +18,10 @@ class ChatRoomScreen extends ConsumerStatefulWidget {
   ConsumerState<ChatRoomScreen> createState() => _ChatRoomScreenState();
 }
 
-class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen>
-    with TickerProviderStateMixin {
+class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen> {
   // === 컨트롤러들 ===
   late TextEditingController _messageController;
   late ScrollController _scrollController;
-  late AnimationController _typingAnimationController;
 
   // === 상태 변수들 ===
   ChatRoom? _chatRoom;
@@ -41,10 +39,6 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen>
   void _initializeControllers() {
     _messageController = TextEditingController();
     _scrollController = ScrollController();
-    _typingAnimationController = AnimationController(
-      duration: const Duration(milliseconds: 1500),
-      vsync: this,
-    );
   }
 
   Future<void> _loadChatRoomInfo() async {
@@ -75,7 +69,6 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen>
   void dispose() {
     _messageController.dispose();
     _scrollController.dispose();
-    _typingAnimationController.dispose();
     super.dispose();
   }
 
@@ -154,18 +147,12 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen>
         onPressed: () => context.pop(),
       ),
       actions: [
-        if (_chatRoom?.isAIChat == true)
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _refreshMessages,
-          ),
         PopupMenuButton<String>(
           onSelected: _handleMenuAction,
           itemBuilder:
               (context) => [
                 const PopupMenuItem(value: 'refresh', child: Text('새로고침')),
-                if (_chatRoom?.isAIChat != true)
-                  const PopupMenuItem(value: 'info', child: Text('상담사 정보')),
+                const PopupMenuItem(value: 'info', child: Text('상담사 정보')),
               ],
         ),
       ],
@@ -207,9 +194,7 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen>
           itemCount: messagesState.messages.length,
           itemBuilder: (context, index) {
             final message = messagesState.messages[index];
-            final isCurrentUser =
-                message.senderId == currentUser?.id ||
-                message.senderId == 'current_user';
+            final isCurrentUser = message.senderId == currentUser?.id;
 
             return _buildMessageBubble(message, isCurrentUser);
           },
@@ -253,21 +238,16 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen>
   }
 
   Widget _buildEmptyMessagesState() {
-    final isAI = _chatRoom?.isAIChat ?? false;
     return Center(
       child: Padding(
         padding: EdgeInsets.all(24.w),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              isAI ? Icons.smart_toy : Icons.person,
-              size: 64.sp,
-              color: AppColors.grey400,
-            ),
+            Icon(Icons.person, size: 64.sp, color: AppColors.grey400),
             SizedBox(height: 16.h),
             Text(
-              isAI ? 'AI 상담사와 대화를 시작해보세요' : '상담사와 대화를 시작해보세요',
+              '상담사와 대화를 시작해보세요',
               style: TextStyle(
                 fontSize: 16.sp,
                 fontWeight: FontWeight.w600,
@@ -296,10 +276,7 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen>
             CircleAvatar(
               radius: 16.r,
               backgroundColor: AppColors.grey200,
-              child:
-                  message.isFromAI
-                      ? Icon(Icons.smart_toy, size: 16.sp)
-                      : Icon(Icons.person, size: 16.sp),
+              child: Icon(Icons.person, size: 16.sp),
             ),
             SizedBox(width: 8.w),
           ],
@@ -406,14 +383,6 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen>
                   ),
                   maxLines: null,
                   enabled: !messagesState.isSending,
-                  onChanged: (text) {
-                    // 타이핑 상태 업데이트
-                    if (text.isNotEmpty) {
-                      ref
-                          .read(chatRoomProvider(widget.chatRoomId).notifier)
-                          .updateTypingStatus(true);
-                    }
-                  },
                 ),
               ),
               SizedBox(width: 8.w),

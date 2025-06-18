@@ -10,6 +10,8 @@ import 'signup_models.dart';
 import 'signup_widgets.dart';
 import '../../providers/auth_provider.dart';
 import 'package:flutter_mentalfit/shared/models/user_model.dart'; // UserType 사용
+import '../../providers/onboarding_provider.dart';
+import '../../core/utils/global_error_handler.dart';
 
 class SignupScreen extends ConsumerStatefulWidget {
   const SignupScreen({super.key});
@@ -24,6 +26,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _passwordConfirmController = TextEditingController();
+  final _goalController = TextEditingController();
 
   bool _isLoading = false;
   bool _obscurePassword = true;
@@ -31,6 +34,9 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
   bool _agreeToTerms = false;
   bool _agreeToPrivacy = false;
   UserType? _selectedUserType = UserType.general;
+  DateTime? _selectedBirthDate;
+  String? _selectedSport;
+  String? _goal;
 
   @override
   void dispose() {
@@ -38,6 +44,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
     _emailController.dispose();
     _passwordController.dispose();
     _passwordConfirmController.dispose();
+    _goalController.dispose();
     super.dispose();
   }
 
@@ -71,26 +78,30 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
     return null;
   }
 
-  // === 이벤트 처리 ===
-  Future<void> _handleSignup() async {
-    if (!_formKey.currentState!.validate()) return;
-
+  bool _validateForm() {
     if (!_agreeToTerms || !_agreeToPrivacy) {
       _showSnackBar('이용약관과 개인정보처리방침에 동의해주세요.', isError: true);
-      return;
+      return false;
     }
 
     if (_selectedUserType == null) {
       _showSnackBar('유저 유형을 선택하세요');
-      return;
+      return false;
     }
+
+    return true;
+  }
+
+  // === 이벤트 처리 ===
+  Future<void> _handleSignup() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    if (!_validateForm()) return;
 
     setState(() => _isLoading = true);
 
     try {
-      await Future.delayed(const Duration(seconds: 2)); // Mock
-
-      await ref
+      final result = await ref
           .read(authProvider.notifier)
           .register(
             email: _emailController.text.trim(),
@@ -99,14 +110,41 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
             userType: _selectedUserType!,
           );
 
-      if (mounted) {
-        _showSnackBar('회원가입이 완료되었습니다!');
-        context.go(AppRoutes.onboardingBasicInfo);
+      if (result.success && result.user != null) {
+        ref
+            .read(onboardingProvider.notifier)
+            .setSignupInfo(
+              name: _nameController.text.trim(),
+              birthDate: _selectedBirthDate?.toIso8601String().split('T')[0],
+              sport: _selectedSport,
+              goal:
+                  _goalController.text.trim().isNotEmpty
+                      ? _goalController.text.trim()
+                      : null,
+            );
+
+        ref.read(onboardingProvider.notifier).updateStepCompletion(1, true);
+
+        if (mounted) {
+          _showSnackBar('회원가입이 완료되었습니다!');
+          context.go(AppRoutes.onboardingMentalCheck);
+        }
+      } else {
+        if (mounted) {
+          GlobalErrorHandler.showErrorSnackBar(
+            context,
+            result.error ?? '회원가입에 실패했습니다.',
+          );
+        }
       }
     } catch (e) {
-      if (mounted) _showSnackBar('회원가입 실패: $e', isError: true);
+      if (mounted) {
+        GlobalErrorHandler.showErrorSnackBar(context, e);
+      }
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 

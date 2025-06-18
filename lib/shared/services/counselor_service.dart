@@ -613,10 +613,25 @@ class CounselorService {
 
   // === 상담사 등록 ===
   Future<void> registerCounselor(Counselor counselor) async {
-    final docRef = _counselorsRef.doc();
-    final data = counselor.toFirestore();
-    data['id'] = docRef.id;
-    await docRef.set(data);
+    try {
+      final user = _auth.currentUser;
+      if (user == null) {
+        throw Exception('로그인이 필요합니다.');
+      }
+
+      final docRef = _counselorsRef.doc();
+      final data = counselor.toFirestore();
+      data['id'] = docRef.id;
+      data['userId'] = user.uid;
+      data['createdAt'] = FieldValue.serverTimestamp();
+      data['updatedAt'] = FieldValue.serverTimestamp();
+
+      await docRef.set(data);
+      debugPrint('✅ 상담사 등록 완료: ${counselor.name}');
+    } catch (e) {
+      debugPrint('❌ 상담사 등록 오류: $e');
+      rethrow;
+    }
   }
 
   // === 상담사 수정 ===

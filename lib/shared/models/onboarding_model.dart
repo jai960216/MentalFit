@@ -18,6 +18,8 @@ class OnboardingData {
   // 완료 여부
   final bool isCompleted;
 
+  final List<int>? completedSteps;
+
   const OnboardingData({
     this.name,
     this.birthDate,
@@ -30,6 +32,7 @@ class OnboardingData {
     this.counselingPreference,
     this.preferredTimes,
     this.isCompleted = false,
+    this.completedSteps,
   });
 
   factory OnboardingData.fromJson(Map<String, dynamic> json) {
@@ -53,6 +56,10 @@ class OnboardingData {
               ? List<String>.from(json['preferredTimes'] as List)
               : null,
       isCompleted: json['isCompleted'] as bool? ?? false,
+      completedSteps:
+          json['completedSteps'] != null
+              ? List<int>.from(json['completedSteps'] as List)
+              : null,
     );
   }
 
@@ -69,6 +76,7 @@ class OnboardingData {
       'counselingPreference': counselingPreference?.value,
       'preferredTimes': preferredTimes,
       'isCompleted': isCompleted,
+      'completedSteps': completedSteps,
     };
   }
 
@@ -84,6 +92,7 @@ class OnboardingData {
     CounselingPreference? counselingPreference,
     List<String>? preferredTimes,
     bool? isCompleted,
+    List<int>? completedSteps,
   }) {
     return OnboardingData(
       name: name ?? this.name,
@@ -97,6 +106,7 @@ class OnboardingData {
       counselingPreference: counselingPreference ?? this.counselingPreference,
       preferredTimes: preferredTimes ?? this.preferredTimes,
       isCompleted: isCompleted ?? this.isCompleted,
+      completedSteps: completedSteps ?? this.completedSteps,
     );
   }
 
