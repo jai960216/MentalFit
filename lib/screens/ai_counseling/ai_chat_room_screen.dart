@@ -17,7 +17,7 @@ class AiChatRoomScreen extends StatefulWidget {
 class _AiChatRoomScreenState extends State<AiChatRoomScreen> {
   List<AIChatMessage> messages = [];
   String? topic;
-  String? realRoomId; // 실제 방 id (생성 후 할당)
+  String? realRoomId;
   final controller = TextEditingController();
   bool isLoading = false;
   final scrollController = ScrollController();

@@ -6,7 +6,6 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_mentalfit/shared/models/chat_room_model.dart';
-import 'package:flutter_mentalfit/shared/services/openai_service.dart';
 
 // ChatRoom 모델이 이미 Message를 export하고 있으므로 별도 import 불필요
 
