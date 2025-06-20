@@ -5,15 +5,11 @@ import 'package:go_router/go_router.dart';
 import '../../core/config/app_colors.dart';
 import '../../core/config/app_routes.dart';
 import '../../core/network/error_handler.dart';
-import '../../shared/widgets/chat_list_widgets.dart';
-import '../../shared/widgets/chat_error_widgets.dart';
-import '../../shared/models/chat_room_model.dart';
+import '../../shared/widgets/theme_aware_widgets.dart';
+import '../../shared/widgets/loading_widget.dart';
 import '../../shared/models/user_model.dart';
 import '../../providers/chat_provider.dart';
 import '../../providers/auth_provider.dart';
-import '../ai_counseling/ai_counseling_history_list.dart';
-import '../../shared/services/ai_chat_local_service.dart';
-import '../../shared/models/ai_chat_models.dart';
 
 class ChatListScreen extends ConsumerStatefulWidget {
   const ChatListScreen({super.key});
@@ -25,51 +21,27 @@ class ChatListScreen extends ConsumerStatefulWidget {
 class _ChatListScreenState extends ConsumerState<ChatListScreen>
     with TickerProviderStateMixin {
   late TabController _tabController;
+  bool _isInitializing = true;
   bool _isInitialized = false;
-  bool _isInitializing = false;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _initialize());
+    _initializeChatService();
   }
 
-  Future<void> _initialize() async {
-    if (_isInitializing || _isInitialized) return;
-
-    setState(() => _isInitializing = true);
-
+  Future<void> _initializeChatService() async {
     try {
-      // Provider 초기화 시도 (최대 3번)
-      int attempts = 0;
-      bool success = false;
+      setState(() => _isInitializing = true);
 
-      while (!success && attempts < 3) {
-        try {
-          attempts++;
-          await ref.read(chatListProvider.notifier).initializeIfNeeded();
-          success = true;
-        } catch (e) {
-          debugPrint('초기화 시도 $attempts 실패: $e');
-          if (attempts < 3) {
-            await Future.delayed(Duration(seconds: attempts));
-          }
-        }
-      }
+      // 채팅 서비스 초기화
+      await ref.read(chatListProvider.notifier).initializeIfNeeded();
 
-      if (mounted) {
-        setState(() => _isInitialized = success);
-
-        if (!success) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('채팅 서비스 초기화에 실패했습니다. 새로고침을 시도해주세요.'),
-              duration: Duration(seconds: 3),
-            ),
-          );
-        }
-      }
+      setState(() {
+        _isInitialized = true;
+        _isInitializing = false;
+      });
     } catch (e) {
       if (mounted) {
         setState(() => _isInitialized = true);
@@ -88,6 +60,124 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen>
     }
   }
 
+  void _showNewChatOptions() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder:
+          (context) => ThemedContainer(
+            padding: EdgeInsets.all(20.w),
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(20.r),
+              topRight: Radius.circular(20.r),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // 드래그 핸들
+                Container(
+                  width: 40.w,
+                  height: 4.h,
+                  decoration: BoxDecoration(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withOpacity(0.7),
+                    borderRadius: BorderRadius.circular(2.r),
+                  ),
+                ),
+
+                SizedBox(height: 20.h),
+
+                ThemedText(
+                  text: '새 채팅 시작하기',
+                  style: TextStyle(
+                    fontSize: 18.sp,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+
+                SizedBox(height: 20.h),
+
+                // AI 상담 시작
+                _buildChatOption(
+                  icon: Icons.psychology,
+                  title: 'AI 상담',
+                  subtitle: '24시간 언제든 상담 가능',
+                  color: AppColors.primary,
+                  onTap: () {
+                    Navigator.pop(context);
+                    context.push(AppRoutes.aiCounseling);
+                  },
+                ),
+
+                SizedBox(height: 12.h),
+
+                // 상담사 찾기
+                _buildChatOption(
+                  icon: Icons.person_search,
+                  title: '상담사 찾기',
+                  subtitle: '전문 상담사와 1:1 상담',
+                  color: AppColors.secondary,
+                  onTap: () {
+                    Navigator.pop(context);
+                    context.push(AppRoutes.counselorList);
+                  },
+                ),
+
+                SizedBox(height: 20.h),
+              ],
+            ),
+          ),
+    );
+  }
+
+  Widget _buildChatOption({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return ThemedCard(
+      onTap: onTap,
+      padding: EdgeInsets.all(16.w),
+      child: Row(
+        children: [
+          Container(
+            padding: EdgeInsets.all(12.w),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12.r),
+            ),
+            child: Icon(icon, color: color, size: 24.sp),
+          ),
+          SizedBox(width: 16.w),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ThemedText(
+                  text: title,
+                  style: TextStyle(
+                    fontSize: 16.sp,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                SizedBox(height: 4.h),
+                ThemedText(
+                  text: subtitle,
+                  isPrimary: false,
+                  style: TextStyle(fontSize: 14.sp),
+                ),
+              ],
+            ),
+          ),
+          ThemedIcon(icon: Icons.arrow_forward_ios, size: 16.sp),
+        ],
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _tabController.dispose();
@@ -100,11 +190,10 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen>
     final user = ref.watch(currentUserProvider);
 
     if (_isInitializing) {
-      return ChatListWidgets.buildLoadingScreen();
+      return _buildLoadingScreen();
     }
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
+    return ThemedScaffold(
       appBar: _buildAppBar(),
       body: TabBarView(
         controller: _tabController,
@@ -116,15 +205,25 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen>
       floatingActionButton: FloatingActionButton(
         onPressed: _showNewChatOptions,
         backgroundColor: AppColors.primary,
-        child: const Icon(Icons.add, color: AppColors.white),
+        child: const Icon(Icons.add, color: Colors.white),
       ),
+    );
+  }
+
+  Widget _buildLoadingScreen() {
+    return ThemedScaffold(
+      appBar: AppBar(
+        title: const Text('채팅'),
+        backgroundColor: context.surfaceColor,
+      ),
+      body: const LoadingWidget(),
     );
   }
 
   AppBar _buildAppBar() {
     return AppBar(
       title: const Text('채팅'),
-      backgroundColor: AppColors.white,
+      backgroundColor: context.surfaceColor,
       actions: [
         IconButton(
           icon: const Icon(Icons.search),
@@ -160,289 +259,288 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen>
     }
   }
 
-  Widget _buildTab(ChatListState state, User? user, String tabType) {
-    if (tabType == 'ai') {
-      final List<Map<String, dynamic>> topics = [
-        {
-          'id': 'anxiety',
-          'title': '불안/스트레스',
-          'description': '경기 전 불안과 스트레스 관리',
-          'icon': Icons.psychology,
-          'color': Colors.blue,
-        },
-        {
-          'id': 'confidence',
-          'title': '자신감/동기부여',
-          'description': '자신감 향상과 동기부여',
-          'icon': Icons.emoji_events,
-          'color': Colors.orange,
-        },
-        {
-          'id': 'focus',
-          'title': '집중력/수행력',
-          'description': '경기 중 집중력 향상',
-          'icon': Icons.center_focus_strong,
-          'color': Colors.green,
-        },
-        {
-          'id': 'teamwork',
-          'title': '팀워크/리더십',
-          'description': '팀 내 관계와 리더십',
-          'icon': Icons.group,
-          'color': Colors.purple,
-        },
-        {
-          'id': 'injury',
-          'title': '부상/재활',
-          'description': '부상 후 심리적 회복',
-          'icon': Icons.healing,
-          'color': Colors.red,
-        },
-        {
-          'id': 'performance',
-          'title': '경기력 향상',
-          'description': '전체적인 경기력 개선',
-          'icon': Icons.trending_up,
-          'color': Colors.teal,
-        },
-      ];
-      String getTopicTitle(String topicId) {
-        final topic = topics.firstWhere(
-          (t) => t['id'] == topicId,
-          orElse: () => topics[0],
-        );
-        return topic['title'] as String;
-      }
+  Widget _buildTab(ChatListState state, User? user, String type) {
+    final rooms = type == 'ai' ? state.aiChatRooms : state.counselorChatRooms;
 
-      return Padding(
+    if (state.isLoading) {
+      return const LoadingWidget();
+    }
+
+    if (rooms.isEmpty) {
+      return _buildEmptyState(type);
+    }
+
+    // 최신 메시지 순으로 정렬
+    rooms.sort((a, b) {
+      final aTime = a.lastMessage?.timestamp ?? a.createdAt;
+      final bTime = b.lastMessage?.timestamp ?? b.createdAt;
+      return bTime.compareTo(aTime);
+    });
+
+    return RefreshIndicator(
+      onRefresh: _refresh,
+      color: AppColors.primary,
+      child: ListView.builder(
+        padding: EdgeInsets.all(12.w),
+        itemCount: rooms.length,
+        itemBuilder: (context, index) {
+          final room = rooms[index];
+          return _buildChatRoomCard(room, user);
+        },
+      ),
+    );
+  }
+
+  Widget _buildChatRoomCard(dynamic chatRoom, User? user) {
+    return ThemedCard(
+      margin: EdgeInsets.only(bottom: 12.h),
+      onTap: () => context.push('${AppRoutes.chatRoom}/${chatRoom.id}'),
+      child: Padding(
         padding: EdgeInsets.all(16.w),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Row(
           children: [
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                icon: Icon(Icons.smart_toy),
-                label: Text('AI 상담 시작'),
-                onPressed: () => context.push(AppRoutes.aiCounseling),
+            // 채팅방 아이콘
+            Container(
+              width: 48.w,
+              height: 48.w,
+              decoration: BoxDecoration(
+                color:
+                    chatRoom.type.toString().contains('ai')
+                        ? AppColors.primary.withOpacity(0.1)
+                        : AppColors.secondary.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(24.r),
+              ),
+              child: Icon(
+                chatRoom.type.toString().contains('ai')
+                    ? Icons.psychology
+                    : Icons.person,
+                color:
+                    chatRoom.type.toString().contains('ai')
+                        ? AppColors.primary
+                        : AppColors.secondary,
+                size: 24.sp,
               ),
             ),
-            SizedBox(height: 24.h),
+
+            SizedBox(width: 12.w),
+
+            // 채팅방 정보
             Expanded(
-              child: FutureBuilder<List<AIChatRoom>>(
-                future: AIChatLocalService.getRooms(),
-                builder: (context, snapshot) {
-                  final aiRooms = snapshot.data ?? [];
-                  return AiCounselingHistoryList(
-                    aiRooms: aiRooms,
-                    topics: topics,
-                    getTopicTitle: getTopicTitle,
-                    onEnterRoom: (room) {
-                      context.push(
-                        '${AppRoutes.aiChatRoom}/${room.id}',
-                        extra: {
-                          'type': 'ai',
-                          'topicId': room.topic,
-                          'title': getTopicTitle(room.topic),
-                        },
-                      );
-                    },
-                  );
-                },
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ThemedText(
+                          text: chatRoom.title ?? '채팅방',
+                          style: TextStyle(
+                            fontSize: 16.sp,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      ThemedText(
+                        text: _formatTime(chatRoom.updatedAt),
+                        isPrimary: false,
+                        style: TextStyle(fontSize: 12.sp),
+                      ),
+                    ],
+                  ),
+
+                  SizedBox(height: 4.h),
+
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ThemedText(
+                          text: chatRoom.lastMessage?.content ?? '대화를 시작해보세요',
+                          isPrimary: false,
+                          style: TextStyle(fontSize: 14.sp),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (chatRoom.unreadCount > 0) ...[
+                        SizedBox(width: 8.w),
+                        Container(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 6.w,
+                            vertical: 2.h,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary,
+                            borderRadius: BorderRadius.circular(10.r),
+                          ),
+                          child: Text(
+                            chatRoom.unreadCount.toString(),
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 12.sp,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
               ),
             ),
           ],
         ),
-      );
-    }
-    // 탭에 따른 채팅방 필터링
-    List<ChatRoom> rooms;
-    switch (tabType) {
-      case 'ai':
-        rooms =
-            state.chatRooms
-                .where((room) => room.type == ChatRoomType.ai)
-                .toList();
-        break;
-      case 'counselor':
-        rooms =
-            state.chatRooms
-                .where((room) => room.type == ChatRoomType.counselor)
-                .toList();
-        break;
-      default:
-        rooms = state.chatRooms;
-    }
+      ),
+    );
+  }
 
-    // 1. 초기화되지 않은 상태
-    if (!state.isInitialized) {
-      return ChatListWidgets.buildLoading('채팅 서비스를 초기화하는 중...');
-    }
+  Widget _buildEmptyState(String tabType) {
+    final isAI = tabType == 'ai';
 
-    // 2. 로딩 상태
-    if (state.isLoading && rooms.isEmpty) {
-      return ChatListWidgets.buildLoading('채팅방을 불러오는 중...');
-    }
-
-    // 3. 에러 + 빈 데이터
-    if (state.error != null && rooms.isEmpty) {
-      ChatRoomType errorType =
-          tabType == 'ai' ? ChatRoomType.ai : ChatRoomType.counselor;
-
-      return ChatErrorWidgets.buildErrorState(
-        errorType,
-        state.error!,
-        _refresh,
-        tabType == 'ai' ? () => context.push(AppRoutes.aiCounseling) : () {},
-        () => context.push(AppRoutes.counselorList),
-      );
-    }
-
-    // 4. 빈 상태
-    if (rooms.isEmpty) {
-      ChatRoomType emptyType =
-          tabType == 'ai' ? ChatRoomType.ai : ChatRoomType.counselor;
-
-      return ChatErrorWidgets.buildEmptyState(
-        emptyType,
-        tabType == 'ai' ? () => context.push(AppRoutes.aiCounseling) : () {},
-        () => context.push(AppRoutes.counselorList),
-      );
-    }
-
-    // 5. 정상 데이터
-    return Column(
-      children: [
-        if (state.error != null)
-          ChatErrorWidgets.buildErrorBanner(state.error!, _refresh, ref),
-        Expanded(
-          child: RefreshIndicator(
-            onRefresh: _refresh,
-            child: ListView.builder(
-              padding: EdgeInsets.all(16.w),
-              itemCount: rooms.length,
-              itemBuilder:
-                  (context, index) => ChatListWidgets.buildChatRoomCard(
-                    rooms[index],
-                    user,
-                    _enterChatRoom,
-                    _showChatRoomOptions,
-                  ),
+    return Center(
+      child: Padding(
+        padding: EdgeInsets.all(32.w),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 80.w,
+              height: 80.w,
+              decoration: BoxDecoration(
+                color: (isAI ? AppColors.primary : AppColors.secondary)
+                    .withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                isAI ? Icons.psychology : Icons.person_search,
+                size: 40.sp,
+                color: isAI ? AppColors.primary : AppColors.secondary,
+              ),
             ),
-          ),
+
+            SizedBox(height: 24.h),
+
+            ThemedText(
+              text: isAI ? 'AI 상담 기록이 없습니다' : '상담사 채팅이 없습니다',
+              style: TextStyle(fontSize: 18.sp, fontWeight: FontWeight.w600),
+              textAlign: TextAlign.center,
+            ),
+
+            SizedBox(height: 12.h),
+
+            ThemedText(
+              text: isAI ? '24시간 언제든 AI 상담을 시작해보세요' : '전문 상담사와 1:1 상담을 시작해보세요',
+              isPrimary: false,
+              style: TextStyle(fontSize: 14.sp, height: 1.5),
+              textAlign: TextAlign.center,
+            ),
+
+            SizedBox(height: 32.h),
+
+            ElevatedButton.icon(
+              onPressed: () {
+                if (isAI) {
+                  context.push(AppRoutes.aiCounseling);
+                } else {
+                  context.push(AppRoutes.counselorList);
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: isAI ? AppColors.primary : AppColors.secondary,
+                foregroundColor: Colors.white,
+                padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 12.h),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12.r),
+                ),
+              ),
+              icon: Icon(
+                isAI ? Icons.psychology : Icons.person_search,
+                size: 20.sp,
+              ),
+              label: Text(
+                isAI ? 'AI 상담 시작' : '상담사 찾기',
+                style: TextStyle(fontSize: 16.sp, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 
-  void _enterChatRoom(ChatRoom chatRoom) {
-    if (chatRoom.type == ChatRoomType.ai) {
-      context.push(AppRoutes.aiCounseling);
+  Widget _buildErrorState(String error) {
+    return Center(
+      child: Padding(
+        padding: EdgeInsets.all(32.w),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 80.w,
+              height: 80.w,
+              decoration: BoxDecoration(
+                color: AppColors.error.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.error_outline,
+                size: 40.sp,
+                color: AppColors.error,
+              ),
+            ),
+
+            SizedBox(height: 24.h),
+
+            ThemedText(
+              text: '채팅 목록을 불러올 수 없습니다',
+              style: TextStyle(fontSize: 18.sp, fontWeight: FontWeight.w600),
+              textAlign: TextAlign.center,
+            ),
+
+            SizedBox(height: 12.h),
+
+            ThemedText(
+              text: error,
+              isPrimary: false,
+              style: TextStyle(fontSize: 14.sp, height: 1.5),
+              textAlign: TextAlign.center,
+            ),
+
+            SizedBox(height: 32.h),
+
+            ElevatedButton.icon(
+              onPressed: _refresh,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 12.h),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12.r),
+                ),
+              ),
+              icon: Icon(Icons.refresh, size: 20.sp),
+              label: Text(
+                '다시 시도',
+                style: TextStyle(fontSize: 16.sp, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _formatTime(DateTime dateTime) {
+    final now = DateTime.now();
+    final difference = now.difference(dateTime);
+
+    if (difference.inDays > 0) {
+      return '${difference.inDays}일 전';
+    } else if (difference.inHours > 0) {
+      return '${difference.inHours}시간 전';
+    } else if (difference.inMinutes > 0) {
+      return '${difference.inMinutes}분 전';
     } else {
-      context.push('${AppRoutes.chatRoom}/${chatRoom.id}');
+      return '방금 전';
     }
-  }
-
-  void _showChatRoomOptions(ChatRoom chatRoom) {
-    showModalBottomSheet(
-      context: context,
-      builder:
-          (context) => Container(
-            padding: EdgeInsets.all(20.w),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ListTile(
-                  leading: const Icon(Icons.delete, color: AppColors.error),
-                  title: const Text(
-                    '채팅방 삭제',
-                    style: TextStyle(color: AppColors.error),
-                  ),
-                  onTap: () {
-                    Navigator.pop(context);
-                    _deleteChatRoom(chatRoom);
-                  },
-                ),
-              ],
-            ),
-          ),
-    );
-  }
-
-  void _deleteChatRoom(ChatRoom chatRoom) {
-    showDialog(
-      context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('채팅방 삭제'),
-            content: Text('${chatRoom.title} 채팅방을 삭제하시겠습니까?'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('취소'),
-              ),
-              TextButton(
-                onPressed: () async {
-                  Navigator.pop(context);
-                  final success = await ref
-                      .read(chatListProvider.notifier)
-                      .deleteChatRoom(chatRoom.id);
-
-                  if (mounted) {
-                    if (success) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('채팅방이 삭제되었습니다.')),
-                      );
-                    } else {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('채팅방 삭제에 실패했습니다.')),
-                      );
-                    }
-                  }
-                },
-                child: const Text(
-                  '삭제',
-                  style: TextStyle(color: AppColors.error),
-                ),
-              ),
-            ],
-          ),
-    );
-  }
-
-  void _showNewChatOptions() {
-    showModalBottomSheet(
-      context: context,
-      builder:
-          (context) => Container(
-            padding: EdgeInsets.all(20.w),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ListTile(
-                  leading: const Icon(
-                    Icons.smart_toy,
-                    color: AppColors.primary,
-                  ),
-                  title: const Text('AI 상담 시작'),
-                  subtitle: const Text('AI와 즉시 대화를 시작합니다'),
-                  onTap: () {
-                    Navigator.pop(context);
-                    context.push(AppRoutes.aiCounseling);
-                  },
-                ),
-                ListTile(
-                  leading: const Icon(Icons.person, color: AppColors.secondary),
-                  title: const Text('상담사 찾기'),
-                  subtitle: const Text('전문 상담사와 상담을 예약합니다'),
-                  onTap: () {
-                    Navigator.pop(context);
-                    context.push(AppRoutes.counselorList);
-                  },
-                ),
-              ],
-            ),
-          ),
-    );
   }
 }

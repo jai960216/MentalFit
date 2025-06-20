@@ -6,6 +6,7 @@ import '../../core/config/app_routes.dart';
 import 'ai_counseling_history_list.dart';
 import '../../shared/services/ai_chat_local_service.dart';
 import '../../shared/models/ai_chat_models.dart';
+import '../../shared/widgets/theme_aware_widgets.dart';
 
 class AiCounselingTopicGrid extends StatelessWidget {
   final List<Map<String, dynamic>> topics;
@@ -35,10 +36,16 @@ class AiCounselingTopicGrid extends StatelessWidget {
           onTap: () => onSelect(topic['id']),
           child: Container(
             decoration: BoxDecoration(
-              color: Colors.white,
+              color:
+                  Theme.of(context).brightness == Brightness.dark
+                      ? Theme.of(context).colorScheme.surface
+                      : Colors.white,
               borderRadius: BorderRadius.circular(16.r),
               border: Border.all(
-                color: topic['color'].withOpacity(0.2),
+                color:
+                    Theme.of(context).brightness == Brightness.dark
+                        ? Colors.grey[700]!
+                        : topic['color'].withOpacity(0.2),
                 width: 1.5,
               ),
               boxShadow: [
@@ -72,7 +79,10 @@ class AiCounselingTopicGrid extends StatelessWidget {
                     topic['title'],
                     textAlign: TextAlign.center, // 가운데 정렬 추가
                     style: TextStyle(
-                      color: AppColors.textPrimary,
+                      color:
+                          Theme.of(context).brightness == Brightness.dark
+                              ? Theme.of(context).colorScheme.onSurface
+                              : AppColors.textPrimary,
                       fontWeight: FontWeight.w600,
                       fontSize: 13.sp, // 14.sp → 13.sp로 줄임
                     ),
@@ -82,7 +92,12 @@ class AiCounselingTopicGrid extends StatelessWidget {
                     topic['description'],
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      color: AppColors.textSecondary,
+                      color:
+                          Theme.of(context).brightness == Brightness.dark
+                              ? Theme.of(
+                                context,
+                              ).colorScheme.onSurface.withOpacity(0.7)
+                              : AppColors.textSecondary,
                       fontSize: 10.sp,
                       height: 1.2, // 줄 간격 추가
                     ),
@@ -174,21 +189,18 @@ class AiCounselingScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    '어떤 도움이 필요하신가요?',
+                  ThemedText(
+                    text: '어떤 도움이 필요하신가요?',
                     style: TextStyle(
                       fontSize: 20.sp,
                       fontWeight: FontWeight.bold,
-                      color: AppColors.textPrimary,
                     ),
                   ),
                   SizedBox(height: 8.h),
-                  Text(
-                    '관심 있는 주제를 선택해주세요',
-                    style: TextStyle(
-                      fontSize: 14.sp,
-                      color: AppColors.textSecondary,
-                    ),
+                  ThemedText(
+                    text: '관심 있는 주제를 선택해주세요',
+                    isPrimary: false,
+                    style: TextStyle(fontSize: 14.sp),
                   ),
                   SizedBox(height: 24.h),
                   AiCounselingTopicGrid(
@@ -210,12 +222,11 @@ class AiCounselingScreen extends StatelessWidget {
                     },
                   ),
                   SizedBox(height: 32.h),
-                  Text(
-                    'AI 상담 기록',
+                  ThemedText(
+                    text: 'AI 상담 기록',
                     style: TextStyle(
                       fontSize: 16.sp,
                       fontWeight: FontWeight.bold,
-                      color: AppColors.textPrimary,
                     ),
                   ),
                   SizedBox(height: 12.h),

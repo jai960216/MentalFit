@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/foundation.dart';
 import '../shared/models/counselor_model.dart';
 import '../shared/services/counselor_service.dart';
+import 'counselor_filters_provider.dart' as filters;
 
 // === 상담사 목록 Provider ===
 final counselorsProvider =
@@ -635,3 +636,99 @@ final counselorProvider =
       final service = ref.watch(counselorServiceProvider);
       return CounselorNotifier(service);
     });
+
+// === 필터링된 상담사 목록 Provider ===
+final filteredCounselorsProvider = Provider<List<Counselor>>((ref) {
+  final counselorsState = ref.watch(counselorsProvider);
+  final filtersState = ref.watch(filters.counselorFiltersProvider);
+
+  if (counselorsState.counselors.isEmpty) {
+    return [];
+  }
+
+  // 필터링 로직
+  List<Counselor> filtered = List.from(counselorsState.counselors);
+
+  // 검색어 필터
+  final searchQuery = ref.watch(counselorSearchQueryProvider);
+  if (searchQuery.isNotEmpty) {
+    filtered =
+        filtered.where((c) {
+          return c.name.toLowerCase().contains(searchQuery.toLowerCase()) ||
+              c.introduction.toLowerCase().contains(
+                searchQuery.toLowerCase(),
+              ) ||
+              c.specialties.any(
+                (specialty) =>
+                    specialty.toLowerCase().contains(searchQuery.toLowerCase()),
+              );
+        }).toList();
+  }
+
+  // 전문 분야 필터
+  if (filtersState.selectedSpecialties.isNotEmpty) {
+    filtered =
+        filtered.where((c) {
+          return filtersState.selectedSpecialties.any(
+            (selectedSpecialty) => c.specialties.contains(selectedSpecialty),
+          );
+        }).toList();
+  }
+
+  // 상담 방식 필터
+  if (filtersState.selectedMethod != null) {
+    filtered =
+        filtered.where((c) {
+          return c.preferredMethod == filtersState.selectedMethod;
+        }).toList();
+  }
+
+  // 최소 평점 필터
+  if (filtersState.minRating != null) {
+    filtered =
+        filtered.where((c) {
+          return c.rating >= filtersState.minRating!;
+        }).toList();
+  }
+
+  // 최대 가격 필터
+  if (filtersState.maxPrice != null) {
+    filtered =
+        filtered.where((c) {
+          return c.price.consultationFee <= filtersState.maxPrice!;
+        }).toList();
+  }
+
+  // 온라인 전용 필터
+  if (filtersState.onlineOnly) {
+    filtered =
+        filtered.where((c) {
+          return c.isOnline;
+        }).toList();
+  }
+
+  // 정렬 로직
+  switch (filtersState.sortBy) {
+    case 'rating':
+      filtered.sort((a, b) => b.rating.compareTo(a.rating));
+      break;
+    case 'price':
+      filtered.sort(
+        (a, b) => a.price.consultationFee.compareTo(b.price.consultationFee),
+      );
+      break;
+    case 'experience':
+      filtered.sort((a, b) => b.experienceYears.compareTo(a.experienceYears));
+      break;
+    case 'name':
+      filtered.sort((a, b) => a.name.compareTo(b.name));
+      break;
+    default:
+      filtered.sort((a, b) => b.rating.compareTo(a.rating));
+  }
+
+  return filtered;
+});
+
+// === 검색어 Provider ===
+final counselorSearchQueryProvider = StateProvider<String>((ref) => '');

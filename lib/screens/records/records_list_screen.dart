@@ -11,6 +11,7 @@ import '../../shared/widgets/loading_widget.dart';
 import '../../shared/services/records_service.dart';
 import '../../shared/models/record_model.dart';
 import '../../providers/records_provider.dart';
+import '../../shared/widgets/theme_aware_widgets.dart';
 
 class RecordsListScreen extends ConsumerStatefulWidget {
   const RecordsListScreen({super.key});
@@ -185,8 +186,7 @@ class _RecordsListScreenState extends ConsumerState<RecordsListScreen>
   Widget build(BuildContext context) {
     final recordsState = ref.watch(recordsProvider);
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
+    return ThemedScaffold(
       appBar: CustomAppBar(
         title: '상담 기록',
         actions: [

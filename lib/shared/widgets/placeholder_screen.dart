@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import '../../core/config/app_colors.dart';
-import 'custom_app_bar.dart';
+import '../../shared/widgets/theme_aware_widgets.dart';
+import '../../shared/widgets/custom_app_bar.dart';
 
 class PlaceholderScreen extends StatelessWidget {
   final String title;
@@ -21,9 +22,8 @@ class PlaceholderScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: CustomAppBar(title: title, backgroundColor: AppColors.white),
+    return ThemedScaffold(
+      appBar: CustomAppBar(title: title),
       body: Center(
         child: Padding(
           padding: EdgeInsets.all(24.w),
@@ -48,26 +48,19 @@ class PlaceholderScreen extends StatelessWidget {
               SizedBox(height: 24.h),
 
               // === 제목 ===
-              Text(
-                title,
-                style: TextStyle(
-                  fontSize: 20.sp,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textPrimary,
-                ),
+              ThemedText(
+                text: title,
+                style: TextStyle(fontSize: 20.sp, fontWeight: FontWeight.w600),
                 textAlign: TextAlign.center,
               ),
 
               SizedBox(height: 12.h),
 
               // === 설명 ===
-              Text(
-                description ?? '이 기능은 곧 제공될 예정입니다.\n조금만 기다려 주세요! 🚀',
-                style: TextStyle(
-                  fontSize: 14.sp,
-                  color: AppColors.textSecondary,
-                  height: 1.5,
-                ),
+              ThemedText(
+                text: description ?? '이 기능은 곧 제공될 예정입니다.\n조금만 기다려 주세요! 🚀',
+                isPrimary: false,
+                style: TextStyle(fontSize: 14.sp, height: 1.5),
                 textAlign: TextAlign.center,
               ),
 
@@ -81,34 +74,22 @@ class PlaceholderScreen extends StatelessWidget {
                     onPressed: onAction,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primary,
-                      foregroundColor: AppColors.white,
+                      foregroundColor: Colors.white,
                       padding: EdgeInsets.symmetric(vertical: 16.h),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12.r),
                       ),
                     ),
-                    child: Text(actionText ?? '확인'),
-                  ),
-                ),
-                SizedBox(height: 12.h),
-              ],
-
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.arrow_back),
-                  label: const Text('뒤로 가기'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.textPrimary,
-                    side: BorderSide(color: AppColors.grey300),
-                    padding: EdgeInsets.symmetric(vertical: 16.h),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12.r),
+                    child: Text(
+                      actionText ?? '돌아가기',
+                      style: TextStyle(
+                        fontSize: 16.sp,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ),
-              ),
+              ],
             ],
           ),
         ),

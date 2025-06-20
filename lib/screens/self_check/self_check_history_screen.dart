@@ -8,6 +8,7 @@ import '../../shared/widgets/custom_app_bar.dart';
 import '../../shared/widgets/loading_widget.dart';
 import '../../providers/self_check_provider.dart';
 import '../../shared/models/self_check_models.dart';
+import '../../shared/widgets/theme_aware_widgets.dart';
 
 class SelfCheckHistoryScreen extends ConsumerStatefulWidget {
   const SelfCheckHistoryScreen({super.key});
@@ -34,8 +35,7 @@ class _SelfCheckHistoryScreenState
     final isLoading = selfCheckState.isLoading;
     final error = selfCheckState.error;
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
+    return ThemedScaffold(
       appBar: const CustomAppBar(title: '자가진단 기록'),
       body:
           isLoading
@@ -58,82 +58,79 @@ class _SelfCheckHistoryScreenState
                 separatorBuilder: (context, i) => SizedBox(height: 12.h),
                 itemBuilder: (context, i) {
                   final result = results[i];
-                  return GestureDetector(
-                    onTap:
-                        () => context.push(
-                          '${AppRoutes.selfCheckResult}/${result.id}',
-                        ),
-                    child: Container(
-                      padding: EdgeInsets.all(16.w),
-                      decoration: BoxDecoration(
-                        color: AppColors.white,
-                        borderRadius: BorderRadius.circular(12.r),
-                        border: Border.all(color: AppColors.grey200),
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 8.w,
-                            height: 40.h,
-                            decoration: BoxDecoration(
-                              color: result.riskLevel.color,
-                              borderRadius: BorderRadius.circular(4.r),
-                            ),
-                          ),
-                          SizedBox(width: 12.w),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  result.test.title,
-                                  style: TextStyle(
-                                    fontSize: 14.sp,
-                                    fontWeight: FontWeight.w600,
-                                    color: AppColors.textPrimary,
-                                  ),
-                                ),
-                                SizedBox(height: 4.h),
-                                Text(
-                                  _formatDate(result.completedAt),
-                                  style: TextStyle(
-                                    fontSize: 12.sp,
-                                    color: AppColors.textSecondary,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Container(
-                            padding: EdgeInsets.symmetric(
-                              horizontal: 8.w,
-                              vertical: 4.h,
-                            ),
-                            decoration: BoxDecoration(
-                              color: result.riskLevel.color.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(12.r),
-                            ),
-                            child: Text(
-                              result.riskLevel.name,
-                              style: TextStyle(
-                                fontSize: 10.sp,
-                                fontWeight: FontWeight.w600,
-                                color: result.riskLevel.color,
-                              ),
-                            ),
-                          ),
-                          SizedBox(width: 8.w),
-                          Icon(
-                            Icons.arrow_forward_ios,
-                            size: 12.sp,
-                            color: AppColors.grey400,
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
+                  return _buildResultCard(result);
                 },
               ),
+    );
+  }
+
+  Widget _buildResultCard(SelfCheckResult result) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return GestureDetector(
+      onTap: () => context.push('${AppRoutes.selfCheckResult}/${result.id}'),
+      child: Container(
+        padding: EdgeInsets.all(16.w),
+        decoration: BoxDecoration(
+          color:
+              isDark ? Theme.of(context).colorScheme.surface : AppColors.white,
+          borderRadius: BorderRadius.circular(12.r),
+          border: Border.all(color: AppColors.grey200),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 8.w,
+              height: 40.h,
+              decoration: BoxDecoration(
+                color: result.riskLevel.color,
+                borderRadius: BorderRadius.circular(4.r),
+              ),
+            ),
+            SizedBox(width: 12.w),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ThemedText(
+                    text: result.test.title,
+                    style: TextStyle(
+                      fontSize: 14.sp,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  SizedBox(height: 4.h),
+                  ThemedText(
+                    text: _formatDate(result.completedAt),
+                    isPrimary: false,
+                    style: TextStyle(fontSize: 12.sp),
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
+              decoration: BoxDecoration(
+                color: result.riskLevel.color.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12.r),
+              ),
+              child: Text(
+                result.riskLevel.name,
+                style: TextStyle(
+                  fontSize: 10.sp,
+                  fontWeight: FontWeight.w600,
+                  color: result.riskLevel.color,
+                ),
+              ),
+            ),
+            SizedBox(width: 8.w),
+            Icon(
+              Icons.arrow_forward_ios,
+              size: 12.sp,
+              color: AppColors.grey400,
+            ),
+          ],
+        ),
+      ),
     );
   }
 

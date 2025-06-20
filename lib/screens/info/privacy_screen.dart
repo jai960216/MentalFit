@@ -6,6 +6,7 @@ import '../../core/config/app_colors.dart';
 
 // Shared
 import '../../shared/widgets/custom_app_bar.dart';
+import '../../shared/widgets/theme_aware_widgets.dart';
 
 class PrivacyScreen extends StatefulWidget {
   const PrivacyScreen({super.key});
@@ -46,8 +47,7 @@ class _PrivacyScreenState extends State<PrivacyScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
+    return ThemedScaffold(
       appBar: const CustomAppBar(title: '개인정보처리방침'),
       body: FadeTransition(
         opacity: _fadeAnimation,
@@ -55,19 +55,8 @@ class _PrivacyScreenState extends State<PrivacyScreen>
           physics: const BouncingScrollPhysics(),
           child: Padding(
             padding: EdgeInsets.all(20.w),
-            child: Container(
+            child: ThemedContainer(
               padding: EdgeInsets.all(20.w),
-              decoration: BoxDecoration(
-                color: AppColors.white,
-                borderRadius: BorderRadius.circular(16.r),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.grey400.withOpacity(0.1),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -101,28 +90,26 @@ class _PrivacyScreenState extends State<PrivacyScreen>
             Icon(
               Icons.privacy_tip_outlined,
               size: 24.sp,
-              color: AppColors.primary,
+              color: Theme.of(context).colorScheme.primary,
             ),
             SizedBox(width: 8.w),
-            Text(
-              '개인정보처리방침',
-              style: TextStyle(
-                fontSize: 20.sp,
-                fontWeight: FontWeight.bold,
-                color: AppColors.textPrimary,
-              ),
+            const ThemedText(
+              text: '개인정보처리방침',
+              style: TextStyle(fontSize: 20.0, fontWeight: FontWeight.bold),
             ),
           ],
         ),
         SizedBox(height: 8.h),
-        Text(
-          '시행일자: 2024년 1월 1일',
-          style: TextStyle(fontSize: 12.sp, color: AppColors.textSecondary),
+        const ThemedText(
+          text: '시행일자: 2024년 1월 1일',
+          isPrimary: false,
+          style: TextStyle(fontSize: 12.0),
         ),
         SizedBox(height: 4.h),
-        Text(
-          '최종 개정일: 2024년 12월 1일',
-          style: TextStyle(fontSize: 12.sp, color: AppColors.textSecondary),
+        const ThemedText(
+          text: '최종 개정일: 2024년 12월 1일',
+          isPrimary: false,
+          style: TextStyle(fontSize: 12.0),
         ),
       ],
     );
@@ -140,34 +127,26 @@ class _PrivacyScreenState extends State<PrivacyScreen>
       '8. 개인정보 처리방침의 변경',
     ];
 
-    return Container(
+    return ThemedContainer(
+      useSurface: false, // background color
+      addShadow: false,
       padding: EdgeInsets.all(16.w),
-      decoration: BoxDecoration(
-        color: AppColors.grey50,
-        borderRadius: BorderRadius.circular(12.r),
-        border: Border.all(color: AppColors.grey200),
-      ),
+      borderRadius: BorderRadius.circular(12.r),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            '목차',
-            style: TextStyle(
-              fontSize: 16.sp,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textPrimary,
-            ),
+          const ThemedText(
+            text: '목차',
+            style: TextStyle(fontSize: 16.0, fontWeight: FontWeight.w600),
           ),
           SizedBox(height: 12.h),
           ...contents.map(
             (content) => Padding(
               padding: EdgeInsets.only(bottom: 4.h),
-              child: Text(
-                content,
-                style: TextStyle(
-                  fontSize: 14.sp,
-                  color: AppColors.textSecondary,
-                ),
+              child: ThemedText(
+                text: content,
+                isPrimary: false,
+                style: const TextStyle(fontSize: 14.0),
               ),
             ),
           ),
@@ -307,28 +286,16 @@ class _PrivacyScreenState extends State<PrivacyScreen>
         _buildSection(
           title: '8. 개인정보 처리방침의 변경',
           content:
-              '''이 개인정보처리방침은 시행일로부터 적용되며, 법령 및 방침에 따른 변경내용의 추가, 삭제 및 정정이 있는 경우에는 변경사항의 시행 7일 전부터 공지사항을 통하여 고지할 것입니다.
-
-• 공고일자: 2024년 1월 1일
-• 시행일자: 2024년 1월 1일
-
-기타 개인정보처리와 관련하여 아래의 기관에 문의하실 수 있습니다:
-
-• 개인정보 침해신고센터 (privacy.go.kr / 국번없이 182)
-• 대검찰청 사이버범죄수사단 (www.spo.go.kr / 02-3480-3573)
-• 경찰청 사이버테러대응센터 (www.netan.go.kr / 국번없이 182)''',
+              '본 개인정보 처리방침은 시행일로부터 적용되며, 법령 및 방침에 따른 변경내용의 추가, 삭제 및 정정이 있는 경우에는 변경사항의 시행 7일 전부터 공지사항을 통하여 고지할 것입니다.',
         ),
 
         SizedBox(height: 32.h),
 
         // === 문의 정보 ===
-        Container(
+        ThemedContainer(
+          useSurface: false,
           padding: EdgeInsets.all(16.w),
-          decoration: BoxDecoration(
-            color: AppColors.primary.withOpacity(0.05),
-            borderRadius: BorderRadius.circular(12.r),
-            border: Border.all(color: AppColors.primary.withOpacity(0.2)),
-          ),
+          borderRadius: BorderRadius.circular(12.r),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -337,35 +304,29 @@ class _PrivacyScreenState extends State<PrivacyScreen>
                   Icon(
                     Icons.contact_support_outlined,
                     size: 20.sp,
-                    color: AppColors.primary,
+                    color: Theme.of(context).colorScheme.primary,
                   ),
                   SizedBox(width: 8.w),
-                  Text(
-                    '문의하기',
+                  ThemedText(
+                    text: '문의하기',
                     style: TextStyle(
                       fontSize: 16.sp,
                       fontWeight: FontWeight.w600,
-                      color: AppColors.primary,
+                      color: Theme.of(context).colorScheme.primary,
                     ),
                   ),
                 ],
               ),
               SizedBox(height: 12.h),
-              Text(
-                '개인정보 처리에 관한 문의사항이 있으시면 언제든지 연락주세요.',
-                style: TextStyle(
-                  fontSize: 14.sp,
-                  color: AppColors.textSecondary,
-                ),
+              const ThemedText(
+                text: '개인정보 처리에 관한 문의사항이 있으시면 언제든지 연락주세요.',
+                isPrimary: false,
+                style: TextStyle(fontSize: 14.0),
               ),
               SizedBox(height: 8.h),
-              Text(
-                '이메일: privacy@mentalfit.co.kr\n전화: 02-1234-5678',
-                style: TextStyle(
-                  fontSize: 14.sp,
-                  color: AppColors.textPrimary,
-                  fontWeight: FontWeight.w500,
-                ),
+              const ThemedText(
+                text: '이메일: privacy@mentalfit.co.kr\n전화: 02-1234-5678',
+                style: TextStyle(fontSize: 14.0, fontWeight: FontWeight.w500),
               ),
             ],
           ),
@@ -375,30 +336,21 @@ class _PrivacyScreenState extends State<PrivacyScreen>
   }
 
   Widget _buildSection({required String title, required String content}) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: 24.h),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: TextStyle(
-              fontSize: 16.sp,
-              fontWeight: FontWeight.w600,
-              color: AppColors.primary,
-            ),
-          ),
-          SizedBox(height: 12.h),
-          Text(
-            content,
-            style: TextStyle(
-              fontSize: 14.sp,
-              color: AppColors.textPrimary,
-              height: 1.6,
-            ),
-          ),
-        ],
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ThemedText(
+          text: title,
+          style: TextStyle(fontSize: 18.sp, fontWeight: FontWeight.bold),
+        ),
+        SizedBox(height: 12.h),
+        ThemedText(
+          text: content,
+          isPrimary: false,
+          style: TextStyle(fontSize: 14.sp, height: 1.6),
+        ),
+        SizedBox(height: 24.h),
+      ],
     );
   }
 }

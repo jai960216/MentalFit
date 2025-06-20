@@ -13,6 +13,7 @@ import '../../shared/widgets/custom_text_field.dart';
 import '../../shared/widgets/loading_widget.dart';
 import '../../providers/auth_provider.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import '../../shared/widgets/theme_aware_widgets.dart';
 
 class EditProfileScreen extends ConsumerStatefulWidget {
   const EditProfileScreen({super.key});
@@ -310,345 +311,241 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen>
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Scaffold(
-        backgroundColor: AppColors.background,
-        body: LoadingWidget(),
-      );
-    }
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
+    return ThemedScaffold(
       appBar: const CustomAppBar(title: '프로필 수정'),
-      body: FadeTransition(
-        opacity: _fadeAnimation,
-        child: Form(
-          key: _formKey,
-          child: SingleChildScrollView(
-            padding: EdgeInsets.all(20.w),
-            child: Column(
-              children: [
-                // === 프로필 이미지 섹션 ===
-                FadeTransition(
-                  opacity: _cardAnimation,
-                  child: _buildProfileImageSection(),
-                ),
+      body:
+          _isLoading
+              ? const LoadingWidget()
+              : FadeTransition(
+                opacity: _fadeAnimation,
+                child: Form(
+                  key: _formKey,
+                  child: SingleChildScrollView(
+                    padding: EdgeInsets.all(24.w),
+                    child: Column(
+                      children: [
+                        // === 프로필 이미지 섹션 ===
+                        _buildProfileImageSection(theme),
+                        SizedBox(height: 32.h),
 
-                SizedBox(height: 24.h),
-
-                // === 기본 정보 섹션 ===
-                FadeTransition(
-                  opacity: _cardAnimation,
-                  child: _buildBasicInfoSection(),
-                ),
-
-                SizedBox(height: 20.h),
-
-                // === 부가 정보 섹션 ===
-                FadeTransition(
-                  opacity: _cardAnimation,
-                  child: _buildAdditionalInfoSection(),
-                ),
-
-                SizedBox(height: 32.h),
-
-                // === 저장 버튼 ===
-                FadeTransition(
-                  opacity: _cardAnimation,
-                  child: _buildSaveButton(),
-                ),
-
-                SizedBox(height: 40.h),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  // === UI 구성 요소들 ===
-
-  Widget _buildProfileImageSection() {
-    return Container(
-      padding: EdgeInsets.all(24.w),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(16.r),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.grey400.withOpacity(0.1),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Text(
-            '프로필 이미지',
-            style: TextStyle(
-              fontSize: 16.sp,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textPrimary,
-            ),
-          ),
-
-          SizedBox(height: 20.h),
-
-          // 프로필 이미지
-          GestureDetector(
-            onTap: _selectProfileImage,
-            child: Stack(
-              children: [
-                CircleAvatar(
-                  radius: 60.r,
-                  backgroundColor: AppColors.grey200,
-                  backgroundImage: _getProfileImage(),
-                  child:
-                      _getProfileImage() == null
-                          ? Icon(
-                            Icons.person,
-                            size: 60.sp,
-                            color: AppColors.textSecondary,
-                          )
-                          : null,
-                ),
-                Positioned(
-                  bottom: 0,
-                  right: 0,
-                  child: Container(
-                    padding: EdgeInsets.all(8.w),
-                    decoration: BoxDecoration(
-                      color: AppColors.primary,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: AppColors.white, width: 2),
-                    ),
-                    child: Icon(
-                      Icons.camera_alt,
-                      size: 16.sp,
-                      color: AppColors.white,
+                        // === 프로필 정보 카드 ===
+                        _buildProfileInfoCard(theme),
+                      ],
                     ),
                   ),
                 ),
-              ],
+              ),
+    );
+  }
+
+  // === 프로필 이미지 섹션 ===
+  Widget _buildProfileImageSection(ThemeData theme) {
+    return Column(
+      children: [
+        Stack(
+          alignment: Alignment.bottomRight,
+          children: [
+            Container(
+              width: 120.w,
+              height: 120.w,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: theme.colorScheme.surface,
+                boxShadow: [
+                  BoxShadow(
+                    color: theme.shadowColor.withOpacity(0.1),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: ClipOval(
+                child:
+                    _selectedProfileImage != null
+                        ? Image.file(_selectedProfileImage!, fit: BoxFit.cover)
+                        : _selectedProfileImageUrl != null &&
+                            _selectedProfileImageUrl!.isNotEmpty
+                        ? Image.network(
+                          _selectedProfileImageUrl!,
+                          fit: BoxFit.cover,
+                        )
+                        : Icon(
+                          Icons.person,
+                          size: 60.w,
+                          color: theme.colorScheme.onSurface.withOpacity(0.5),
+                        ),
+              ),
             ),
-          ),
-
-          SizedBox(height: 12.h),
-
-          Text(
-            '탭하여 이미지 변경',
-            style: TextStyle(fontSize: 12.sp, color: AppColors.textSecondary),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBasicInfoSection() {
-    return _buildSection(
-      title: '기본 정보',
-      children: [
-        // 이름
-        CustomTextField(
-          labelText: '이름',
-          hintText: '실명을 입력해주세요',
-          controller: _nameController,
-          prefixIcon: Icons.person_outline,
-          validator: Validators.validateName,
-          enabled: !_isSaving,
-        ),
-
-        SizedBox(height: 20.h),
-
-        // 생년월일
-        _buildBirthDateField(),
-      ],
-    );
-  }
-
-  Widget _buildAdditionalInfoSection() {
-    return _buildSection(
-      title: '부가 정보',
-      children: [
-        // 주요 종목
-        _buildSportField(),
-
-        SizedBox(height: 20.h),
-
-        // 목표
-        CustomTextField(
-          labelText: '목표 (선택사항)',
-          hintText: '운동 목표를 입력해주세요',
-          controller: _goalController,
-          prefixIcon: Icons.flag_outlined,
-          maxLines: 3,
-          enabled: !_isSaving,
+            GestureDetector(
+              onTap: _selectProfileImage,
+              child: Container(
+                width: 36.w,
+                height: 36.w,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: theme.colorScheme.primary,
+                  border: Border.all(
+                    color: theme.scaffoldBackgroundColor,
+                    width: 2.w,
+                  ),
+                ),
+                child: Icon(
+                  Icons.edit,
+                  size: 20.w,
+                  color: theme.colorScheme.onPrimary,
+                ),
+              ),
+            ),
+          ],
         ),
       ],
     );
   }
 
-  Widget _buildSection({
-    required String title,
-    required List<Widget> children,
-  }) {
-    return Container(
-      padding: EdgeInsets.all(20.w),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(16.r),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.grey400.withOpacity(0.1),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
+  // === 프로필 정보 카드 ===
+  Widget _buildProfileInfoCard(ThemeData theme) {
+    return ThemedContainer(
+      useSurface: true,
+      padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 24.h),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            title,
-            style: TextStyle(
-              fontSize: 16.sp,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textPrimary,
-            ),
-          ),
-          SizedBox(height: 16.h),
-          ...children,
+          _buildTextFieldSection(),
+          SizedBox(height: 24.h),
+          _buildDropdownSection(theme),
+          SizedBox(height: 32.h),
+          _buildSaveButton(theme),
         ],
       ),
     );
   }
 
-  Widget _buildBirthDateField() {
+  // === 텍스트 필드 섹션 ===
+  Widget _buildTextFieldSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          '생년월일',
-          style: TextStyle(
-            fontSize: 16.sp,
-            fontWeight: FontWeight.w600,
-            color: AppColors.textPrimary,
-          ),
+        const ThemedText(
+          text: '이름',
+          style: TextStyle(fontWeight: FontWeight.w600),
         ),
         SizedBox(height: 8.h),
-        GestureDetector(
-          onTap: _isSaving ? null : _selectBirthDate,
-          child: Container(
-            padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 16.h),
-            decoration: BoxDecoration(
-              color: _isSaving ? AppColors.grey100 : AppColors.grey50,
-              borderRadius: BorderRadius.circular(12.r),
-              border: Border.all(color: AppColors.grey200),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.calendar_today,
-                  color: AppColors.textSecondary,
-                  size: 20.sp,
-                ),
-                SizedBox(width: 12.w),
-                Expanded(
-                  child: Text(
+        CustomTextField(
+          controller: _nameController,
+          hintText: '이름을 입력하세요',
+          validator: (value) => Validators.validateRequired(value, '이름'),
+        ),
+        SizedBox(height: 16.h),
+        const ThemedText(
+          text: '나의 목표',
+          style: TextStyle(fontWeight: FontWeight.w600),
+        ),
+        SizedBox(height: 8.h),
+        CustomTextField(
+          controller: _goalController,
+          hintText: '이번 시즌 목표를 알려주세요',
+          maxLines: 3,
+        ),
+      ],
+    );
+  }
+
+  // === 드롭다운 섹션 ===
+  Widget _buildDropdownSection(ThemeData theme) {
+    return Row(
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const ThemedText(
+                text: '생년월일',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+              SizedBox(height: 8.h),
+              _buildDropdownField(
+                theme: theme,
+                value:
                     _selectedBirthDate != null
                         ? '${_selectedBirthDate!.year}년 ${_selectedBirthDate!.month}월 ${_selectedBirthDate!.day}일'
-                        : '생년월일을 선택해주세요',
-                    style: TextStyle(
-                      fontSize: 16.sp,
-                      color:
-                          _selectedBirthDate != null
-                              ? AppColors.textPrimary
-                              : AppColors.textHint,
-                    ),
-                  ),
-                ),
-                Icon(
-                  Icons.arrow_drop_down,
-                  color: AppColors.textSecondary,
-                  size: 24.sp,
-                ),
-              ],
-            ),
+                        : '선택하세요',
+                icon: Icons.calendar_today,
+                onTap: _selectBirthDate,
+              ),
+            ],
+          ),
+        ),
+        SizedBox(width: 16.w),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const ThemedText(
+                text: '주요 종목',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+              SizedBox(height: 8.h),
+              _buildDropdownField(
+                theme: theme,
+                value: _selectedSport ?? '선택하세요',
+                icon: Icons.sports_soccer,
+                onTap: _showSportSelectionDialog,
+              ),
+            ],
           ),
         ),
       ],
     );
   }
 
-  Widget _buildSportField() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          '주요 종목',
-          style: TextStyle(
-            fontSize: 16.sp,
-            fontWeight: FontWeight.w600,
-            color: AppColors.textPrimary,
-          ),
+  // === 드롭다운 필드 ===
+  Widget _buildDropdownField({
+    required ThemeData theme,
+    required String value,
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 14.h),
+        decoration: BoxDecoration(
+          color: theme.scaffoldBackgroundColor,
+          borderRadius: BorderRadius.circular(8.r),
+          border: Border.all(color: theme.colorScheme.outline.withOpacity(0.5)),
         ),
-        SizedBox(height: 8.h),
-        GestureDetector(
-          onTap: _isSaving ? null : _showSportSelectionDialog,
-          child: Container(
-            padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 16.h),
-            decoration: BoxDecoration(
-              color: _isSaving ? AppColors.grey100 : AppColors.grey50,
-              borderRadius: BorderRadius.circular(12.r),
-              border: Border.all(color: AppColors.grey200),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.sports, color: AppColors.textSecondary, size: 20.sp),
-                SizedBox(width: 12.w),
-                Expanded(
-                  child: Text(
-                    _selectedSport ?? '주요 종목을 선택해주세요',
-                    style: TextStyle(
-                      fontSize: 16.sp,
-                      color:
-                          _selectedSport != null
-                              ? AppColors.textPrimary
-                              : AppColors.textHint,
-                    ),
-                  ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(
+              child: Text(
+                value,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: theme.colorScheme.onSurface,
+                  fontSize: 14.sp,
                 ),
-                Icon(
-                  Icons.arrow_drop_down,
-                  color: AppColors.textSecondary,
-                  size: 24.sp,
-                ),
-              ],
+              ),
             ),
-          ),
+            Icon(
+              Icons.arrow_drop_down,
+              color: theme.colorScheme.onSurface.withOpacity(0.7),
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 
-  // === 프로필 이미지 처리 헬퍼 ===
-  ImageProvider? _getProfileImage() {
-    if (_selectedProfileImage != null) {
-      return FileImage(_selectedProfileImage!);
-    } else if (_selectedProfileImageUrl?.isNotEmpty == true) {
-      return NetworkImage(_selectedProfileImageUrl!);
-    }
-    return null;
-  }
-
-  Widget _buildSaveButton() {
+  // === 저장 버튼 ===
+  Widget _buildSaveButton(ThemeData theme) {
     return CustomButton(
-      text: '저장하기',
+      text: '수정 완료',
       onPressed: _isSaving ? null : _handleSave,
       isLoading: _isSaving,
-      icon: Icons.save,
     );
   }
 }

@@ -23,18 +23,23 @@ class ImageCacheManager {
     Duration? cacheDuration,
     bool useOldImageOnUrlChange = true,
   }) {
+    debugPrint('🖼️ ImageCacheManager: 이미지 로딩 시작 - $imageUrl');
+
     return CachedNetworkImage(
       imageUrl: imageUrl,
       width: width,
       height: height,
       fit: fit,
       cacheManager: defaultCacheManager,
-      placeholder:
-          (context, url) =>
-              placeholder ?? const Center(child: CircularProgressIndicator()),
-      errorWidget:
-          (context, url, error) =>
-              errorWidget ?? const Icon(Icons.error_outline, color: Colors.red),
+      placeholder: (context, url) {
+        debugPrint('⏳ ImageCacheManager: 로딩 중 - $url');
+        return placeholder ?? const Center(child: CircularProgressIndicator());
+      },
+      errorWidget: (context, url, error) {
+        debugPrint('❌ ImageCacheManager: 로딩 실패 - $url, 오류: $error');
+        return errorWidget ??
+            const Icon(Icons.error_outline, color: Colors.red);
+      },
       memCacheWidth: width?.toInt(),
       memCacheHeight: height?.toInt(),
       useOldImageOnUrlChange: useOldImageOnUrlChange,

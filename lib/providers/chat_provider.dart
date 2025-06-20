@@ -9,26 +9,30 @@ import '../shared/services/chat_service.dart';
 
 // === 채팅방 목록 상태 ===
 class ChatListState {
-  final List<ChatRoom> chatRooms;
+  final List<ChatRoom> aiChatRooms;
+  final List<ChatRoom> counselorChatRooms;
   final bool isLoading;
   final bool isInitialized;
   final String? error;
 
   const ChatListState({
-    this.chatRooms = const [],
+    this.aiChatRooms = const [],
+    this.counselorChatRooms = const [],
     this.isLoading = false,
     this.isInitialized = false,
     this.error,
   });
 
   ChatListState copyWith({
-    List<ChatRoom>? chatRooms,
+    List<ChatRoom>? aiChatRooms,
+    List<ChatRoom>? counselorChatRooms,
     bool? isLoading,
     bool? isInitialized,
     String? error,
   }) {
     return ChatListState(
-      chatRooms: chatRooms ?? this.chatRooms,
+      aiChatRooms: aiChatRooms ?? this.aiChatRooms,
+      counselorChatRooms: counselorChatRooms ?? this.counselorChatRooms,
       isLoading: isLoading ?? this.isLoading,
       isInitialized: isInitialized ?? this.isInitialized,
       error: error,
@@ -98,7 +102,7 @@ class ChatListNotifier extends StateNotifier<ChatListState> {
       if (_chatService != null) {
         // 명시적으로 채팅방 목록 한 번 로드
         final chatRooms = await _chatService!.getChatRooms();
-        state = state.copyWith(chatRooms: chatRooms);
+        state = state.copyWith(aiChatRooms: chatRooms);
       }
     } catch (e) {
       debugPrint('초기 채팅방 로드 실패: $e');
@@ -119,8 +123,15 @@ class ChatListNotifier extends StateNotifier<ChatListState> {
         _chatRoomsSubscription = stream.listen(
           (chatRooms) {
             if (mounted) {
+              final aiRooms =
+                  chatRooms.where((cr) => cr.type == ChatRoomType.ai).toList();
+              final counselorRooms =
+                  chatRooms
+                      .where((cr) => cr.type == ChatRoomType.counselor)
+                      .toList();
               state = state.copyWith(
-                chatRooms: chatRooms,
+                aiChatRooms: aiRooms,
+                counselorChatRooms: counselorRooms,
                 isLoading: false,
                 error: null,
               );
@@ -154,8 +165,13 @@ class ChatListNotifier extends StateNotifier<ChatListState> {
 
       if (_chatService != null) {
         final chatRooms = await _chatService!.getChatRooms();
+        final aiRooms =
+            chatRooms.where((cr) => cr.type == ChatRoomType.ai).toList();
+        final counselorRooms =
+            chatRooms.where((cr) => cr.type == ChatRoomType.counselor).toList();
         state = state.copyWith(
-          chatRooms: chatRooms,
+          aiChatRooms: aiRooms,
+          counselorChatRooms: counselorRooms,
           isLoading: false,
           error: null,
         );

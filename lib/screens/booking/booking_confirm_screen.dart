@@ -284,7 +284,7 @@ class _BookingConfirmScreenState extends ConsumerState<BookingConfirmScreen>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '결제 정보',
+            '요금금 정보',
             style: TextStyle(
               fontSize: 18.sp,
               fontWeight: FontWeight.bold,
@@ -466,7 +466,7 @@ class _BookingConfirmScreenState extends ConsumerState<BookingConfirmScreen>
       }
     } catch (e) {
       if (mounted) {
-        _showErrorDialog('결제 중 오류가 발생했습니다: $e');
+        _showErrorDialog('오류가 발생했습니다: $e');
       }
     } finally {
       if (mounted) {

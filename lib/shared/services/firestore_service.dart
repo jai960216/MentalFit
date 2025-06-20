@@ -30,8 +30,7 @@ class FirestoreService {
   CollectionReference get _bookingsCollection =>
       _firestore.collection('bookings');
 
-  CollectionReference get _recordsCollection =>
-      _firestore.collection('records');
+  CollectionReference get recordsCollection => _firestore.collection('records');
 
   CollectionReference get _selfCheckResultsCollection =>
       _firestore.collection('self_check_results');
@@ -272,7 +271,7 @@ class FirestoreService {
       record['createdAt'] = Timestamp.now();
       record['updatedAt'] = Timestamp.now();
 
-      await _recordsCollection.add(record);
+      await recordsCollection.add(record);
 
       debugPrint('✅ 상담 기록 저장 완료: $userId');
       return true;

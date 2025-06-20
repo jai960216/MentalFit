@@ -6,6 +6,7 @@ import '../../core/config/app_colors.dart';
 
 // Shared
 import '../../shared/widgets/custom_app_bar.dart';
+import '../../shared/widgets/theme_aware_widgets.dart';
 
 class TermsScreen extends StatefulWidget {
   const TermsScreen({super.key});
@@ -46,8 +47,7 @@ class _TermsScreenState extends State<TermsScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
+    return ThemedScaffold(
       appBar: const CustomAppBar(title: '이용약관'),
       body: FadeTransition(
         opacity: _fadeAnimation,
@@ -55,19 +55,8 @@ class _TermsScreenState extends State<TermsScreen>
           physics: const BouncingScrollPhysics(),
           child: Padding(
             padding: EdgeInsets.all(20.w),
-            child: Container(
+            child: ThemedContainer(
               padding: EdgeInsets.all(20.w),
-              decoration: BoxDecoration(
-                color: AppColors.white,
-                borderRadius: BorderRadius.circular(16.r),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.grey400.withOpacity(0.1),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -101,28 +90,26 @@ class _TermsScreenState extends State<TermsScreen>
             Icon(
               Icons.description_outlined,
               size: 24.sp,
-              color: AppColors.primary,
+              color: Theme.of(context).colorScheme.primary,
             ),
             SizedBox(width: 8.w),
-            Text(
-              '서비스 이용약관',
-              style: TextStyle(
-                fontSize: 20.sp,
-                fontWeight: FontWeight.bold,
-                color: AppColors.textPrimary,
-              ),
+            const ThemedText(
+              text: '서비스 이용약관',
+              style: TextStyle(fontSize: 20.0, fontWeight: FontWeight.bold),
             ),
           ],
         ),
         SizedBox(height: 8.h),
-        Text(
-          '시행일자: 2024년 1월 1일',
-          style: TextStyle(fontSize: 12.sp, color: AppColors.textSecondary),
+        const ThemedText(
+          text: '시행일자: 2024년 1월 1일',
+          isPrimary: false,
+          style: TextStyle(fontSize: 12.0),
         ),
         SizedBox(height: 4.h),
-        Text(
-          '최종 개정일: 2024년 12월 1일',
-          style: TextStyle(fontSize: 12.sp, color: AppColors.textSecondary),
+        const ThemedText(
+          text: '최종 개정일: 2024년 12월 1일',
+          isPrimary: false,
+          style: TextStyle(fontSize: 12.0),
         ),
       ],
     );
@@ -146,34 +133,26 @@ class _TermsScreenState extends State<TermsScreen>
       '제14조 (기타)',
     ];
 
-    return Container(
+    return ThemedContainer(
+      useSurface: false, // background color
+      addShadow: false,
       padding: EdgeInsets.all(16.w),
-      decoration: BoxDecoration(
-        color: AppColors.grey50,
-        borderRadius: BorderRadius.circular(12.r),
-        border: Border.all(color: AppColors.grey200),
-      ),
+      borderRadius: BorderRadius.circular(12.r),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            '목차',
-            style: TextStyle(
-              fontSize: 16.sp,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textPrimary,
-            ),
+          const ThemedText(
+            text: '목차',
+            style: TextStyle(fontSize: 16.0, fontWeight: FontWeight.w600),
           ),
           SizedBox(height: 12.h),
           ...contents.map(
             (content) => Padding(
               padding: EdgeInsets.only(bottom: 4.h),
-              child: Text(
-                content,
-                style: TextStyle(
-                  fontSize: 14.sp,
-                  color: AppColors.textSecondary,
-                ),
+              child: ThemedText(
+                text: content,
+                isPrimary: false,
+                style: const TextStyle(fontSize: 14.0),
               ),
             ),
           ),
@@ -350,26 +329,14 @@ class _TermsScreenState extends State<TermsScreen>
 
         _buildSection(
           title: '제14조 (기타)',
-          content: '''1. 이 약관은 대한민국 법률에 따라 규율되고 해석됩니다.
-
-2. 이 약관에서 규정하지 않은 사항과 이 약관의 해석에 관하여는 전자상거래 등에서의 소비자보호에 관한 법률, 약관의 규제에 관한 법률, 정보통신망 이용촉진 및 정보보호 등에 관한 법률 등 관련법령 또는 상관례에 따릅니다.
-
-3. 회사는 필요한 경우 특정 서비스에 관하여 별도의 이용약관 및 정책을 둘 수 있으며, 해당 내용이 이 약관과 상충할 경우에는 별도의 이용약관 및 정책이 우선 적용됩니다.
-
-[부칙]
-이 약관은 2024년 1월 1일부터 적용됩니다.''',
+          content: '이 약관에 명시되지 않은 사항은 관련 법령 및 회사의 운영정책에 따릅니다.',
         ),
 
-        SizedBox(height: 32.h),
-
         // === 연락처 정보 ===
-        Container(
+        ThemedContainer(
+          useSurface: false,
           padding: EdgeInsets.all(16.w),
-          decoration: BoxDecoration(
-            color: AppColors.primary.withOpacity(0.05),
-            borderRadius: BorderRadius.circular(12.r),
-            border: Border.all(color: AppColors.primary.withOpacity(0.2)),
-          ),
+          borderRadius: BorderRadius.circular(12.r),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -378,35 +345,30 @@ class _TermsScreenState extends State<TermsScreen>
                   Icon(
                     Icons.contact_support_outlined,
                     size: 20.sp,
-                    color: AppColors.primary,
+                    color: Theme.of(context).colorScheme.primary,
                   ),
                   SizedBox(width: 8.w),
-                  Text(
-                    '문의 및 신고',
+                  ThemedText(
+                    text: '문의 및 신고',
                     style: TextStyle(
-                      fontSize: 16.sp,
+                      fontSize: 16.0,
                       fontWeight: FontWeight.w600,
-                      color: AppColors.primary,
+                      color: Theme.of(context).colorScheme.primary,
                     ),
                   ),
                 ],
               ),
               SizedBox(height: 12.h),
-              Text(
-                '서비스 이용 중 문의사항이나 신고할 내용이 있으시면 언제든지 연락주세요.',
-                style: TextStyle(
-                  fontSize: 14.sp,
-                  color: AppColors.textSecondary,
-                ),
+              const ThemedText(
+                text: '서비스 이용 중 문의사항이나 신고할 내용이 있으시면 언제든지 연락주세요.',
+                isPrimary: false,
+                style: TextStyle(fontSize: 14.0),
               ),
               SizedBox(height: 8.h),
-              Text(
-                '고객센터: 1588-1234\n이메일: support@mentalfit.co.kr\n운영시간: 평일 09:00 - 18:00',
-                style: TextStyle(
-                  fontSize: 14.sp,
-                  color: AppColors.textPrimary,
-                  fontWeight: FontWeight.w500,
-                ),
+              const ThemedText(
+                text:
+                    '고객센터: 1588-1234\n이메일: support@mentalfit.co.kr\n운영시간: 평일 09:00 - 18:00',
+                style: TextStyle(fontSize: 14.0, fontWeight: FontWeight.w500),
               ),
             ],
           ),
@@ -416,30 +378,21 @@ class _TermsScreenState extends State<TermsScreen>
   }
 
   Widget _buildSection({required String title, required String content}) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: 24.h),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: TextStyle(
-              fontSize: 16.sp,
-              fontWeight: FontWeight.w600,
-              color: AppColors.primary,
-            ),
-          ),
-          SizedBox(height: 12.h),
-          Text(
-            content,
-            style: TextStyle(
-              fontSize: 14.sp,
-              color: AppColors.textPrimary,
-              height: 1.6,
-            ),
-          ),
-        ],
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ThemedText(
+          text: title,
+          style: TextStyle(fontSize: 18.sp, fontWeight: FontWeight.bold),
+        ),
+        SizedBox(height: 12.h),
+        ThemedText(
+          text: content,
+          isPrimary: false,
+          style: TextStyle(fontSize: 14.sp, height: 1.6),
+        ),
+        SizedBox(height: 24.h),
+      ],
     );
   }
 }

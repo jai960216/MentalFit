@@ -6,7 +6,7 @@ class AppColors {
   static const Color secondary = Color(0xFF03A9F4);
   static const Color accent = Color(0xFF00BCD4);
 
-  // 배경 색상
+  // 라이트 모드 색상
   static const Color background = Color(0xFFF5F5F5);
   static const Color surface = Color(0xFFFFFFFF);
   static const Color white = Color(0xFFFFFFFF);
@@ -48,6 +48,24 @@ class AppColors {
   static const Color grey800 = Color(0xFF424242);
   static const Color grey900 = Color(0xFF212121);
 
+  // 다크 모드 색상
+  static const Color darkBackground = Color(0xFF121212);
+  static const Color darkSurface = Color(0xFF1E1E1E);
+  static const Color darkCard = Color(0xFF2D2D2D);
+  static const Color darkTextPrimary = Color(0xFFFFFFFF);
+  static const Color darkTextSecondary = Color(0xFFB3B3B3);
+  static const Color darkTextHint = Color(0xFF666666);
+  static const Color darkDivider = Color(0xFF424242);
+  static const Color darkBorder = Color(0xFF424242);
+  static const Color darkShadow = Color(0x40000000);
+  static const Color darkCardShadow = Color(0x20000000);
+
+  // 다크 모드 상태 배경 색상
+  static const Color darkSuccessLight = Color(0xFF1B3A1B);
+  static const Color darkWarningLight = Color(0xFF3A2F1B);
+  static const Color darkErrorLight = Color(0xFF3A1B1B);
+  static const Color darkInfoLight = Color(0xFF1B2A3A);
+
   // 그라데이션
   static const LinearGradient primaryGradient = LinearGradient(
     begin: Alignment.topLeft,
@@ -61,82 +79,15 @@ class AppColors {
     colors: [background, white],
   );
 
+  static const LinearGradient darkBackgroundGradient = LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [darkBackground, darkSurface],
+  );
+
   // 투명도
   static Color withOpacity(Color color, double opacity) {
     return color.withOpacity(opacity);
-  }
-
-  // 테마 데이터
-  static ThemeData get lightTheme {
-    return ThemeData(
-      primaryColor: primary,
-      scaffoldBackgroundColor: background,
-      colorScheme: const ColorScheme.light(
-        primary: primary,
-        secondary: secondary,
-        surface: surface,
-        background: background,
-        error: error,
-      ),
-      textTheme: const TextTheme(
-        bodyLarge: TextStyle(color: textPrimary),
-        bodyMedium: TextStyle(color: textPrimary),
-        bodySmall: TextStyle(color: textSecondary),
-      ),
-      appBarTheme: const AppBarTheme(
-        backgroundColor: white,
-        foregroundColor: textPrimary,
-        elevation: 0,
-      ),
-      cardTheme: CardThemeData(
-        color: white,
-        elevation: 2,
-        shadowColor: cardShadow,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-      elevatedButtonTheme: ElevatedButtonThemeData(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: primary,
-          foregroundColor: white,
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-        ),
-      ),
-      outlinedButtonTheme: OutlinedButtonThemeData(
-        style: OutlinedButton.styleFrom(
-          foregroundColor: primary,
-          side: const BorderSide(color: primary),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-        ),
-      ),
-      textButtonTheme: TextButtonThemeData(
-        style: TextButton.styleFrom(foregroundColor: primary),
-      ),
-      inputDecorationTheme: InputDecorationTheme(
-        filled: true,
-        fillColor: grey50,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: grey300),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: grey300),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: primary),
-        ),
-        errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: error),
-        ),
-      ),
-    );
   }
 
   // Material Colors

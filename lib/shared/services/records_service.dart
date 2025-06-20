@@ -1,5 +1,8 @@
 import 'package:flutter/foundation.dart';
 import '../models/record_model.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'firestore_service.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class RecordsService {
   static RecordsService? _instance;
@@ -25,16 +28,39 @@ class RecordsService {
   // === 기록 목록 조회 ===
   Future<List<CounselingRecord>> getRecords({RecordType? type}) async {
     try {
-      await Future.delayed(const Duration(milliseconds: 800)); // 네트워크 지연 시뮬레이션
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) throw Exception('로그인이 필요합니다.');
+      final firestore = await FirestoreService.getInstance();
+      final querySnapshot =
+          await firestore.recordsCollection
+              .where('userId', isEqualTo: user.uid)
+              .orderBy('createdAt', descending: true)
+              .get();
 
-      List<CounselingRecord> mockRecords = _getMockRecords();
+      List<CounselingRecord> records =
+          querySnapshot.docs.map((doc) {
+            final data = doc.data() as Map<String, dynamic>;
+            data['id'] = doc.id;
+            // Firestore의 Timestamp -> String 변환
+            if (data['createdAt'] is Timestamp) {
+              data['createdAt'] =
+                  (data['createdAt'] as Timestamp).toDate().toIso8601String();
+            }
+            if (data['updatedAt'] is Timestamp) {
+              data['updatedAt'] =
+                  (data['updatedAt'] as Timestamp).toDate().toIso8601String();
+            }
+            if (data['sessionDate'] is Timestamp) {
+              data['sessionDate'] =
+                  (data['sessionDate'] as Timestamp).toDate().toIso8601String();
+            }
+            return CounselingRecord.fromJson(data);
+          }).toList();
 
       if (type != null && type != RecordType.all) {
-        mockRecords =
-            mockRecords.where((record) => record.type == type).toList();
+        records = records.where((record) => record.type == type).toList();
       }
-
-      return mockRecords;
+      return records;
     } catch (e) {
       if (kDebugMode) {
         debugPrint('기록 목록 조회 오류: $e');

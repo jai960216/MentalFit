@@ -9,6 +9,7 @@ import 'app_routes.dart';
 
 // === 스크린 임포트 ===
 import '../../screens/profile/profile_screen.dart';
+import '../../screens/records/records_list_screen.dart';
 
 // Auth
 import '../../screens/auth/login_screen.dart';
@@ -247,7 +248,7 @@ class AppRouter {
       GoRoute(
         path: AppRoutes.recordsList,
         name: 'records-list',
-        builder: (context, state) => const PlaceholderScreen(title: '상담 기록'),
+        builder: (context, state) => const RecordsListScreen(),
       ),
       GoRoute(
         path: '${AppRoutes.recordDetail}/:recordId',

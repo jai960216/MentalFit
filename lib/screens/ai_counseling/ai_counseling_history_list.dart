@@ -3,6 +3,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import '../../core/config/app_colors.dart';
 import '../../shared/models/ai_chat_models.dart';
 import '../../shared/services/ai_chat_local_service.dart';
+import '../../shared/widgets/theme_aware_widgets.dart';
 
 class AiCounselingHistoryList extends StatelessWidget {
   final List<AIChatRoom> aiRooms;
@@ -22,35 +23,25 @@ class AiCounselingHistoryList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (aiRooms.isEmpty) {
-      return Container(
+      return ThemedContainer(
+        useSurface: true,
+        addShadow: false,
         width: double.infinity,
         padding: EdgeInsets.all(32.w),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16.r),
-          border: Border.all(color: AppColors.grey200),
-        ),
         child: Column(
           children: [
-            Icon(
-              Icons.chat_bubble_outline_rounded,
-              size: 48.sp,
-              color: AppColors.textHint,
-            ),
+            ThemedIcon(icon: Icons.chat_bubble_outline_rounded, size: 48.sp),
             SizedBox(height: 16.h),
-            Text(
-              '아직 상담 기록이 없어요',
-              style: TextStyle(
-                fontSize: 16.sp,
-                fontWeight: FontWeight.w500,
-                color: AppColors.textSecondary,
-              ),
+            ThemedText(
+              text: '아직 상담 기록이 없어요',
+              style: TextStyle(fontSize: 16.sp, fontWeight: FontWeight.w500),
             ),
             SizedBox(height: 8.h),
-            Text(
-              '주제를 선택해 AI와와 대화를 시작해보세요',
+            ThemedText(
+              text: '주제를 선택해 AI와와 대화를 시작해보세요',
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 14.sp, color: AppColors.textHint),
+              isPrimary: false,
+              style: TextStyle(fontSize: 14.sp),
             ),
           ],
         ),
@@ -112,12 +103,10 @@ class AiCounselingHistoryList extends StatelessWidget {
             await AIChatLocalService.deleteRoom(room.id);
             if (onRoomDeleted != null) onRoomDeleted!();
           },
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12.r),
-              border: Border.all(color: AppColors.grey200),
-            ),
+          child: ThemedContainer(
+            useSurface: true,
+            addShadow: false,
+            borderRadius: BorderRadius.circular(12.r),
             child: ListTile(
               onTap: () => onEnterRoom(room),
               contentPadding: EdgeInsets.symmetric(
@@ -133,45 +122,34 @@ class AiCounselingHistoryList extends StatelessWidget {
                 ),
                 child: Icon(topic['icon'], color: topic['color'], size: 20.sp),
               ),
-              title: Text(
-                topicTitle,
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 15.sp,
-                  color: AppColors.textPrimary,
-                ),
+              title: ThemedText(
+                text: topicTitle,
+                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15.sp),
               ),
               subtitle: Padding(
                 padding: EdgeInsets.only(top: 4.h),
-                child: Text(
-                  room.lastMessage ?? '새로운 상담',
+                child: ThemedText(
+                  text: room.lastMessage ?? '새로운 상담',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 13.sp,
-                    color: AppColors.textSecondary,
-                  ),
+                  isPrimary: false,
+                  style: TextStyle(fontSize: 13.sp),
                 ),
               ),
               trailing: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Text(
-                    room.lastMessageAt != null
-                        ? '${room.lastMessageAt!.month}/${room.lastMessageAt!.day}'
-                        : '',
-                    style: TextStyle(
-                      fontSize: 12.sp,
-                      color: AppColors.textHint,
-                    ),
+                  ThemedText(
+                    text:
+                        room.lastMessageAt != null
+                            ? '${room.lastMessageAt!.month}/${room.lastMessageAt!.day}'
+                            : '',
+                    isPrimary: false,
+                    style: TextStyle(fontSize: 12.sp),
                   ),
                   SizedBox(height: 2.h),
-                  Icon(
-                    Icons.chevron_right_rounded,
-                    size: 18.sp,
-                    color: AppColors.textHint,
-                  ),
+                  ThemedIcon(icon: Icons.chevron_right_rounded, size: 18.sp),
                 ],
               ),
             ),
