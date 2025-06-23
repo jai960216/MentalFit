@@ -93,6 +93,27 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
   }
 
   // === 이벤트 처리 ===
+  void _handleUserTypeSelection(UserType type) {
+    if (type == UserType.counselor) {
+      if (!_formKey.currentState!.validate()) {
+        _showSnackBar('이름, 이메일, 비밀번호를 먼저 입력해주세요.', isError: true);
+        return;
+      }
+      context.push(
+        AppRoutes.counselorRegister,
+        extra: {
+          'email': _emailController.text.trim(),
+          'password': _passwordController.text,
+          'name': _nameController.text.trim(),
+        },
+      );
+    } else {
+      setState(() {
+        _selectedUserType = type;
+      });
+    }
+  }
+
   Future<void> _handleSignup() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -228,7 +249,11 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                   child: Column(
                     children:
                         UserType.values
-                            .where((type) => type != UserType.master)
+                            .where(
+                              (type) =>
+                                  type != UserType.master &&
+                                  type != UserType.counselor,
+                            )
                             .map((type) {
                               final isSelected = _selectedUserType == type;
                               return GestureDetector(
@@ -309,6 +334,10 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                             .toList(),
                   ),
                 ),
+                SizedBox(height: 24.h),
+
+                // === 상담사 등록 버튼 ===
+                _buildCounselorRegisterButton(),
                 SizedBox(height: 24.h),
 
                 SignupFormSection(
@@ -406,14 +435,30 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
     }
   }
 
-  // === 유저 타입 선택 처리 ===
-  void _handleUserTypeSelection(UserType type) {
-    if (type == UserType.master) {
-      _showSnackBar('관리자 계정은 별도 승인 절차가 필요합니다.', isError: true);
-      return;
-    }
-    setState(() {
-      _selectedUserType = type;
-    });
+  // === 상담사 등록 버튼 위젯 ===
+  Widget _buildCounselorRegisterButton() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '상담사로 활동하고 싶으신가요?',
+          style: TextStyle(
+            fontSize: 16.sp,
+            fontWeight: FontWeight.bold,
+            color: AppColors.textPrimary,
+          ),
+        ),
+        SizedBox(height: 8.h),
+        CustomButton(
+          text: '상담사 등록하기',
+          onPressed:
+              _isLoading
+                  ? null
+                  : () => context.push(AppRoutes.counselorRegister),
+          type: ButtonType.outline,
+          icon: Icons.person_add,
+        ),
+      ],
+    );
   }
 }

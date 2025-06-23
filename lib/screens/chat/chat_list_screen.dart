@@ -28,7 +28,11 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-    _initializeChatService();
+
+    // 위젯 생성 완료 후 초기화
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initializeChatService();
+    });
   }
 
   Future<void> _initializeChatService() async {
@@ -187,7 +191,10 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen>
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(chatListProvider);
-    final user = ref.watch(currentUserProvider);
+    final user =
+        ref
+            .watch(authProvider)
+            .user; // ✅ 수정: currentUserProvider → authProvider.user
 
     if (_isInitializing) {
       return _buildLoadingScreen();
@@ -262,8 +269,15 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen>
   Widget _buildTab(ChatListState state, User? user, String type) {
     final rooms = type == 'ai' ? state.aiChatRooms : state.counselorChatRooms;
 
-    if (state.isLoading) {
+    // 디버깅용 로그 추가
+    debugPrint('$type 탭 - 채팅방 개수: ${rooms.length}');
+
+    if (state.isLoading && rooms.isEmpty) {
       return const LoadingWidget();
+    }
+
+    if (state.error != null) {
+      return _buildErrorState(state.error!);
     }
 
     if (rooms.isEmpty) {

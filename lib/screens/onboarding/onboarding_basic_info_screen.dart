@@ -462,21 +462,27 @@ class _OnboardingBasicInfoScreenState
         return Icons.sports;
       case UserType.master:
         return Icons.admin_panel_settings;
+      case UserType.counselor:
+        return Icons.psychology;
     }
   }
 
   String _getUserTypeDescription(UserType type) {
     switch (type) {
       case UserType.athlete:
-        return '프로/아마추어 스포츠 선수';
+        return '선수: 운동 선수로서 전문적인 멘탈 관리를 원합니다.';
       case UserType.general:
-        return '운동을 즐기는 일반인';
+        return '일반인: 일상 속 스트레스, 불안감 해소 등 정신 건강 관리가 필요합니다.';
       case UserType.guardian:
-        return '선수 자녀를 둔 부모님';
+        return '보호자: 자녀, 가족 등 다른 사람의 정신 건강을 돕고 싶습니다.';
       case UserType.coach:
-        return '스포츠 지도자 및 트레이너';
+        return '지도자: 선수들을 지도하며 멘탈 코칭 역량을 키우고 싶습니다.';
       case UserType.master:
-        return '관리자(마스터)는 온보딩 불가, 안내 메시지 등 처리';
+        return '관리자: 시스템 전반을 관리합니다.';
+      case UserType.counselor:
+        // 상담사는 별도의 등록 프로세스를 가지므로, 이 화면에 도달해서는 안됩니다.
+        // 하지만 완전성을 위해 추가합니다.
+        return '상담사: 전문가로서 상담을 제공합니다.';
     }
   }
 
@@ -698,5 +704,22 @@ class _OnboardingBasicInfoScreenState
             ),
           ),
     );
+  }
+
+  String _getUserTypeIconPath(UserType type) {
+    switch (type) {
+      case UserType.athlete:
+        return 'assets/icons/athlete.svg';
+      case UserType.general:
+        return 'assets/icons/general.svg';
+      case UserType.guardian:
+        return 'assets/icons/guardian.svg';
+      case UserType.coach:
+        return 'assets/icons/coach.svg';
+      case UserType.master:
+        return 'assets/icons/master.svg';
+      case UserType.counselor:
+        return 'assets/icons/counselor.svg';
+    }
   }
 }

@@ -2,21 +2,27 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
-import '../../core/config/app_colors.dart';
-import '../../core/config/app_routes.dart';
-import '../../core/network/error_handler.dart';
-import '../../shared/widgets/custom_app_bar.dart';
-import '../../shared/widgets/custom_button.dart';
-import '../../shared/widgets/custom_text_field.dart';
-import '../../shared/widgets/loading_widget.dart';
-import '../../shared/models/counselor_model.dart';
-import '../../providers/counselor_provider.dart';
+import 'dart:convert';
 import 'package:image_picker/image_picker.dart';
-import 'package:path_provider/path_provider.dart';
 import 'dart:io';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'dart:typed_data';
+import 'package:image/image.dart' as img;
+
+import '../../core/config/app_colors.dart';
+import '../../core/network/error_handler.dart';
+import '../../providers/auth_provider.dart';
+import '../../shared/models/user_model.dart';
+import '../../shared/services/counselor_service.dart';
+import '../../shared/models/counselor_model.dart';
+import '../../shared/widgets/custom_button.dart';
+import '../../shared/widgets/loading_widget.dart';
+import '../auth/signup_models.dart';
 
 class CounselorRegisterScreen extends ConsumerStatefulWidget {
-  const CounselorRegisterScreen({super.key});
+  final SignupInfo signupInfo;
+
+  const CounselorRegisterScreen({super.key, required this.signupInfo});
 
   @override
   ConsumerState<CounselorRegisterScreen> createState() =>
@@ -26,707 +32,460 @@ class CounselorRegisterScreen extends ConsumerStatefulWidget {
 class _CounselorRegisterScreenState
     extends ConsumerState<CounselorRegisterScreen> {
   final _formKey = GlobalKey<FormState>();
-  bool _isLoading = false;
-  bool _isSaving = false;
 
-  // 기본 정보
-  final _nameController = TextEditingController();
-  final _titleController = TextEditingController();
-  final _introductionController = TextEditingController();
+  // Controllers
+  final _emailController = TextEditingController(); // 이메일
+  final _passwordController = TextEditingController(); // 비밀번호
+  late final TextEditingController _nameController;
+  final _titleController = TextEditingController(); // 직책
+  final _introductionController = TextEditingController(); // 한줄소개
+  final _experienceController = TextEditingController(); // 경력
+  final _priceController = TextEditingController(); // 가격
+  final _packagePriceController = TextEditingController(); // 패키지 가격
+  final _groupPriceController = TextEditingController(); // 그룹 가격
+  final _specialtyController = TextEditingController(); // 전문분야
+  final _qualificationController = TextEditingController(); // 자격증
+  final _languageController = TextEditingController(); // 언어
 
-  // 전문 분야
-  final List<String> _selectedSpecialties = [];
-
-  // 자격증/학력
+  // State
+  String? _profileImageBase64;
+  final List<String> _specialties = [];
   final List<String> _qualifications = [];
-  final _qualificationController = TextEditingController();
-
-  // 경력
-  int _experienceYears = 0;
-
-  // 상담 방식
-  CounselingMethod _preferredMethod = CounselingMethod.all;
-
-  // 가격 정보
-  final _priceController = TextEditingController();
-
-  // 가능한 시간
+  final List<String> _languages = [];
+  CounselingMethod _preferredMethod = CounselingMethod.online;
+  bool _isLoading = false;
+  // 상담 가능한 시간대
   final List<AvailableTime> _availableTimes = [];
+  String _selectedDay = '월';
+  TimeOfDay _startTime = const TimeOfDay(hour: 9, minute: 0);
+  TimeOfDay _endTime = const TimeOfDay(hour: 18, minute: 0);
 
-  // 사용 언어
-  final List<String> _languages = ['한국어'];
-
-  XFile? _pickedImage;
-  String? _localImagePath;
+  @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController(text: widget.signupInfo.name);
+  }
 
   @override
   void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
     _nameController.dispose();
     _titleController.dispose();
     _introductionController.dispose();
-    _qualificationController.dispose();
+    _experienceController.dispose();
     _priceController.dispose();
+    _packagePriceController.dispose();
+    _groupPriceController.dispose();
+    _specialtyController.dispose();
+    _qualificationController.dispose();
+    _languageController.dispose();
     super.dispose();
   }
 
-  // === 전문 분야 선택 ===
-  void _showSpecialtiesDialog() {
-    final specialties = [
-      '불안/스트레스',
-      '자신감/동기부여',
-      '집중력/수행력',
-      '팀워크/리더십',
-      '부상/재활',
-      '경기력 향상',
-      '생활 관리',
-      '기타',
-    ];
+  Future<void> _pickImage() async {
+    final picker = ImagePicker();
+    final pickedFile = await picker.pickImage(source: ImageSource.gallery);
 
-    showDialog(
-      context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('전문 분야 선택'),
-            content: SizedBox(
-              width: double.maxFinite,
-              height: 300.h,
-              child: ListView.builder(
-                itemCount: specialties.length,
-                itemBuilder: (context, index) {
-                  final specialty = specialties[index];
-                  final isSelected = _selectedSpecialties.contains(specialty);
-
-                  return CheckboxListTile(
-                    title: Text(specialty),
-                    value: isSelected,
-                    onChanged: (bool? value) {
-                      setState(() {
-                        if (value == true) {
-                          _selectedSpecialties.add(specialty);
-                        } else {
-                          _selectedSpecialties.remove(specialty);
-                        }
-                      });
-                    },
-                  );
-                },
+    if (pickedFile != null) {
+      // 이미지 리사이즈 및 강한 압축 (128x128, 품질 30)
+      final bytes = await pickedFile.readAsBytes();
+      final original = img.decodeImage(bytes);
+      if (original != null) {
+        final resized = img.copyResize(original, width: 128, height: 128);
+        final jpg = img.encodeJpg(resized, quality: 30);
+        // 20KB 이하로 제한
+        if (jpg.length < 20 * 1024) {
+          setState(() {
+            _profileImageBase64 = base64Encode(jpg);
+          });
+        } else {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('이미지 용량이 너무 큽니다. 더 작은 이미지를 선택해주세요.'),
+                backgroundColor: Colors.red,
               ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('확인'),
-              ),
-            ],
-          ),
-    );
-  }
-
-  // === 자격증/학력 추가 ===
-  void _addQualification() {
-    if (_qualificationController.text.isNotEmpty) {
-      setState(() {
-        _qualifications.add(_qualificationController.text);
-        _qualificationController.clear();
-      });
+            );
+          }
+        }
+      }
     }
   }
 
-  // === 경력 연수 선택 ===
-  void _showExperienceDialog() {
-    showDialog(
-      context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('경력 연수'),
-            content: SizedBox(
-              width: double.maxFinite,
-              height: 300.h,
-              child: ListView.builder(
-                itemCount: 21, // 0-20년
-                itemBuilder: (context, index) {
-                  final years = index;
-                  final isSelected = _experienceYears == years;
+  Future<void> _submitRequest() async {
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+    _formKey.currentState!.save();
 
-                  return ListTile(
-                    title: Text('$years년'),
-                    trailing: isSelected ? const Icon(Icons.check) : null,
-                    onTap: () {
-                      setState(() => _experienceYears = years);
-                      Navigator.pop(context);
-                    },
-                  );
-                },
-              ),
-            ),
-          ),
-    );
-  }
+    setState(() => _isLoading = true);
 
-  // === 상담 방식 선택 ===
-  void _showCounselingMethodDialog() {
-    showDialog(
-      context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('선호 상담 방식'),
-            content: SizedBox(
-              width: double.maxFinite,
-              height: 300.h,
-              child: ListView.builder(
-                itemCount: CounselingMethod.values.length,
-                itemBuilder: (context, index) {
-                  final method = CounselingMethod.values[index];
-                  final isSelected = _preferredMethod == method;
-
-                  return ListTile(
-                    leading: Icon(method.icon),
-                    title: Text(method.displayName),
-                    trailing: isSelected ? const Icon(Icons.check) : null,
-                    onTap: () {
-                      setState(() => _preferredMethod = method);
-                      Navigator.pop(context);
-                    },
-                  );
-                },
-              ),
-            ),
-          ),
-    );
-  }
-
-  // === 가능한 시간 추가 ===
-  void _showAvailableTimeDialog() {
-    String selectedDay = '월';
-    String selectedStartTime = '09:00';
-    String selectedEndTime = '18:00';
-
-    showDialog(
-      context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('가능한 시간 추가'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                DropdownButtonFormField<String>(
-                  value: selectedDay,
-                  items:
-                      ['월', '화', '수', '목', '금', '토', '일']
-                          .map(
-                            (day) =>
-                                DropdownMenuItem(value: day, child: Text(day)),
-                          )
-                          .toList(),
-                  onChanged: (value) {
-                    if (value != null) selectedDay = value;
-                  },
-                ),
-                Row(
-                  children: [
-                    Expanded(
-                      child: DropdownButtonFormField<String>(
-                        value: selectedStartTime,
-                        items: List.generate(24, (index) {
-                          final hour = index.toString().padLeft(2, '0');
-                          return DropdownMenuItem(
-                            value: '$hour:00',
-                            child: Text('$hour:00'),
-                          );
-                        }),
-                        onChanged: (value) {
-                          if (value != null) selectedStartTime = value;
-                        },
-                      ),
-                    ),
-                    const Text(' ~ '),
-                    Expanded(
-                      child: DropdownButtonFormField<String>(
-                        value: selectedEndTime,
-                        items: List.generate(24, (index) {
-                          final hour = index.toString().padLeft(2, '0');
-                          return DropdownMenuItem(
-                            value: '$hour:00',
-                            child: Text('$hour:00'),
-                          );
-                        }),
-                        onChanged: (value) {
-                          if (value != null) selectedEndTime = value;
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('취소'),
-              ),
-              TextButton(
-                onPressed: () {
-                  setState(() {
-                    _availableTimes.add(
-                      AvailableTime(
-                        dayOfWeek: selectedDay,
-                        startTime: selectedStartTime,
-                        endTime: selectedEndTime,
-                        isAvailable: true,
-                      ),
-                    );
-                  });
-                  Navigator.pop(context);
-                },
-                child: const Text('추가'),
-              ),
-            ],
-          ),
-    );
-  }
-
-  // === 이미지 선택 ===
-  Future<void> _pickImage() async {
     try {
-      final ImagePicker picker = ImagePicker();
-      final XFile? image = await picker.pickImage(
-        source: ImageSource.gallery,
-        maxWidth: 1024,
-        maxHeight: 1024,
-        imageQuality: 85,
+      // 1. Firebase Auth 계정 생성
+      final authNotifier = ref.read(authProvider.notifier);
+      final authResult = await authNotifier.register(
+        email: _emailController.text,
+        password: _passwordController.text,
+        name: _nameController.text,
+        userType: UserType.counselor,
       );
 
-      if (image != null) {
-        // 앱의 Document 디렉토리에 복사
-        final appDir = await getApplicationDocumentsDirectory();
-        final fileName = image.name;
-        final savedImage = await File(
-          image.path,
-        ).copy('${appDir.path}/$fileName');
-        setState(() {
-          _pickedImage = image;
-          _localImagePath = savedImage.path;
-        });
+      if (!authResult.success || authResult.user == null) {
+        throw Exception(authResult.error ?? "Firebase Auth 계정 생성에 실패했습니다.");
       }
-    } catch (e) {
-      debugPrint('이미지 선택 실패: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('이미지 선택에 실패했습니다: \\${e.toString()}'),
-            backgroundColor: AppColors.error,
-          ),
-        );
-      }
-    }
-  }
 
-  // === 저장 처리 ===
-  Future<void> _handleSave() async {
-    if (!_formKey.currentState!.validate()) return;
+      final user = authResult.user!;
 
-    setState(() => _isSaving = true);
-
-    try {
-      // Storage 업로드 코드 제거, 로컬 경로만 사용
-      String? finalImagePath = _localImagePath;
-
-      final counselor = Counselor(
-        id: '', // 서버에서 생성
-        name: _nameController.text.trim(),
-        title: _titleController.text.trim(),
-        introduction: _introductionController.text.trim(),
-        specialties: _selectedSpecialties,
+      // 2. 상담사 등록 요청 객체 생성
+      final request = CounselorRequest(
+        id: '', // Firestore에서 자동 생성
+        userId: user.id,
+        userName: _nameController.text,
+        userProfileImageUrl: _profileImageBase64 ?? '',
+        title: _titleController.text.isNotEmpty ? _titleController.text : '',
+        introduction:
+            _introductionController.text.isNotEmpty
+                ? _introductionController.text
+                : '',
+        specialties: _specialties,
         qualifications: _qualifications,
-        experienceYears: _experienceYears,
-        preferredMethod: _preferredMethod,
-        price: Price(consultationFee: int.tryParse(_priceController.text) ?? 0),
+        experienceYears: int.tryParse(_experienceController.text) ?? 0,
+        price: Price(
+          consultationFee: int.tryParse(_priceController.text) ?? 0,
+          packageFee:
+              _packagePriceController.text.isNotEmpty
+                  ? int.tryParse(_packagePriceController.text)
+                  : null,
+          groupFee:
+              _groupPriceController.text.isNotEmpty
+                  ? int.tryParse(_groupPriceController.text)
+                  : null,
+        ),
         availableTimes: _availableTimes,
         languages: _languages,
-        rating: 0,
-        reviewCount: 0,
-        isOnline: false,
-        consultationCount: 0,
+        preferredMethod: _preferredMethod,
+        status: CounselorRequestStatus.pending,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
-        profileImageUrl: finalImagePath, // Firestore에는 로컬 경로 저장(임시)
       );
 
-      final success = await ref
-          .read(counselorProvider.notifier)
-          .registerCounselor(counselor);
+      // 3. Firestore에 요청 제출
+      final counselorService = await CounselorService.getInstance();
+      await counselorService.submitCounselorRequest(request);
 
-      if (success && mounted) {
-        await ref
-            .read(counselorProvider.notifier)
-            .loadCounselors(refresh: true);
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('상담사가 등록되었습니다'),
+            content: Text('상담사 등록 요청이 완료되었습니다. 관리자 승인 후 활동할 수 있습니다.'),
             backgroundColor: AppColors.success,
           ),
         );
-        context.pop();
+        context.go('/login');
       }
     } catch (e) {
       if (mounted) {
-        GlobalErrorHandler.showErrorSnackBar(context, e);
+        GlobalErrorHandler.showErrorSnackBar(context, e.toString());
       }
     } finally {
       if (mounted) {
-        setState(() => _isSaving = false);
+        setState(() => _isLoading = false);
       }
+    }
+  }
+
+  void _addToList(List<String> list, TextEditingController controller) {
+    if (controller.text.isNotEmpty) {
+      setState(() {
+        list.add(controller.text);
+        controller.clear();
+      });
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Scaffold(
-        backgroundColor: AppColors.background,
-        body: LoadingWidget(),
-      );
-    }
-
     return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: const CustomAppBar(title: '상담사 등록'),
-      body: Form(
-        key: _formKey,
-        child: SingleChildScrollView(
-          padding: EdgeInsets.all(20.w),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // === 프로필 이미지 선택 ===
-              Center(
-                child: Stack(
-                  children: [
-                    CircleAvatar(
-                      radius: 48.r,
-                      backgroundImage:
-                          _localImagePath != null
-                              ? FileImage(File(_localImagePath!))
-                              : null,
-                      child:
-                          (_localImagePath == null)
-                              ? const Icon(
-                                Icons.person,
-                                size: 48,
-                                color: Colors.white,
-                              )
-                              : null,
-                      backgroundColor: AppColors.primary.withOpacity(0.2),
-                    ),
-                    Positioned(
-                      bottom: 0,
-                      right: 0,
-                      child: GestureDetector(
-                        onTap: _pickImage,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: AppColors.primary,
-                            shape: BoxShape.circle,
-                          ),
-                          padding: const EdgeInsets.all(8),
-                          child: const Icon(
-                            Icons.camera_alt,
-                            color: Colors.white,
-                            size: 20,
-                          ),
-                        ),
+      appBar: AppBar(title: const Text('상담사 등록')),
+      body:
+          _isLoading
+              ? const LoadingWidget()
+              : SingleChildScrollView(
+                padding: EdgeInsets.all(16.w),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _buildImagePicker(),
+                      SizedBox(height: 24.h),
+                      _buildTextField(
+                        _emailController,
+                        '이메일',
+                        keyboardType: TextInputType.emailAddress,
                       ),
-                    ),
-                  ],
-                ),
-              ),
-              SizedBox(height: 24.h),
-              // === 기본 정보 ===
-              Text(
-                '기본 정보',
-                style: TextStyle(
-                  fontSize: 18.sp,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-              SizedBox(height: 16.h),
-
-              // 이름
-              CustomTextField(
-                labelText: '이름',
-                hintText: '실명을 입력해주세요',
-                controller: _nameController,
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return '이름을 입력해주세요';
-                  }
-                  return null;
-                },
-              ),
-              SizedBox(height: 16.h),
-
-              // 직책/자격
-              CustomTextField(
-                labelText: '직책/자격',
-                hintText: '예: 스포츠 심리 전문가, 임상심리전문가 등',
-                controller: _titleController,
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return '직책/자격을 입력해주세요';
-                  }
-                  return null;
-                },
-              ),
-              SizedBox(height: 16.h),
-
-              // 소개
-              CustomTextField(
-                labelText: '소개',
-                hintText: '자신을 소개해주세요',
-                controller: _introductionController,
-                maxLines: 5,
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return '소개를 입력해주세요';
-                  }
-                  return null;
-                },
-              ),
-              SizedBox(height: 24.h),
-
-              // === 전문 분야 ===
-              Text(
-                '전문 분야',
-                style: TextStyle(
-                  fontSize: 18.sp,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-              SizedBox(height: 16.h),
-
-              // 전문 분야 선택 버튼
-              CustomButton(
-                text: '전문 분야 선택',
-                icon: Icons.add,
-                type: ButtonType.outline,
-                onPressed: _showSpecialtiesDialog,
-              ),
-              if (_selectedSpecialties.isNotEmpty) ...[
-                SizedBox(height: 8.h),
-                Wrap(
-                  spacing: 8.w,
-                  runSpacing: 8.h,
-                  children:
-                      _selectedSpecialties.map((specialty) {
-                        return Chip(
-                          label: Text(specialty),
-                          onDeleted: () {
-                            setState(() {
-                              _selectedSpecialties.remove(specialty);
-                            });
-                          },
-                        );
-                      }).toList(),
-                ),
-              ],
-              SizedBox(height: 24.h),
-
-              // === 자격증/학력 ===
-              Text(
-                '자격증/학력',
-                style: TextStyle(
-                  fontSize: 18.sp,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-              SizedBox(height: 16.h),
-
-              // 자격증/학력 입력
-              Row(
-                children: [
-                  Expanded(
-                    child: CustomTextField(
-                      labelText: '자격증/학력',
-                      hintText: '예: 서울대학교 심리학과 졸업',
-                      controller: _qualificationController,
-                    ),
-                  ),
-                  SizedBox(width: 8.w),
-                  IconButton(
-                    onPressed: _addQualification,
-                    icon: const Icon(Icons.add_circle_outline),
-                    color: AppColors.primary,
-                  ),
-                ],
-              ),
-              if (_qualifications.isNotEmpty) ...[
-                SizedBox(height: 8.h),
-                Wrap(
-                  spacing: 8.w,
-                  runSpacing: 8.h,
-                  children:
-                      _qualifications.map((qualification) {
-                        return Chip(
-                          label: Text(qualification),
-                          onDeleted: () {
-                            setState(() {
-                              _qualifications.remove(qualification);
-                            });
-                          },
-                        );
-                      }).toList(),
-                ),
-              ],
-              SizedBox(height: 24.h),
-
-              // === 경력 ===
-              Text(
-                '경력',
-                style: TextStyle(
-                  fontSize: 18.sp,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-              SizedBox(height: 16.h),
-
-              // 경력 선택 버튼
-              CustomButton(
-                text: '경력 연수 선택',
-                icon: Icons.work_outline,
-                type: ButtonType.outline,
-                onPressed: _showExperienceDialog,
-              ),
-              if (_experienceYears > 0) ...[
-                SizedBox(height: 8.h),
-                Text(
-                  '$_experienceYears년',
-                  style: TextStyle(
-                    fontSize: 16.sp,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-              ],
-              SizedBox(height: 24.h),
-
-              // === 상담 방식 ===
-              Text(
-                '선호 상담 방식',
-                style: TextStyle(
-                  fontSize: 18.sp,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-              SizedBox(height: 16.h),
-
-              // 상담 방식 선택 버튼
-              CustomButton(
-                text: '상담 방식 선택',
-                icon: _preferredMethod.icon,
-                type: ButtonType.outline,
-                onPressed: _showCounselingMethodDialog,
-              ),
-              if (_preferredMethod != CounselingMethod.all) ...[
-                SizedBox(height: 8.h),
-                Text(
-                  _preferredMethod.displayName,
-                  style: TextStyle(
-                    fontSize: 16.sp,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-              ],
-              SizedBox(height: 24.h),
-
-              // === 가격 정보 ===
-              Text(
-                '상담 비용',
-                style: TextStyle(
-                  fontSize: 18.sp,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-              SizedBox(height: 16.h),
-
-              // 가격 입력
-              CustomTextField(
-                labelText: '1회 상담 비용',
-                hintText: '예: 50000',
-                controller: _priceController,
-                keyboardType: TextInputType.number,
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return '상담 비용을 입력해주세요';
-                  }
-                  if (int.tryParse(value) == null) {
-                    return '숫자만 입력해주세요';
-                  }
-                  return null;
-                },
-              ),
-              SizedBox(height: 24.h),
-
-              // === 가능한 시간 ===
-              Text(
-                '가능한 시간',
-                style: TextStyle(
-                  fontSize: 18.sp,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-              SizedBox(height: 16.h),
-
-              // 가능한 시간 추가 버튼
-              CustomButton(
-                text: '가능한 시간 추가',
-                icon: Icons.access_time,
-                type: ButtonType.outline,
-                onPressed: _showAvailableTimeDialog,
-              ),
-              if (_availableTimes.isNotEmpty) ...[
-                SizedBox(height: 8.h),
-                ListView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: _availableTimes.length,
-                  itemBuilder: (context, index) {
-                    final time = _availableTimes[index];
-                    return ListTile(
-                      title: Text(
-                        '${time.dayOfWeek} ${time.startTime} - ${time.endTime}',
+                      SizedBox(height: 16.h),
+                      _buildPasswordField(_passwordController, '비밀번호'),
+                      SizedBox(height: 16.h),
+                      _buildNameField(),
+                      SizedBox(height: 16.h),
+                      _buildTextField(_titleController, '직책 (예: 스포츠심리상담사)'),
+                      SizedBox(height: 16.h),
+                      _buildTextField(_introductionController, '한 줄 소개'),
+                      SizedBox(height: 16.h),
+                      _buildTextField(
+                        _experienceController,
+                        '총 경력 (년)',
+                        keyboardType: TextInputType.number,
                       ),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.delete_outline),
-                        onPressed: () {
-                          setState(() {
-                            _availableTimes.removeAt(index);
-                          });
-                        },
+                      SizedBox(height: 16.h),
+                      _buildTextField(
+                        _priceController,
+                        '상담 가격 (1회)',
+                        keyboardType: TextInputType.number,
                       ),
-                    );
-                  },
+                      SizedBox(height: 16.h),
+                      _buildTextField(
+                        _packagePriceController,
+                        '패키지 가격 (선택)',
+                        keyboardType: TextInputType.number,
+                      ),
+                      SizedBox(height: 16.h),
+                      _buildTextField(
+                        _groupPriceController,
+                        '그룹 가격 (선택)',
+                        keyboardType: TextInputType.number,
+                      ),
+                      SizedBox(height: 24.h),
+                      _buildAvailableTimesInput(),
+                      SizedBox(height: 24.h),
+                      _buildPreferredMethodDropdown(),
+                      SizedBox(height: 24.h),
+                      _buildChipInput(
+                        '전문 분야',
+                        _specialtyController,
+                        _specialties,
+                      ),
+                      SizedBox(height: 24.h),
+                      _buildChipInput(
+                        '자격증/학력',
+                        _qualificationController,
+                        _qualifications,
+                      ),
+                      SizedBox(height: 24.h),
+                      _buildChipInput('사용 언어', _languageController, _languages),
+                      SizedBox(height: 32.h),
+                      CustomButton(text: '등록 요청하기', onPressed: _submitRequest),
+                    ],
+                  ),
                 ),
-              ],
-              SizedBox(height: 32.h),
-
-              // === 저장 버튼 ===
-              CustomButton(
-                text: '상담사 등록',
-                onPressed: _isSaving ? null : _handleSave,
-                isLoading: _isSaving,
               ),
-
-              SizedBox(height: 40.h),
-            ],
-          ),
-        ),
-      ),
     );
   }
+
+  Widget _buildImagePicker() => Center(
+    child: Stack(
+      children: [
+        CircleAvatar(
+          radius: 50.r,
+          backgroundImage:
+              _profileImageBase64 != null
+                  ? MemoryImage(base64Decode(_profileImageBase64!))
+                  : null,
+          child:
+              _profileImageBase64 == null
+                  ? Icon(Icons.person, size: 50.r)
+                  : null,
+        ),
+        Positioned(
+          bottom: 0,
+          right: 0,
+          child: IconButton(
+            icon: const Icon(Icons.camera_alt),
+            onPressed: _pickImage,
+          ),
+        ),
+      ],
+    ),
+  );
+
+  Widget _buildNameField() => TextFormField(
+    controller: _nameController,
+    decoration: const InputDecoration(
+      labelText: '이름',
+      border: OutlineInputBorder(),
+    ),
+    validator: (value) => (value?.isEmpty ?? true) ? '이름을 입력해주세요.' : null,
+  );
+
+  Widget _buildTextField(
+    TextEditingController controller,
+    String label, {
+    TextInputType? keyboardType,
+  }) => TextFormField(
+    controller: controller,
+    decoration: InputDecoration(
+      labelText: label,
+      border: const OutlineInputBorder(),
+    ),
+    keyboardType: keyboardType,
+    validator:
+        (value) => (value?.isEmpty ?? true) ? '$label을(를) 입력해주세요.' : null,
+  );
+
+  Widget _buildPasswordField(TextEditingController controller, String label) =>
+      TextFormField(
+        controller: controller,
+        decoration: InputDecoration(
+          labelText: label,
+          border: const OutlineInputBorder(),
+        ),
+        obscureText: true,
+        validator:
+            (value) =>
+                (value == null || value.length < 6)
+                    ? '비밀번호는 6자 이상이어야 합니다.'
+                    : null,
+      );
+
+  Widget _buildPreferredMethodDropdown() =>
+      DropdownButtonFormField<CounselingMethod>(
+        value: _preferredMethod,
+        decoration: const InputDecoration(
+          labelText: '선호 상담 방식',
+          border: OutlineInputBorder(),
+        ),
+        items:
+            CounselingMethod.values
+                .map(
+                  (method) => DropdownMenuItem(
+                    value: method,
+                    child: Text(method.displayName),
+                  ),
+                )
+                .toList(),
+        onChanged: (value) {
+          if (value != null) {
+            setState(() => _preferredMethod = value);
+          }
+        },
+      );
+
+  Widget _buildChipInput(
+    String label,
+    TextEditingController controller,
+    List<String> chips,
+  ) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(label, style: Theme.of(context).textTheme.titleMedium),
+      SizedBox(height: 8.h),
+      Wrap(
+        spacing: 8.w,
+        runSpacing: 4.h,
+        children:
+            chips
+                .map(
+                  (chip) => Chip(
+                    label: Text(chip),
+                    onDeleted: () => setState(() => chips.remove(chip)),
+                  ),
+                )
+                .toList(),
+      ),
+      SizedBox(height: 8.h),
+      Row(
+        children: [
+          Expanded(
+            child: TextFormField(
+              controller: controller,
+              decoration: InputDecoration(
+                labelText: '$label 추가',
+                border: const OutlineInputBorder(),
+              ),
+              onFieldSubmitted: (_) => _addToList(chips, controller),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.add),
+            onPressed: () => _addToList(chips, controller),
+          ),
+        ],
+      ),
+    ],
+  );
+
+  Widget _buildAvailableTimesInput() => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text('상담 가능한 시간대', style: Theme.of(context).textTheme.titleMedium),
+      SizedBox(height: 8.h),
+      Wrap(
+        spacing: 8.w,
+        runSpacing: 4.h,
+        children:
+            _availableTimes
+                .map(
+                  (t) => Chip(
+                    label: Text('${t.day} ${t.startTime}~${t.endTime}'),
+                    onDeleted: () => setState(() => _availableTimes.remove(t)),
+                  ),
+                )
+                .toList(),
+      ),
+      SizedBox(height: 8.h),
+      Row(
+        children: [
+          DropdownButton<String>(
+            value: _selectedDay,
+            items:
+                ['월', '화', '수', '목', '금', '토', '일']
+                    .map((d) => DropdownMenuItem(value: d, child: Text(d)))
+                    .toList(),
+            onChanged: (v) => setState(() => _selectedDay = v!),
+          ),
+          SizedBox(width: 8.w),
+          TextButton(
+            onPressed: () async {
+              final picked = await showTimePicker(
+                context: context,
+                initialTime: _startTime,
+              );
+              if (picked != null) setState(() => _startTime = picked);
+            },
+            child: Text('시작: ${_startTime.format(context)}'),
+          ),
+          SizedBox(width: 8.w),
+          TextButton(
+            onPressed: () async {
+              final picked = await showTimePicker(
+                context: context,
+                initialTime: _endTime,
+              );
+              if (picked != null) setState(() => _endTime = picked);
+            },
+            child: Text('종료: ${_endTime.format(context)}'),
+          ),
+          IconButton(
+            icon: const Icon(Icons.add),
+            onPressed: () {
+              final start = _startTime.format(context);
+              final end = _endTime.format(context);
+              if (start != end) {
+                setState(() {
+                  _availableTimes.add(
+                    AvailableTime(
+                      day: _selectedDay,
+                      startTime: start,
+                      endTime: end,
+                    ),
+                  );
+                });
+              }
+            },
+          ),
+        ],
+      ),
+    ],
+  );
 }

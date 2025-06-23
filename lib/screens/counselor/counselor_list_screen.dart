@@ -4,6 +4,8 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter/rendering.dart';
 import 'dart:io';
+import 'dart:convert';
+import 'dart:typed_data';
 
 import '../../core/config/app_routes.dart';
 import '../../core/utils/image_cache_manager.dart';
@@ -519,64 +521,40 @@ class CounselorListScreen extends ConsumerWidget {
     );
   }
 
+  ImageProvider? getImageProvider(String? imageUrl) {
+    if (imageUrl == null || imageUrl.isEmpty) return null;
+    if (imageUrl.startsWith('http')) {
+      return NetworkImage(imageUrl);
+    }
+    try {
+      Uint8List bytes = base64Decode(imageUrl);
+      return MemoryImage(bytes);
+    } catch (e) {
+      return null;
+    }
+  }
+
   Widget _buildCounselorImage(BuildContext context, String? imageUrl) {
-    // 디버그 로그 추가
-    debugPrint('🔍 상담사 이미지 URL: $imageUrl');
-
-    // 이미지 URL이 null이거나 빈 문자열인 경우 기본 프로필 이미지 표시
-    if (imageUrl == null || imageUrl.isEmpty) {
-      debugPrint('⚠️ 이미지 URL이 없어 기본 이미지 표시');
-      return Container(
-        width: 80.w,
-        height: 80.w,
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surfaceVariant,
-          borderRadius: BorderRadius.circular(12.r),
-        ),
-        child: Icon(
-          Icons.person,
-          size: 40.w,
-          color: Theme.of(context).colorScheme.onSurfaceVariant,
-        ),
-      );
-    }
-
-    // 로컬 파일 경로인지 네트워크 URL인지 확인
-    final isLocalFile =
-        imageUrl.startsWith('/') || imageUrl.startsWith('file://');
-
-    if (isLocalFile) {
-      debugPrint('📁 로컬 파일 경로: $imageUrl');
-      return Container(
-        width: 80.w,
-        height: 80.w,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12.r),
-          image: DecorationImage(
-            image: FileImage(File(imageUrl)),
-            fit: BoxFit.cover,
-            onError: (exception, stackTrace) {
-              debugPrint('❌ 로컬 파일 로딩 실패: $imageUrl, 오류: $exception');
-            },
-          ),
-        ),
-      );
-    } else {
-      debugPrint('🌐 네트워크 URL: $imageUrl');
-      return Container(
-        width: 80.w,
-        height: 80.w,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12.r),
-          image: DecorationImage(
-            image: NetworkImage(imageUrl),
-            fit: BoxFit.cover,
-            onError: (exception, stackTrace) {
-              debugPrint('❌ NetworkImage 로딩 실패: $imageUrl, 오류: $exception');
-            },
-          ),
-        ),
-      );
-    }
+    final imageProvider = getImageProvider(imageUrl);
+    return Container(
+      width: 64.w,
+      height: 64.w,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12.r),
+        image:
+            imageProvider != null
+                ? DecorationImage(
+                  image: imageProvider,
+                  fit: BoxFit.cover,
+                  onError: (exception, stackTrace) {},
+                )
+                : null,
+        color: Colors.grey[200],
+      ),
+      child:
+          imageProvider == null
+              ? Icon(Icons.person, size: 32.sp, color: Colors.grey)
+              : null,
+    );
   }
 }

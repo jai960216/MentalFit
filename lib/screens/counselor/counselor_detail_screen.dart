@@ -3,14 +3,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 import 'dart:io';
+import 'dart:convert';
+import 'dart:typed_data';
 
 import '../../core/config/app_routes.dart';
 import '../../providers/counselor_provider.dart';
+import '../../providers/auth_provider.dart';
 import '../../shared/models/counselor_model.dart';
 import '../../shared/widgets/custom_app_bar.dart';
 import '../../shared/widgets/custom_button.dart';
 import '../../shared/widgets/loading_widget.dart';
 import '../../shared/widgets/theme_aware_widgets.dart';
+import '../../shared/services/firebase_chat_service.dart';
 
 class CounselorDetailScreen extends ConsumerStatefulWidget {
   final String counselorId;
@@ -77,7 +81,10 @@ class _CounselorDetailScreenState extends ConsumerState<CounselorDetailScreen>
               : counselor == null
               ? _buildNotFoundScreen()
               : _buildContent(counselor, detailState),
-      appBar: CustomAppBar(title: counselor?.name ?? '상담사 정보'),
+      appBar: CustomAppBar(
+        title: counselor?.name ?? '상담사 정보',
+        centerTitle: true,
+      ),
     );
   }
 
@@ -180,12 +187,14 @@ class _CounselorDetailScreenState extends ConsumerState<CounselorDetailScreen>
     return Container(
       margin: EdgeInsets.fromLTRB(20.w, 80.h, 20.w, 20.h),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           // 프로필 이미지와 기본 정보
           Stack(
             children: [
               // 배경 카드
               Container(
+                width: double.infinity,
                 margin: EdgeInsets.only(top: 50.h),
                 padding: EdgeInsets.fromLTRB(20.w, 60.h, 20.w, 24.h),
                 decoration: BoxDecoration(
@@ -201,6 +210,7 @@ class _CounselorDetailScreenState extends ConsumerState<CounselorDetailScreen>
                   ],
                 ),
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     SizedBox(height: 8.h),
 
@@ -212,6 +222,7 @@ class _CounselorDetailScreenState extends ConsumerState<CounselorDetailScreen>
                         fontWeight: FontWeight.bold,
                         letterSpacing: -0.5,
                       ),
+                      textAlign: TextAlign.center,
                     ),
 
                     SizedBox(height: 6.h),
@@ -223,6 +234,7 @@ class _CounselorDetailScreenState extends ConsumerState<CounselorDetailScreen>
                         fontSize: 16.sp,
                         fontWeight: FontWeight.w500,
                       ),
+                      textAlign: TextAlign.center,
                     ),
 
                     SizedBox(height: 16.h),
@@ -245,26 +257,25 @@ class _CounselorDetailScreenState extends ConsumerState<CounselorDetailScreen>
                           Icon(Icons.star, color: Colors.amber, size: 18.sp),
                           SizedBox(width: 6.w),
                           ThemedText(
-                            text: counselor.ratingText,
-                            style: TextStyle(
-                              fontSize: 15.sp,
-                              fontWeight: FontWeight.w600,
-                              color: Theme.of(context).colorScheme.primary,
-                            ),
-                          ),
-                          SizedBox(width: 8.w),
-                          Container(
-                            width: 1.w,
-                            height: 14.h,
-                            color: context.secondaryTextColor.withOpacity(0.3),
-                          ),
-                          SizedBox(width: 8.w),
-                          ThemedText(
-                            text: '${counselor.reviewCount}+ 상담',
+                            text:
+                                '${counselor.rating.toStringAsFixed(1)} (${counselor.reviewCount}개)',
                             style: TextStyle(
                               fontSize: 14.sp,
-                              fontWeight: FontWeight.w500,
-                              color: Theme.of(context).colorScheme.primary,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          SizedBox(width: 12.w),
+                          Icon(
+                            Icons.headset_mic,
+                            color: Theme.of(context).colorScheme.primary,
+                            size: 18.sp,
+                          ),
+                          SizedBox(width: 6.w),
+                          ThemedText(
+                            text: '상담 ${counselor.consultationCount}회',
+                            style: TextStyle(
+                              fontSize: 14.sp,
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
                         ],
@@ -277,6 +288,7 @@ class _CounselorDetailScreenState extends ConsumerState<CounselorDetailScreen>
                     Wrap(
                       spacing: 8.w,
                       runSpacing: 8.h,
+                      alignment: WrapAlignment.center,
                       children:
                           counselor.specialties.map((specialty) {
                             return Container(
@@ -318,37 +330,40 @@ class _CounselorDetailScreenState extends ConsumerState<CounselorDetailScreen>
                 ),
               ),
 
-              // 프로필 이미지 (위에 떠있는 형태)
-              Positioned(
-                left: 0,
-                right: 0,
-                top: 0,
-                child: Center(
+              // 프로필 이미지
+              Align(
+                alignment: Alignment.topCenter,
+                child: Hero(
+                  tag: 'counselor_image_${counselor.id}',
                   child: Container(
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.15),
-                          blurRadius: 20,
-                          offset: const Offset(0, 8),
+                          color: Colors.black.withOpacity(0.2),
+                          blurRadius: 16,
+                          offset: const Offset(0, 4),
                         ),
                       ],
                     ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(50.r),
-                      child: Container(
-                        width: 100.w,
-                        height: 100.w,
-                        decoration: BoxDecoration(
-                          border: Border.all(
-                            color: context.surfaceColor,
-                            width: 4.w,
-                          ),
-                          borderRadius: BorderRadius.circular(50.r),
-                        ),
-                        child: _buildCounselorImage(counselor.profileImageUrl),
+                    child: CircleAvatar(
+                      radius: 50.r,
+                      backgroundColor: Colors.white,
+                      backgroundImage: _getImageProviderFromString(
+                        counselor.profileImageUrl,
                       ),
+                      child:
+                          counselor.profileImageUrl == null ||
+                                  _getImageProviderFromString(
+                                        counselor.profileImageUrl,
+                                      ) ==
+                                      null
+                              ? Icon(
+                                Icons.person,
+                                size: 50.r,
+                                color: context.textColor.withOpacity(0.5),
+                              )
+                              : null,
                     ),
                   ),
                 ),
@@ -360,13 +375,25 @@ class _CounselorDetailScreenState extends ConsumerState<CounselorDetailScreen>
     );
   }
 
+  ImageProvider? _getImageProviderFromString(String? imageUrl) {
+    if (imageUrl == null || imageUrl.isEmpty) {
+      return null;
+    }
+    if (imageUrl.startsWith('http')) {
+      return NetworkImage(imageUrl);
+    } else {
+      try {
+        final imageBytes = base64Decode(imageUrl);
+        return MemoryImage(imageBytes);
+      } catch (e) {
+        debugPrint('Error decoding base64 image: $e');
+        return null;
+      }
+    }
+  }
+
   Widget _buildCounselorImage(String? imageUrl) {
-    final imageWidget =
-        (imageUrl != null && imageUrl.isNotEmpty)
-            ? (imageUrl.startsWith('/') || imageUrl.startsWith('file://'))
-                ? FileImage(File(imageUrl))
-                : NetworkImage(imageUrl) as ImageProvider
-            : null;
+    final imageProvider = _getImageProviderFromString(imageUrl);
 
     return Container(
       width: 100.w,
@@ -379,11 +406,11 @@ class _CounselorDetailScreenState extends ConsumerState<CounselorDetailScreen>
                 : Theme.of(context).colorScheme.primary.withOpacity(0.1),
       ),
       child:
-          imageWidget != null
+          imageProvider != null
               ? ClipRRect(
                 borderRadius: BorderRadius.circular(50.r),
                 child: Image(
-                  image: imageWidget,
+                  image: imageProvider,
                   fit: BoxFit.cover,
                   width: 100.w,
                   height: 100.w,
@@ -471,36 +498,46 @@ class _CounselorDetailScreenState extends ConsumerState<CounselorDetailScreen>
 
   Widget _buildInfoTab(Counselor counselor) {
     return SingleChildScrollView(
-      padding: EdgeInsets.all(20.w),
+      padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 20.h),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildModernInfoCard(
-            icon: Icons.person_outline,
-            title: '소개',
-            content: counselor.title,
-            color: Theme.of(context).colorScheme.primary,
+          _buildSectionTitle('한 줄 소개'),
+          SizedBox(height: 12.h),
+          ThemedText(
+            text: counselor.introduction,
+            style: TextStyle(fontSize: 15.sp, height: 1.6),
+            isPrimary: false,
           ),
-
-          SizedBox(height: 16.h),
-
-          _buildModernInfoCard(
-            icon: Icons.work_outline,
-            title: '경력',
-            content: counselor.experienceText,
-            color: Theme.of(context).colorScheme.secondary,
+          SizedBox(height: 28.h),
+          _buildSectionTitle('전문 분야'),
+          SizedBox(height: 12.h),
+          Wrap(
+            spacing: 10.w,
+            runSpacing: 10.h,
+            children:
+                counselor.specialties
+                    .map((e) => _buildTag(e, Icons.psychology))
+                    .toList(),
           ),
-
-          if (counselor.qualifications.isNotEmpty) ...[
-            SizedBox(height: 16.h),
-            _buildModernInfoCard(
-              icon: Icons.military_tech_outlined,
-              title: '주요 자격증',
-              content: counselor.qualifications.map((q) => '• $q').join('\n'),
-              color: Theme.of(context).colorScheme.tertiary,
-            ),
-          ],
-
-          SizedBox(height: 100.h), // 하단 바 공간
+          SizedBox(height: 28.h),
+          _buildSectionTitle('자격/학력'),
+          SizedBox(height: 12.h),
+          ...counselor.qualifications
+              .map((e) => _buildInfoRow(Icons.school, e))
+              .toList(),
+          SizedBox(height: 28.h),
+          _buildSectionTitle('상담 정보'),
+          SizedBox(height: 12.h),
+          _buildInfoRow(Icons.access_time, '경력 ${counselor.experienceYears}년'),
+          _buildInfoRow(
+            Icons.business_center,
+            '상담 방식: ${counselor.preferredMethod.name}',
+          ),
+          _buildInfoRow(
+            Icons.translate,
+            '사용 언어: ${counselor.languages.join(', ')}',
+          ),
         ],
       ),
     );
@@ -580,17 +617,13 @@ class _CounselorDetailScreenState extends ConsumerState<CounselorDetailScreen>
       );
     }
 
-    // 리뷰 리스트 UI (실제 데이터 사용)
-    return SingleChildScrollView(
-      padding: EdgeInsets.all(20.w),
-      child: Column(
-        children: [
-          ...reviewsState.reviews.map(
-            (review) => _buildModernReviewCard(review),
-          ),
-          SizedBox(height: 100.h), // 하단 바 공간
-        ],
-      ),
+    return ListView.builder(
+      padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 20.h),
+      itemCount: reviewsState.reviews.length,
+      itemBuilder: (context, index) {
+        final review = reviewsState.reviews[index];
+        return _buildModernReviewCard(review);
+      },
     );
   }
 
@@ -706,10 +739,8 @@ class _CounselorDetailScreenState extends ConsumerState<CounselorDetailScreen>
     // availableTimes를 요일별로 그룹핑
     final Map<String, List<String>> scheduleMap = {};
     for (final time in counselor.availableTimes) {
-      if (time.isAvailable) {
-        scheduleMap.putIfAbsent(time.dayOfWeek, () => []);
-        scheduleMap[time.dayOfWeek]!.add('${time.startTime} ~ ${time.endTime}');
-      }
+      scheduleMap.putIfAbsent(time.day, () => []);
+      scheduleMap[time.day]!.add('${time.startTime} ~ ${time.endTime}');
     }
 
     return SingleChildScrollView(
@@ -992,105 +1023,67 @@ class _CounselorDetailScreenState extends ConsumerState<CounselorDetailScreen>
       child: SafeArea(
         child: Row(
           children: [
-            // 가격 정보
+            // 채팅하기 버튼
             Expanded(
               flex: 2,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  ThemedText(
-                    text: '상담료',
-                    isPrimary: false,
-                    style: TextStyle(
-                      fontSize: 13.sp,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  SizedBox(height: 4.h),
-                  Row(
-                    children: [
-                      ThemedText(
-                        text: '${counselor.price.consultationFee}',
-                        style: TextStyle(
-                          fontSize: 24.sp,
-                          fontWeight: FontWeight.bold,
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
-                      ),
-                      ThemedText(
-                        text: '원',
-                        style: TextStyle(
-                          fontSize: 16.sp,
-                          fontWeight: FontWeight.w600,
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+              child: CustomButton(
+                text: '채팅하기',
+                icon: Icons.chat_bubble_outline,
+                type: ButtonType.outline,
+                onPressed: () => _handleStartChat(counselor),
               ),
             ),
 
-            SizedBox(width: 16.w),
+            SizedBox(width: 12.w),
 
             // 예약 버튼
             Expanded(
               flex: 3,
-              child: Container(
-                height: 56.h,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      Theme.of(context).colorScheme.primary,
-                      Theme.of(context).colorScheme.primary.withOpacity(0.8),
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(16.r),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.primary.withOpacity(0.3),
-                      blurRadius: 12,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: ElevatedButton.icon(
-                  onPressed: () {
-                    context.push(
-                      '${AppRoutes.bookingCalendar}/${counselor.id}',
-                      extra: counselor,
-                    );
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.transparent,
-                    shadowColor: Colors.transparent,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16.r),
-                    ),
-                  ),
-                  icon: Icon(
-                    Icons.calendar_month,
-                    color: Colors.white,
-                    size: 20.sp,
-                  ),
-                  label: Text(
-                    '예약하기',
-                    style: TextStyle(
-                      fontSize: 16.sp,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
+              child: CustomButton(
+                text: '예약하기',
+                icon: Icons.calendar_month,
+                onPressed: () {
+                  context.push(
+                    '${AppRoutes.bookingCalendar}/${counselor.id}',
+                    extra: counselor,
+                  );
+                },
               ),
             ),
           ],
         ),
       ),
     );
+  }
+
+  Future<void> _handleStartChat(Counselor counselor) async {
+    final chatService = await FirebaseChatService.getInstance();
+    final currentUser = ref.read(authProvider).user;
+
+    if (currentUser == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('채팅을 시작하려면 로그인이 필요합니다.')));
+      return;
+    }
+
+    // 상담사의 userId 필드가 필요합니다.
+    final counselorUserId = counselor.userId;
+
+    try {
+      final chatRoom = await chatService.createOrGetPrivateChatRoom(
+        counselorUserId,
+      );
+      if (mounted) {
+        context.push('${AppRoutes.chatRoom}/${chatRoom.id}');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('채팅방을 시작하는 중 오류 발생: $e')));
+      }
+    }
   }
 
   Widget _buildErrorScreen(String error) => Center(
@@ -1154,4 +1147,43 @@ class _CounselorDetailScreenState extends ConsumerState<CounselorDetailScreen>
       subtitle: '다른 상담사를 찾아보세요',
     ),
   );
+
+  Widget _buildSectionTitle(String title) {
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: 8.h),
+      child: ThemedText(
+        text: title,
+        style: TextStyle(fontSize: 18.sp, fontWeight: FontWeight.bold),
+      ),
+    );
+  }
+
+  Widget _buildInfoRow(IconData icon, String text) {
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: 6.h),
+      child: Row(
+        children: [
+          Icon(icon, size: 18.sp, color: context.secondaryTextColor),
+          SizedBox(width: 12.w),
+          Expanded(
+            child: ThemedText(
+              text: text,
+              style: TextStyle(fontSize: 15.sp),
+              isPrimary: false,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTag(String text, IconData icon) {
+    return Chip(
+      avatar: Icon(icon, size: 16.sp, color: context.textColor),
+      label: ThemedText(text: text),
+      backgroundColor: context.surfaceColor,
+      side: BorderSide(color: Theme.of(context).dividerColor),
+      padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 6.h),
+    );
+  }
 }

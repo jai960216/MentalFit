@@ -427,7 +427,7 @@ class _BookingCalendarScreenState extends ConsumerState<BookingCalendarScreen>
 
     if (counselorState.counselor != null) {
       final hasAvailableTime = counselorState.counselor!.availableTimes.any(
-        (time) => time.dayOfWeek == weekday && time.isAvailable,
+        (time) => time.day == weekday,
       );
       return hasAvailableTime ? [day] : [];
     }

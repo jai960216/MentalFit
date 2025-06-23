@@ -109,6 +109,7 @@ enum UserType {
   general('general', '일반인'),
   guardian('guardian', '보호자'),
   coach('coach', '지도자'),
+  counselor('counselor', '상담사'),
   master('master', '관리자');
 
   const UserType(this.value, this.displayName);

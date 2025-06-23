@@ -17,6 +17,7 @@ import '../../screens/auth/signup_screen.dart';
 import '../../screens/auth/splash_screen.dart';
 import '../../screens/auth/user_type_selection_screen.dart';
 import '../../screens/auth/forgot_password_screen.dart';
+import '../../screens/auth/signup_models.dart';
 
 // Onboarding
 import '../../screens/onboarding/onboarding_basic_info_screen.dart';
@@ -39,6 +40,7 @@ import '../../screens/chat/chat_room_screen.dart';
 import '../../screens/counselor/counselor_list_screen.dart';
 import '../../screens/counselor/counselor_detail_screen.dart';
 import '../../screens/counselor/counselor_register_screen.dart';
+import '../../screens/counselor/counselor_approval_screen.dart';
 
 // Booking
 import '../../screens/booking/booking_calendar_screen.dart';
@@ -188,7 +190,16 @@ class AppRouter {
       GoRoute(
         path: AppRoutes.counselorRegister,
         name: 'counselor-register',
-        builder: (context, state) => const CounselorRegisterScreen(),
+        builder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>? ?? {};
+          final signupInfo = SignupInfo.fromMap(extra);
+          return CounselorRegisterScreen(signupInfo: signupInfo);
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.counselorApproval,
+        name: 'counselor-approval',
+        builder: (context, state) => const CounselorApprovalScreen(),
       ),
 
       // === Booking Routes ===
@@ -435,6 +446,7 @@ class AppRouter {
       AppRoutes.terms,
       AppRoutes.help,
       AppRoutes.counselorRegister,
+      AppRoutes.counselorApproval,
       '/404',
     ];
 

@@ -54,63 +54,87 @@ enum AppointmentStatus {
   String toString() => displayName;
 }
 
+// === 상담사 등록 요청 상태 ===
+enum CounselorRequestStatus {
+  pending('pending', '대기중'),
+  approved('approved', '승인됨'),
+  rejected('rejected', '거부됨');
+
+  const CounselorRequestStatus(this.value, this.displayName);
+
+  final String value;
+  final String displayName;
+
+  static CounselorRequestStatus fromString(String value) {
+    return CounselorRequestStatus.values.firstWhere(
+      (status) => status.value == value,
+      orElse: () => CounselorRequestStatus.pending,
+    );
+  }
+
+  @override
+  String toString() => displayName;
+}
+
 // === 상담사 모델 (Firebase 호환) ===
 class Counselor {
   final String id;
+  final String userId;
   final String name;
   final String? profileImageUrl;
-  final String title; // 직책/자격
-  final List<String> specialties; // 전문 분야
-  final String introduction; // 소개
-  final double rating; // 평점 (1-5)
-  final int reviewCount; // 리뷰 수
-  final int experienceYears; // 경력 연수
-  final List<String> qualifications; // 자격증/학력
-  final bool isOnline; // 온라인 상태
-  final int consultationCount; // 상담 횟수
-  final Price price; // 가격 정보
-  final List<AvailableTime> availableTimes; // 가능한 시간
-  final List<String> languages; // 사용 언어
-  final CounselingMethod preferredMethod; // 선호 상담 방식
+  final String title;
+  final String introduction;
+  final double rating;
+  final int reviewCount;
+  final List<String> specialties;
+  final int experienceYears;
+  final List<String> qualifications;
+  final Price price;
+  final List<AvailableTime> availableTimes;
+  final List<String> languages;
+  final CounselingMethod preferredMethod;
+  final bool isOnline;
+  final int consultationCount;
   final DateTime createdAt;
   final DateTime updatedAt;
 
-  const Counselor({
+  Counselor({
     required this.id,
+    required this.userId,
     required this.name,
     this.profileImageUrl,
     required this.title,
-    required this.specialties,
     required this.introduction,
     required this.rating,
     required this.reviewCount,
+    required this.specialties,
     required this.experienceYears,
     required this.qualifications,
-    required this.isOnline,
-    required this.consultationCount,
     required this.price,
     required this.availableTimes,
     required this.languages,
     required this.preferredMethod,
-    required this.createdAt,
-    required this.updatedAt,
-  });
+    this.isOnline = false,
+    this.consultationCount = 0,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) : createdAt = createdAt ?? DateTime.now(),
+       updatedAt = updatedAt ?? DateTime.now();
 
   // === 기존 JSON 호환성 (API 연동용) ===
   factory Counselor.fromJson(Map<String, dynamic> json) {
     return Counselor(
       id: json['id'] as String,
+      userId: json['userId'] as String,
       name: json['name'] as String,
       profileImageUrl: json['profileImageUrl'] as String?,
       title: json['title'] as String,
-      specialties: List<String>.from(json['specialties'] as List),
       introduction: json['introduction'] as String,
       rating: (json['rating'] as num).toDouble(),
       reviewCount: json['reviewCount'] as int,
+      specialties: List<String>.from(json['specialties'] as List),
       experienceYears: json['experienceYears'] as int,
       qualifications: List<String>.from(json['qualifications'] as List),
-      isOnline: json['isOnline'] as bool,
-      consultationCount: json['consultationCount'] as int,
       price: Price.fromJson(json['price'] as Map<String, dynamic>),
       availableTimes:
           (json['availableTimes'] as List)
@@ -130,17 +154,15 @@ class Counselor {
   Map<String, dynamic> toJson() {
     return {
       'id': id,
+      'userId': userId,
       'name': name,
       'profileImageUrl': profileImageUrl,
       'title': title,
-      'specialties': specialties,
       'introduction': introduction,
       'rating': rating,
       'reviewCount': reviewCount,
       'experienceYears': experienceYears,
       'qualifications': qualifications,
-      'isOnline': isOnline,
-      'consultationCount': consultationCount,
       'price': price.toJson(),
       'availableTimes': availableTimes.map((time) => time.toJson()).toList(),
       'languages': languages,
@@ -151,8 +173,8 @@ class Counselor {
   }
 
   // === 🔥 Firebase Firestore 호환 메서드들 ===
-  factory Counselor.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
-    final data = doc.data();
+  factory Counselor.fromFirestore(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
     if (data == null) {
       throw Exception('상담사 데이터가 없습니다: ${doc.id}');
     }
@@ -163,19 +185,18 @@ class Counselor {
     try {
       return Counselor(
         id: docId,
+        userId: data['userId'] as String? ?? '',
         name: data['name'] as String? ?? '',
         profileImageUrl: data['profileImageUrl'] as String?,
         title: data['title'] as String? ?? '',
-        specialties: List<String>.from(data['specialties'] as List? ?? []),
         introduction: data['introduction'] as String? ?? '',
         rating: (data['rating'] as num?)?.toDouble() ?? 0.0,
         reviewCount: data['reviewCount'] as int? ?? 0,
+        specialties: List<String>.from(data['specialties'] as List? ?? []),
         experienceYears: data['experienceYears'] as int? ?? 0,
         qualifications: List<String>.from(
           data['qualifications'] as List? ?? [],
         ),
-        isOnline: data['isOnline'] as bool? ?? false,
-        consultationCount: data['consultationCount'] as int? ?? 0,
         price:
             data['price'] != null
                 ? Price.fromFirestoreData(data['price'] as Map<String, dynamic>)
@@ -192,8 +213,12 @@ class Counselor {
         preferredMethod: CounselingMethod.values.firstWhere(
           (e) => e.toString() == 'CounselingMethod.${data['preferredMethod']}',
         ),
-        createdAt: _parseFirestoreTimestamp(data['createdAt']),
-        updatedAt: _parseFirestoreTimestamp(data['updatedAt']),
+        isOnline: data['isOnline'] ?? false,
+        consultationCount: data['consultationCount'] as int? ?? 0,
+        createdAt:
+            (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+        updatedAt:
+            (data['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       );
     } catch (e, stack) {
       debugPrint('상담사 데이터 파싱 오류: $e\n$stack');
@@ -203,17 +228,15 @@ class Counselor {
 
   Map<String, dynamic> toFirestore() {
     return {
+      'userId': userId,
       'name': name,
       'profileImageUrl': profileImageUrl,
       'title': title,
-      'specialties': specialties,
       'introduction': introduction,
       'rating': rating,
       'reviewCount': reviewCount,
       'experienceYears': experienceYears,
       'qualifications': qualifications,
-      'isOnline': isOnline,
-      'consultationCount': consultationCount,
       'price': price.toFirestore(),
       'availableTimes':
           availableTimes.map((time) => time.toFirestore()).toList(),
@@ -315,58 +338,56 @@ class Price {
 
 // === 가능한 시간 (Firebase 호환) ===
 class AvailableTime {
-  final String dayOfWeek;
-  final String startTime;
-  final String endTime;
-  final bool isAvailable;
+  final String day; // e.g., '월', '화'
+  final String startTime; // e.g., '09:00'
+  final String endTime; // e.g., '18:00'
 
-  const AvailableTime({
-    required this.dayOfWeek,
+  AvailableTime({
+    required this.day,
     required this.startTime,
     required this.endTime,
-    required this.isAvailable,
   });
+
+  factory AvailableTime.fromMap(Map<String, dynamic> map) {
+    return AvailableTime(
+      day: map['day'] as String,
+      startTime: map['startTime'] as String,
+      endTime: map['endTime'] as String,
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {'day': day, 'startTime': startTime, 'endTime': endTime};
+  }
 
   factory AvailableTime.fromJson(Map<String, dynamic> json) {
     return AvailableTime(
-      dayOfWeek: json['dayOfWeek'] as String,
+      day: json['day'] as String,
       startTime: json['startTime'] as String,
       endTime: json['endTime'] as String,
-      isAvailable: json['isAvailable'] as bool,
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'dayOfWeek': dayOfWeek,
-      'startTime': startTime,
-      'endTime': endTime,
-      'isAvailable': isAvailable,
-    };
+    return {'day': day, 'startTime': startTime, 'endTime': endTime};
   }
 
   factory AvailableTime.fromFirestoreData(Map<String, dynamic> data) {
     return AvailableTime(
-      dayOfWeek: data['dayOfWeek'] as String? ?? '',
+      day: data['day'] as String? ?? '',
       startTime: data['startTime'] as String? ?? '09:00',
       endTime: data['endTime'] as String? ?? '18:00',
-      isAvailable: data['isAvailable'] as bool? ?? true,
     );
   }
 
   Map<String, dynamic> toFirestore() {
-    return {
-      'dayOfWeek': dayOfWeek,
-      'startTime': startTime,
-      'endTime': endTime,
-      'isAvailable': isAvailable,
-    };
+    return {'day': day, 'startTime': startTime, 'endTime': endTime};
   }
 
   String get timeText => '$startTime - $endTime';
 
   @override
-  String toString() => '$dayOfWeek $timeText';
+  String toString() => '$day $timeText';
 }
 
 // === 예약 모델 (Firebase 호환) ===
@@ -598,4 +619,165 @@ class CounselorReview {
   @override
   String toString() =>
       'CounselorReview(id: $id, rating: $rating, content: ${content.substring(0, content.length > 20 ? 20 : content.length)})';
+}
+
+// === 상담사 등록 요청 모델 ===
+class CounselorRequest {
+  final String id;
+  final String userId;
+  final String userName;
+  final String? userProfileImageUrl;
+  final String title;
+  final List<String> specialties;
+  final String introduction;
+  final int experienceYears;
+  final List<String> qualifications;
+  final Price price;
+  final List<AvailableTime> availableTimes;
+  final List<String> languages;
+  final CounselingMethod preferredMethod;
+  final CounselorRequestStatus status;
+  final String? rejectionReason;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+
+  const CounselorRequest({
+    required this.id,
+    required this.userId,
+    required this.userName,
+    this.userProfileImageUrl,
+    required this.title,
+    required this.specialties,
+    required this.introduction,
+    required this.experienceYears,
+    required this.qualifications,
+    required this.price,
+    required this.availableTimes,
+    required this.languages,
+    required this.preferredMethod,
+    required this.status,
+    this.rejectionReason,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  factory CounselorRequest.fromFirestore(
+    DocumentSnapshot<Map<String, dynamic>> doc,
+  ) {
+    final data = doc.data();
+    if (data == null) {
+      throw Exception('상담사 요청 데이터가 없습니다: ${doc.id}');
+    }
+    return CounselorRequest.fromFirestoreData(data, doc.id);
+  }
+
+  factory CounselorRequest.fromFirestoreData(
+    Map<String, dynamic> data,
+    String docId,
+  ) {
+    return CounselorRequest(
+      id: docId,
+      userId: data['userId'] as String? ?? '',
+      userName: data['userName'] as String? ?? '',
+      userProfileImageUrl: data['userProfileImageUrl'] as String?,
+      title: data['title'] as String? ?? '',
+      specialties: List<String>.from(data['specialties'] as List? ?? []),
+      introduction: data['introduction'] as String? ?? '',
+      experienceYears: data['experienceYears'] as int? ?? 0,
+      qualifications: List<String>.from(data['qualifications']),
+      price: Price.fromJson(data['price'] as Map<String, dynamic>),
+      availableTimes:
+          (data['availableTimes'] as List)
+              .map(
+                (time) => AvailableTime.fromMap(time as Map<String, dynamic>),
+              )
+              .toList(),
+      languages: List<String>.from(data['languages']),
+      preferredMethod: CounselingMethod.values.firstWhere(
+        (e) => e.toString() == 'CounselingMethod.${data['preferredMethod']}',
+        orElse: () => CounselingMethod.all,
+      ),
+      status: CounselorRequestStatus.fromString(
+        data['status'] as String? ?? 'pending',
+      ),
+      rejectionReason: data['rejectionReason'] as String?,
+      createdAt: _parseFirestoreTimestamp(data['createdAt']),
+      updatedAt: _parseFirestoreTimestamp(data['updatedAt']),
+    );
+  }
+
+  Map<String, dynamic> toFirestore() {
+    return {
+      'userId': userId,
+      'userName': userName,
+      'userProfileImageUrl': userProfileImageUrl,
+      'title': title,
+      'specialties': specialties,
+      'introduction': introduction,
+      'experienceYears': experienceYears,
+      'qualifications': qualifications,
+      'price': price.toJson(),
+      'availableTimes': availableTimes.map((time) => time.toMap()).toList(),
+      'languages': languages,
+      'preferredMethod': preferredMethod.name,
+      'status': status.value,
+      'rejectionReason': rejectionReason,
+      'createdAt': Timestamp.fromDate(createdAt),
+      'updatedAt': Timestamp.fromDate(updatedAt),
+    };
+  }
+
+  CounselorRequest copyWith({
+    String? id,
+    String? userId,
+    String? userName,
+    String? userProfileImageUrl,
+    String? title,
+    List<String>? specialties,
+    String? introduction,
+    int? experienceYears,
+    List<String>? qualifications,
+    Price? price,
+    List<AvailableTime>? availableTimes,
+    List<String>? languages,
+    CounselingMethod? preferredMethod,
+    CounselorRequestStatus? status,
+    String? rejectionReason,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) {
+    return CounselorRequest(
+      id: id ?? this.id,
+      userId: userId ?? this.userId,
+      userName: userName ?? this.userName,
+      userProfileImageUrl: userProfileImageUrl ?? this.userProfileImageUrl,
+      title: title ?? this.title,
+      specialties: specialties ?? this.specialties,
+      introduction: introduction ?? this.introduction,
+      experienceYears: experienceYears ?? this.experienceYears,
+      qualifications: qualifications ?? this.qualifications,
+      price: price ?? this.price,
+      availableTimes: availableTimes ?? this.availableTimes,
+      languages: languages ?? this.languages,
+      preferredMethod: preferredMethod ?? this.preferredMethod,
+      status: status ?? this.status,
+      rejectionReason: rejectionReason ?? this.rejectionReason,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() =>
+      'CounselorRequest(id: $id, userName: $userName, status: $status)';
+
+  static DateTime _parseFirestoreTimestamp(dynamic timestamp) {
+    if (timestamp is Timestamp) {
+      return timestamp.toDate();
+    } else if (timestamp is String) {
+      return DateTime.parse(timestamp);
+    } else {
+      return DateTime.now();
+    }
+  }
 }

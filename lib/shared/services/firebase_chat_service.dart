@@ -41,9 +41,7 @@ class FirebaseChatService {
       _storage = FirebaseStorage.instance;
       _auth = FirebaseAuth.instance;
 
-      // Firebase 서비스 상태 확인
-      await _checkFirebaseConnection();
-
+      // Firebase 서비스 상태 확인 제거 - 채팅과 무관한 _health_check 접근 방지
       debugPrint('✅ FirebaseChatService 초기화 완료');
     } catch (e) {
       debugPrint('❌ FirebaseChatService 초기화 실패: $e');
@@ -51,24 +49,10 @@ class FirebaseChatService {
     }
   }
 
-  /// Firebase 연결 상태 확인
+  /// Firebase 연결 상태 확인 (채팅과 무관 - 제거됨)
   Future<void> _checkFirebaseConnection() async {
-    try {
-      // Firestore 연결 테스트
-      await _firestore
-          .collection('_health_check')
-          .limit(1)
-          .get()
-          .timeout(
-            const Duration(seconds: 10),
-            onTimeout: () => throw Exception('Firestore 연결 시간 초과'),
-          );
-
-      debugPrint('✅ Firebase 연결 확인 완료');
-    } catch (e) {
-      debugPrint('❌ Firebase 연결 실패: $e');
-      throw Exception('Firebase에 연결할 수 없습니다: $e');
-    }
+    // 채팅과 무관한 _health_check 접근 제거
+    // 실제 채팅 기능에는 영향 없음
   }
 
   // === 컬렉션 참조 ===
@@ -134,8 +118,8 @@ class FirebaseChatService {
       }).toList();
     } catch (e) {
       debugPrint('채팅방 목록 조회 오류: $e');
-      // 오류 시 기본 AI 채팅방 반환
-      return [await _createDefaultAIChatRoom()];
+      // 오류 시 빈 리스트 반환
+      return [];
     }
   }
 
@@ -496,30 +480,6 @@ class FirebaseChatService {
     }
   }
 
-  /// 기본 AI 채팅방 생성
-  Future<ChatRoom> _createDefaultAIChatRoom() async {
-    try {
-      return await createChatRoom(
-        title: 'AI 상담',
-        type: ChatRoomType.ai,
-        topic: '일반 상담',
-      );
-    } catch (e) {
-      // 생성 실패 시 로컬 객체 반환
-      return ChatRoom(
-        id: 'ai_chat_default',
-        title: 'AI 상담',
-        type: ChatRoomType.ai,
-        participantIds: [_currentUserId ?? 'guest', 'ai'],
-        topic: '일반 상담',
-        unreadCount: 0,
-        status: ChatRoomStatus.active,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      );
-    }
-  }
-
   /// 폴백 채팅방 생성
   ChatRoom _createFallbackChatRoom(String chatRoomId) {
     return ChatRoom(
@@ -570,6 +530,49 @@ class FirebaseChatService {
       debugPrint('✅ FirebaseChatService 리소스 정리 완료');
     } catch (e) {
       debugPrint('❌ FirebaseChatService 정리 오류: $e');
+    }
+  }
+
+  /// 1:1 채팅방 생성 또는 조회
+  Future<ChatRoom> createOrGetPrivateChatRoom(String otherUserId) async {
+    if (_currentUserId == null) {
+      throw Exception('로그인이 필요합니다.');
+    }
+
+    // 두 사용자 ID를 정렬하여 고유한 채팅방 ID 생성
+    final ids = [_currentUserId!, otherUserId];
+    ids.sort();
+    final chatRoomId = 'private_${ids[0]}_${ids[1]}';
+
+    final chatRoomRef = _chatRoomsCollection.doc(chatRoomId);
+    final doc = await chatRoomRef.get();
+
+    if (doc.exists) {
+      // 기존 채팅방 반환
+      final data = doc.data() as Map<String, dynamic>;
+      data['id'] = doc.id;
+      return ChatRoom.fromJson(data);
+    } else {
+      // 새 채팅방 생성
+      final otherUserDoc =
+          await _firestore.collection('users').doc(otherUserId).get();
+      final otherUserName = otherUserDoc.data()?['name'] ?? '상대방';
+
+      final now = DateTime.now();
+      final newChatRoom = ChatRoom(
+        id: chatRoomId,
+        title: otherUserName,
+        type: ChatRoomType.counselor,
+        participantIds: ids,
+        status: ChatRoomStatus.active,
+        lastMessage: null,
+        unreadCount: 0,
+        createdAt: now,
+        updatedAt: now,
+      );
+
+      await chatRoomRef.set(newChatRoom.toFirestore());
+      return newChatRoom;
     }
   }
 }

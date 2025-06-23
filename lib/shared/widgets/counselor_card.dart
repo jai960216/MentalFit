@@ -3,6 +3,8 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import '../../core/config/app_colors.dart';
 import '../models/counselor_model.dart';
 import 'dart:io';
+import 'dart:convert';
+import 'dart:typed_data';
 
 class CounselorCard extends StatelessWidget {
   final Counselor counselor;
@@ -31,14 +33,7 @@ class CounselorCard extends StatelessWidget {
             CircleAvatar(
               radius: 32,
               backgroundColor: AppColors.primary.withOpacity(0.1),
-              backgroundImage:
-                  (counselor.profileImageUrl != null &&
-                          counselor.profileImageUrl!.isNotEmpty)
-                      ? (counselor.profileImageUrl!.startsWith('/')
-                          ? FileImage(File(counselor.profileImageUrl!))
-                          : NetworkImage(counselor.profileImageUrl!)
-                              as ImageProvider)
-                      : null,
+              backgroundImage: getImageProvider(counselor.profileImageUrl),
               child:
                   (counselor.profileImageUrl == null ||
                           counselor.profileImageUrl!.isEmpty)
@@ -168,5 +163,18 @@ class CounselorCard extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  ImageProvider? getImageProvider(String? imageUrl) {
+    if (imageUrl == null || imageUrl.isEmpty) return null;
+    if (imageUrl.startsWith('http')) {
+      return NetworkImage(imageUrl);
+    }
+    try {
+      Uint8List bytes = base64Decode(imageUrl);
+      return MemoryImage(bytes);
+    } catch (e) {
+      return null;
+    }
   }
 }

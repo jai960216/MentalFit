@@ -3,6 +3,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/counselor_model.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'dart:io';
+import 'package:image_picker/image_picker.dart';
 
 /// 🔥 Firebase Firestore 연동 상담사 서비스 (실제 운영용)
 class CounselorService {
@@ -12,6 +15,8 @@ class CounselorService {
   late CollectionReference<Map<String, dynamic>> _counselorsRef;
   late CollectionReference<Map<String, dynamic>> _appointmentsRef;
   late CollectionReference<Map<String, dynamic>> _reviewsRef;
+  late CollectionReference<Map<String, dynamic>> _counselorRequestsRef;
+  late FirebaseStorage _storage;
 
   // === public 생성자 ===
   CounselorService() {
@@ -20,6 +25,8 @@ class CounselorService {
     _counselorsRef = _firestore.collection('counselors');
     _appointmentsRef = _firestore.collection('appointments');
     _reviewsRef = _firestore.collection('reviews');
+    _counselorRequestsRef = _firestore.collection('counselorRequests');
+    _storage = FirebaseStorage.instance;
   }
 
   static Future<CounselorService> getInstance() async {
@@ -181,7 +188,7 @@ class CounselorService {
       final weekday = _getKoreanWeekday(date.weekday);
       final availableTime =
           counselor.availableTimes
-              .where((time) => time.dayOfWeek == weekday && time.isAvailable)
+              .where((time) => time.day == weekday)
               .firstOrNull;
 
       if (availableTime == null) {
@@ -611,29 +618,6 @@ class CounselorService {
     return int.parse(parts[0]);
   }
 
-  // === 상담사 등록 ===
-  Future<void> registerCounselor(Counselor counselor) async {
-    try {
-      final user = _auth.currentUser;
-      if (user == null) {
-        throw Exception('로그인이 필요합니다.');
-      }
-
-      final docRef = _counselorsRef.doc();
-      final data = counselor.toFirestore();
-      data['id'] = docRef.id;
-      data['userId'] = user.uid;
-      data['createdAt'] = FieldValue.serverTimestamp();
-      data['updatedAt'] = FieldValue.serverTimestamp();
-
-      await docRef.set(data);
-      debugPrint('✅ 상담사 등록 완료: ${counselor.name}');
-    } catch (e) {
-      debugPrint('❌ 상담사 등록 오류: $e');
-      rethrow;
-    }
-  }
-
   // === 상담사 수정 ===
   Future<void> updateCounselor(Counselor counselor) async {
     await _counselorsRef.doc(counselor.id).update(counselor.toFirestore());
@@ -675,6 +659,193 @@ class CounselorService {
     } catch (e) {
       debugPrint('❌ 리뷰 저장 오류: $e');
       return ApiResponse.failure('리뷰 저장에 실패했습니다: $e');
+    }
+  }
+
+  // === 🔥 상담사 등록 요청 제출 ===
+  Future<void> submitCounselorRequest(CounselorRequest request) async {
+    try {
+      await _counselorRequestsRef.add(request.toFirestore());
+    } catch (e) {
+      throw Exception('상담사 등록 요청 제출에 실패했습니다: $e');
+    }
+  }
+
+  // === 🔥 상담사 등록 요청 목록 조회 (master용) ===
+  Future<List<CounselorRequest>> getCounselorRequests({
+    CounselorRequestStatus? status,
+    int limit = 50,
+  }) async {
+    try {
+      debugPrint('🔍 상담사 등록 요청 목록 조회');
+
+      Query<Map<String, dynamic>> query = _counselorRequestsRef
+          .orderBy('createdAt', descending: true)
+          .limit(limit);
+
+      if (status != null) {
+        query = query.where('status', isEqualTo: status.value);
+      }
+
+      final snapshot = await query.get();
+
+      if (snapshot.docs.isEmpty) {
+        debugPrint('⚠️ 상담사 등록 요청이 없습니다');
+        return [];
+      }
+
+      final requests = <CounselorRequest>[];
+      for (final doc in snapshot.docs) {
+        try {
+          requests.add(CounselorRequest.fromFirestore(doc));
+        } catch (e) {
+          debugPrint('⚠️ 요청 데이터 파싱 오류: $e');
+        }
+      }
+
+      debugPrint('✅ 상담사 등록 요청 ${requests.length}개 조회 완료');
+      return requests;
+    } catch (e) {
+      debugPrint('❌ 상담사 등록 요청 목록 조회 오류: $e');
+      return [];
+    }
+  }
+
+  // === 🔥 상담사 등록 요청 승인/거부 ===
+  Future<void> updateCounselorRequestStatus(
+    String requestId,
+    CounselorRequestStatus status, {
+    String? rejectionReason,
+  }) async {
+    try {
+      final updateData = {'status': status.value, 'updatedAt': Timestamp.now()};
+
+      if (status == CounselorRequestStatus.rejected &&
+          rejectionReason != null) {
+        updateData['rejectionReason'] = rejectionReason;
+      }
+
+      await _counselorRequestsRef.doc(requestId).update(updateData);
+
+      // 승인된 경우 상담사로 등록
+      if (status == CounselorRequestStatus.approved) {
+        final requestDoc = await _counselorRequestsRef.doc(requestId).get();
+        if (requestDoc.exists) {
+          await _createCounselorFromRequest(requestDoc);
+        }
+      }
+
+      debugPrint('✅ 상담사 등록 요청 상태 업데이트 완료: $requestId -> $status');
+    } catch (e) {
+      debugPrint('❌ 상담사 등록 요청 상태 업데이트 오류: $e');
+      throw Exception('상담사 등록 요청 상태 업데이트에 실패했습니다: $e');
+    }
+  }
+
+  // === 🔥 승인된 요청을 상담사로 등록 ===
+  Future<void> _createCounselorFromRequest(DocumentSnapshot requestDoc) async {
+    final requestData = requestDoc.data() as Map<String, dynamic>;
+    final userId = requestData['userId'];
+
+    try {
+      // 🔍 디버깅: 현재 사용자와 승인 대상 사용자 확인
+      final currentUser = _auth.currentUser;
+      debugPrint('🔍 현재 사용자 UID: \\${currentUser?.uid}');
+      debugPrint('🔍 승인 대상 사용자 UID: \\${userId}');
+
+      // 1. 먼저 상담사 문서 생성
+      final newCounselorRef = _firestore.collection('counselors').doc(userId);
+
+      final newCounselor = Counselor(
+        id: userId,
+        userId: userId,
+        name: requestData['userName'] ?? '',
+        profileImageUrl: requestData['userProfileImageUrl'] ?? '',
+        title: requestData['title'] ?? '',
+        introduction: requestData['introduction'] ?? '',
+        rating: 0.0,
+        reviewCount: 0,
+        specialties: List<String>.from(requestData['specialties'] ?? []),
+        experienceYears: requestData['experienceYears'] ?? 0,
+        qualifications: List<String>.from(requestData['qualifications'] ?? []),
+        price:
+            requestData['price'] is Map<String, dynamic>
+                ? Price.fromJson(requestData['price'] as Map<String, dynamic>)
+                : const Price(consultationFee: 0),
+        availableTimes:
+            (requestData['availableTimes'] as List? ?? [])
+                .map(
+                  (time) => AvailableTime.fromMap(time as Map<String, dynamic>),
+                )
+                .toList(),
+        languages: List<String>.from(requestData['languages'] ?? ['한국어']),
+        preferredMethod:
+            requestData['preferredMethod'] != null &&
+                    CounselingMethod.values
+                        .map((e) => e.name)
+                        .contains(requestData['preferredMethod'])
+                ? CounselingMethod.values.byName(requestData['preferredMethod'])
+                : CounselingMethod.all,
+        isOnline: false,
+        consultationCount: 0,
+      );
+
+      await newCounselorRef.set(newCounselor.toFirestore());
+      debugPrint('✅ 상담사 문서 생성 완료: \\${userId}');
+
+      // 2. users 컬렉션의 userType을 counselor로 업데이트
+      try {
+        final userRef = _firestore.collection('users').doc(userId);
+
+        // 🔍 디버깅: 업데이트 전 사용자 문서 확인
+        final userDoc = await userRef.get();
+        if (!userDoc.exists) {
+          debugPrint('⚠️ 사용자 문서가 존재하지 않습니다: \\${userId}');
+          return;
+        }
+
+        debugPrint('🔍 업데이트 전 사용자 데이터: \\${userDoc.data()}');
+
+        await userRef.update({
+          'userType': 'counselor',
+          'updatedAt': Timestamp.fromDate(DateTime.now()),
+        });
+
+        debugPrint('✅ 사용자 userType 업데이트 완료: \\${userId} -> counselor');
+      } catch (userUpdateError) {
+        debugPrint('❌ 사용자 userType 업데이트 실패: \\${userUpdateError}');
+        // 상담사 문서는 생성되었으므로 userType 업데이트 실패는 로깅만 하고 계속 진행
+      }
+    } catch (e, stackTrace) {
+      debugPrint('❌ 상담사 등록 과정에서 오류 발생: \\${e}');
+      debugPrint('❌ 스택 트레이스: \\${stackTrace}');
+      rethrow;
+    }
+  }
+
+  // === 🔥 사용자의 상담사 등록 요청 상태 확인 ===
+  Future<CounselorRequest?> getUserCounselorRequest() async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) {
+        return null;
+      }
+
+      final snapshot =
+          await _counselorRequestsRef
+              .where('userId', isEqualTo: user.uid)
+              .orderBy('createdAt', descending: true)
+              .limit(1)
+              .get();
+
+      if (snapshot.docs.isEmpty) {
+        return null;
+      }
+
+      return CounselorRequest.fromFirestore(snapshot.docs.first);
+    } catch (e) {
+      debugPrint('❌ 사용자 상담사 등록 요청 조회 오류: $e');
+      return null;
     }
   }
 }

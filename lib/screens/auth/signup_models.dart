@@ -1,3 +1,48 @@
+import '../../shared/models/user_model.dart';
+
+// === 회원가입 정보 모델 ===
+class SignupInfo {
+  final String email;
+  final String password;
+  final String name;
+  final UserType userType;
+
+  const SignupInfo({
+    required this.email,
+    required this.password,
+    required this.name,
+    required this.userType,
+  });
+
+  // Map으로부터 생성
+  factory SignupInfo.fromMap(Map<String, dynamic> map) {
+    return SignupInfo(
+      email: map['email'] ?? '',
+      password: map['password'] ?? '',
+      name: map['name'] ?? '',
+      userType: UserType.values.firstWhere(
+        (type) => type.value == map['userType'],
+        orElse: () => UserType.athlete,
+      ),
+    );
+  }
+
+  // Map으로 변환
+  Map<String, dynamic> toMap() {
+    return {
+      'email': email,
+      'password': password,
+      'name': name,
+      'userType': userType.value,
+    };
+  }
+
+  @override
+  String toString() {
+    return 'SignupInfo(email: $email, name: $name, userType: $userType)';
+  }
+}
+
 // === 소셜 로그인 유형 ===
 enum SocialLoginType {
   google('google', 'Google'),

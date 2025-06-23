@@ -174,7 +174,7 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen> {
     return Consumer(
       builder: (context, ref, child) {
         final messagesState = ref.watch(chatRoomProvider(widget.chatRoomId));
-        final currentUser = ref.watch(currentUserProvider);
+        final currentUser = ref.watch(authProvider).user;
 
         if (messagesState.isLoading && messagesState.messages.isEmpty) {
           return const Center(child: CircularProgressIndicator());

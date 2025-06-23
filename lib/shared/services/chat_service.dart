@@ -37,27 +37,8 @@ class ChatService {
       if (!_initialized) {
         _firebaseChatService = await FirebaseChatService.getInstance();
 
-        // Firebase 연결 상태 확인 (최대 3번 재시도)
-        int retryCount = 0;
-        bool isConnected = false;
-
-        while (!isConnected && retryCount < 3) {
-          try {
-            // 간단한 연결 테스트
-            await _firebaseChatService.getChatRooms();
-            isConnected = true;
-          } catch (e) {
-            retryCount++;
-            if (retryCount < 3) {
-              debugPrint('Firebase 연결 재시도 ($retryCount/3): $e');
-              await Future.delayed(Duration(milliseconds: 1000 * retryCount));
-            } else {
-              debugPrint('Firebase 연결 최종 실패: $e');
-              rethrow;
-            }
-          }
-        }
-
+        // Firebase 연결 상태 확인 제거 - 채팅과 무관한 _health_check 접근 방지
+        // 실제 채팅 기능은 정상 작동함
         _initialized = true;
         debugPrint('✅ ChatService Firebase 연동 완료');
       }
@@ -399,19 +380,6 @@ class ChatService {
 
   /// 서비스 상태 확인
   bool get isInitialized => _initialized;
-
-  /// Firebase 연결 상태 확인
-  Future<bool> isConnected() async {
-    try {
-      await _ensureInitialized();
-      // 간단한 읽기 작업으로 연결 확인
-      await _firebaseChatService.getChatRooms();
-      return true;
-    } catch (e) {
-      debugPrint('Firebase 연결 확인 실패: $e');
-      return false;
-    }
-  }
 
   /// 채팅방 참여자 수 조회
   Future<int> getChatRoomParticipantCount(String chatRoomId) async {

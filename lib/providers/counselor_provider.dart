@@ -590,20 +590,6 @@ class CounselorNotifier extends StateNotifier<CounselorState> {
     await loadCounselors(refresh: true);
   }
 
-  Future<bool> registerCounselor(Counselor counselor) async {
-    try {
-      debugPrint('🔍 상담사 등록 시작: ${counselor.name}');
-      await _service.registerCounselor(counselor);
-      debugPrint('✅ 상담사 등록 완료: ${counselor.name}');
-      await loadCounselors(refresh: true); // 목록 새로고침
-      return true;
-    } catch (e) {
-      debugPrint('❌ 상담사 등록 오류: $e');
-      state = state.copyWith(error: '상담사 등록 중 오류가 발생했습니다: $e');
-      return false;
-    }
-  }
-
   Future<bool> updateCounselor(Counselor counselor) async {
     try {
       await _service.updateCounselor(counselor);

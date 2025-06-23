@@ -4,6 +4,7 @@ import '../shared/models/user_model.dart';
 import '../shared/services/auth_service.dart';
 import '../shared/services/social_auth_service.dart';
 import '../shared/services/firestore_service.dart';
+import 'package:flutter/material.dart';
 
 /// 인증 상태 관리 (Firebase 기반)
 class AuthState {
@@ -602,6 +603,22 @@ class AuthNotifier extends StateNotifier<AuthState> {
     debugPrint('로딩 상태: ${state.isLoading}');
     debugPrint('에러: ${state.error}');
     debugPrint('===============================');
+  }
+
+  /// === Firestore 인증 에러 자동 처리 ===
+  void handleFirestoreAuthError(dynamic error, {BuildContext? context}) async {
+    final errorMsg = error.toString();
+    if (errorMsg.contains('permission-denied')) {
+      await logout();
+      if (context != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('세션이 만료되었습니다. 다시 로그인 해주세요.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 }
 

@@ -67,11 +67,8 @@ class ChatListNotifier extends StateNotifier<ChatListState> {
     try {
       _chatService = await ChatService.getInstance();
 
-      // Firebase 연결 상태 확인
-      final isConnected = await _chatService!.isConnected();
-      if (!isConnected) {
-        throw Exception('Firebase에 연결할 수 없습니다. 인터넷 연결을 확인해주세요.');
-      }
+      // Firebase 연결 상태 확인 제거 - 채팅과 무관한 _health_check 접근 방지
+      // 실제 채팅 기능은 정상 작동함
 
       // 실시간 채팅방 목록 스트림 구독
       await _subscribeToChatRoomsStream();
@@ -102,7 +99,30 @@ class ChatListNotifier extends StateNotifier<ChatListState> {
       if (_chatService != null) {
         // 명시적으로 채팅방 목록 한 번 로드
         final chatRooms = await _chatService!.getChatRooms();
-        state = state.copyWith(aiChatRooms: chatRooms);
+
+        // 더 안전한 방식으로 분류
+        final aiRooms = <ChatRoom>[];
+        final counselorRooms = <ChatRoom>[];
+
+        for (final room in chatRooms) {
+          try {
+            if (room.type.value == 'ai') {
+              // enum의 value로 비교
+              aiRooms.add(room);
+            } else if (room.type.value == 'counselor') {
+              counselorRooms.add(room);
+            }
+          } catch (e) {
+            debugPrint('채팅방 분류 오류: $e');
+            // 기본적으로 AI 채팅방으로 분류
+            aiRooms.add(room);
+          }
+        }
+
+        state = state.copyWith(
+          aiChatRooms: aiRooms,
+          counselorChatRooms: counselorRooms,
+        );
       }
     } catch (e) {
       debugPrint('초기 채팅방 로드 실패: $e');
@@ -123,12 +143,25 @@ class ChatListNotifier extends StateNotifier<ChatListState> {
         _chatRoomsSubscription = stream.listen(
           (chatRooms) {
             if (mounted) {
-              final aiRooms =
-                  chatRooms.where((cr) => cr.type == ChatRoomType.ai).toList();
-              final counselorRooms =
-                  chatRooms
-                      .where((cr) => cr.type == ChatRoomType.counselor)
-                      .toList();
+              // 더 안전한 방식으로 분류
+              final aiRooms = <ChatRoom>[];
+              final counselorRooms = <ChatRoom>[];
+
+              for (final room in chatRooms) {
+                try {
+                  if (room.type.value == 'ai') {
+                    // enum의 value로 비교
+                    aiRooms.add(room);
+                  } else if (room.type.value == 'counselor') {
+                    counselorRooms.add(room);
+                  }
+                } catch (e) {
+                  debugPrint('채팅방 분류 오류: $e');
+                  // 기본적으로 AI 채팅방으로 분류
+                  aiRooms.add(room);
+                }
+              }
+
               state = state.copyWith(
                 aiChatRooms: aiRooms,
                 counselorChatRooms: counselorRooms,
@@ -165,10 +198,26 @@ class ChatListNotifier extends StateNotifier<ChatListState> {
 
       if (_chatService != null) {
         final chatRooms = await _chatService!.getChatRooms();
-        final aiRooms =
-            chatRooms.where((cr) => cr.type == ChatRoomType.ai).toList();
-        final counselorRooms =
-            chatRooms.where((cr) => cr.type == ChatRoomType.counselor).toList();
+
+        // 더 안전한 방식으로 분류
+        final aiRooms = <ChatRoom>[];
+        final counselorRooms = <ChatRoom>[];
+
+        for (final room in chatRooms) {
+          try {
+            if (room.type.value == 'ai') {
+              // enum의 value로 비교
+              aiRooms.add(room);
+            } else if (room.type.value == 'counselor') {
+              counselorRooms.add(room);
+            }
+          } catch (e) {
+            debugPrint('채팅방 분류 오류: $e');
+            // 기본적으로 AI 채팅방으로 분류
+            aiRooms.add(room);
+          }
+        }
+
         state = state.copyWith(
           aiChatRooms: aiRooms,
           counselorChatRooms: counselorRooms,
@@ -258,18 +307,6 @@ class ChatListNotifier extends StateNotifier<ChatListState> {
   /// 에러 클리어
   void clearError() {
     state = state.copyWith(error: null);
-  }
-
-  /// 연결 상태 확인
-  Future<bool> checkConnection() async {
-    try {
-      if (_chatService != null) {
-        return await _chatService!.isConnected();
-      }
-      return false;
-    } catch (e) {
-      return false;
-    }
   }
 }
 
@@ -557,12 +594,6 @@ final chatRoomProvider =
       return ChatRoomNotifier(chatRoomId);
     });
 
-/// 현재 사용자 ID Provider (임시)
-final currentUserIdProvider = Provider<String>((ref) {
-  // 실제로는 Firebase Auth에서 가져올 예정
-  return 'current_user';
-});
-
 /// 읽지 않은 메시지 총 개수 Provider
 final totalUnreadCountProvider = FutureProvider<int>((ref) async {
   try {
@@ -583,15 +614,5 @@ final chatRoomInfoProvider = FutureProvider.family<ChatRoom?, String>((
     return await chatService.getChatRoom(chatRoomId);
   } catch (e) {
     return null;
-  }
-});
-
-/// Firebase 연결 상태 Provider
-final chatConnectionProvider = FutureProvider<bool>((ref) async {
-  try {
-    final chatService = await ChatService.getInstance();
-    return await chatService.isConnected();
-  } catch (e) {
-    return false;
   }
 });

@@ -188,17 +188,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                 ),
               ),
 
-              // === 관리자 전용: 상담사 등록 버튼 ===
-              if (user.userType == UserType.master) ...[
-                SizedBox(height: 16.h),
+              // === 상담사 등록/승인 버튼 ===
+              SizedBox(height: 16.h),
+              if (user.userType == UserType.master)
                 CustomButton(
-                  text: '상담사 등록',
-                  icon: Icons.person_add,
+                  text: '상담사 승인',
+                  icon: Icons.verified_user,
                   type: ButtonType.outline,
-                  onPressed: () => context.push(AppRoutes.counselorRegister),
+                  onPressed: () => context.push(AppRoutes.counselorApproval),
                 ),
-              ],
-
               SizedBox(height: 40.h),
             ],
           ),

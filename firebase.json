@@ -1,1 +1,26 @@
-{"flutter":{"platforms":{"android":{"default":{"projectId":"mental-fit-78d5a","appId":"1:1063603907093:android:7af1d1e58593d90e6dfc1c","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"mental-fit-78d5a","configurations":{"android":"1:1063603907093:android:7af1d1e58593d90e6dfc1c","ios":"1:1063603907093:ios:554dea720b9f60086dfc1c"}}}}}}
+{
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "mental-fit-78d5a",
+          "appId": "1:1063603907093:android:7af1d1e58593d90e6dfc1c",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "mental-fit-78d5a",
+          "configurations": {
+            "android": "1:1063603907093:android:7af1d1e58593d90e6dfc1c",
+            "ios": "1:1063603907093:ios:554dea720b9f60086dfc1c"
+          }
+        }
+      }
+    }
+  }
+}

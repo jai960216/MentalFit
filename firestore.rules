@@ -1,25 +1,66 @@
 rules_version = '2';
-
 service cloud.firestore {
   match /databases/{database}/documents {
     // === 인증 확인 ===
     function isAuthenticated() {
       return request.auth != null;
     }
+    
     function isAdmin() {
       return isAuthenticated() && 
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.userType == 'admin';
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.userType == 'master';
     }
-
-    // === 상담사 등록/수정/삭제는 관리자만 ===
+    
+    // === 사용자 정보 ===
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      // 🔥 중요: 자신의 정보 수정 + 관리자는 모든 사용자 정보 수정 가능
+      allow write: if request.auth.uid == userId || isAdmin();
+    }
+    
+    // === 상담사 등록 요청 ===
+    match /counselorRequests/{requestId} {
+      // 인증된 사용자는 요청 생성 가능
+      allow create: if isAuthenticated();
+      
+      // 일반 사용자: 자신의 요청만 읽기 가능
+      // 관리자: 모든 요청 읽기/수정/삭제 가능
+      allow read: if isAuthenticated() && 
+        (resource.data.userId == request.auth.uid || isAdmin());
+      allow update, delete: if isAdmin();
+    }
+    
+    // === 상담사 등록/수정/삭제 ===
     match /counselors/{counselorId} {
-      allow create, update, delete: if isAdmin();
+      // 🔥 관리자도 상담사 생성 가능 (승인 과정에서 필요)
+      allow create: if isAuthenticated() || isAdmin();
+      
+      // 자신의 정보만 수정 가능, 관리자는 모든 정보 수정 가능
+      allow update: if isAuthenticated() && 
+        (resource.data.userId == request.auth.uid || isAdmin());
+      // 관리자만 삭제 가능
+      allow delete: if isAdmin();
       allow read: if isAuthenticated();
     }
-
-    // === 그 외 모든 컬렉션(서브컬렉션 포함) ===
-    match /{document=**} {
+    
+    // === 예약 관련 ===
+    match /appointments/{appointmentId} {
       allow read, write: if isAuthenticated();
     }
+    
+    // === 리뷰 관련 ===
+    match /reviews/{reviewId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // === 채팅방 관련 ===
+    match /chat_rooms/{roomId} {
+      allow read, write: if isAuthenticated();
+
+      // === 메시지 ===
+      match /messages/{messageId} {
+        allow read, write: if isAuthenticated();
+      }
+    }
   }
-} 
+}
