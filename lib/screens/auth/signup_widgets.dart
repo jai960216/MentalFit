@@ -391,16 +391,6 @@ class SocialButtonsSection extends StatelessWidget {
             onTap: () => onSocialSignup(SocialLoginType.google),
           ),
         ),
-        SizedBox(width: 12.w),
-        Expanded(
-          child: _buildSocialButton(
-            label: 'Kakao로 가입',
-            icon: Icons.chat_bubble,
-            backgroundColor: const Color(0xFFFEE500),
-            textColor: Colors.black,
-            onTap: () => onSocialSignup(SocialLoginType.kakao),
-          ),
-        ),
       ],
     );
   }

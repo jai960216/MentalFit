@@ -322,49 +322,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  /// === Kakao 소셜 로그인 ===
-  Future<AuthResult> signInWithKakao() async {
-    if (!_initialized) await _initializeServices();
-
-    state = state.copyWith(
-      isLoading: true,
-      error: null,
-      status: AuthStatus.loading,
-    );
-
-    try {
-      final result = await _socialAuthService.signInWithKakao();
-
-      if (result.success && result.user != null) {
-        state = state.copyWith(
-          user: result.user,
-          isLoading: false,
-          isLoggedIn: true,
-          status: AuthStatus.authenticated,
-          error: null,
-        );
-        debugPrint('✅ Kakao 로그인 성공: ${result.user!.email}');
-      } else {
-        state = state.copyWith(
-          isLoading: false,
-          status: AuthStatus.error,
-          error: result.error,
-        );
-        debugPrint('❌ Kakao 로그인 실패: ${result.error}');
-      }
-
-      return result;
-    } catch (e) {
-      debugPrint('❌ Kakao 로그인 중 오류: $e');
-      state = state.copyWith(
-        isLoading: false,
-        status: AuthStatus.error,
-        error: 'Kakao 로그인 중 오류가 발생했습니다: $e',
-      );
-      return AuthResult.failure(e.toString());
-    }
-  }
-
   /// === Apple 소셜 로그인 ===
   Future<AuthResult> signInWithApple() async {
     if (!_initialized) await _initializeServices();

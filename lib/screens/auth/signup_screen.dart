@@ -173,13 +173,10 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final result =
-          type == SocialLoginType.google
-              ? await ref.read(authProvider.notifier).signInWithGoogle()
-              : await ref.read(authProvider.notifier).signInWithKakao();
+      final result = await ref.read(authProvider.notifier).signInWithGoogle();
 
       if (mounted) {
-        _showSnackBar('${type.displayName} 회원가입이 완료되었습니다!');
+        _showSnackBar('Google 회원가입이 완료되었습니다!');
         if (result.success && result.user != null) {
           if (result.user!.userType == null) {
             context.go(AppRoutes.userTypeSelection);

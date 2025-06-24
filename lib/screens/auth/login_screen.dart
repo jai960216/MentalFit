@@ -131,40 +131,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     }
   }
 
-  Future<void> _handleKakaoLogin() async {
-    setState(() => _isLoading = true);
-
-    try {
-      final result = await ref.read(authProvider.notifier).signInWithKakao();
-
-      if (result.success && result.user != null) {
-        if (mounted) {
-          // 온보딩 완료 여부에 따라 라우팅
-          if (result.user!.isOnboardingCompleted) {
-            context.go(AppRoutes.home);
-          } else {
-            context.go(AppRoutes.onboardingBasicInfo);
-          }
-        }
-      } else {
-        if (mounted) {
-          GlobalErrorHandler.showErrorSnackBar(
-            context,
-            result.error ?? 'Kakao 로그인에 실패했습니다.',
-          );
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        GlobalErrorHandler.showErrorSnackBar(context, e);
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
-    }
-  }
-
   Future<void> _handleAppleLogin() async {
     setState(() => _isLoading = true);
     try {
@@ -468,16 +434,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             backgroundColor: AppColors.white,
             iconColor: AppColors.error,
             label: 'Google',
-          ),
-        ),
-        SizedBox(width: 12.w),
-        Expanded(
-          child: _SocialLoginButton(
-            onPressed: _isLoading ? null : _handleKakaoLogin,
-            icon: Icons.chat_bubble,
-            backgroundColor: const Color(0xFFFEE500),
-            iconColor: AppColors.black,
-            label: 'Kakao',
           ),
         ),
         SizedBox(width: 12.w),

@@ -45,8 +45,7 @@ class SignupInfo {
 
 // === 소셜 로그인 유형 ===
 enum SocialLoginType {
-  google('google', 'Google'),
-  kakao('kakao', 'Kakao');
+  google('google', 'Google');
 
   const SocialLoginType(this.value, this.displayName);
 
@@ -137,7 +136,6 @@ MentalFit(이하 "회사")는 다음의 목적을 위하여 개인정보를 처�
   static const Map<String, String> successMessages = {
     'signupComplete': '회원가입이 완료되었습니다!',
     'googleSignupComplete': 'Google 회원가입이 완료되었습니다!',
-    'kakaoSignupComplete': 'Kakao 회원가입이 완료되었습니다!',
   };
 
   // 에러 메시지

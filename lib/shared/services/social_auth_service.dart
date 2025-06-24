@@ -134,26 +134,6 @@ class SocialAuthService {
     }
   }
 
-  // === Kakao 로그인 (Mock) ===
-  Future<AuthResult> signInWithKakao() async {
-    try {
-      debugPrint('🔧 Kakao Mock 로그인 시작...');
-      await Future.delayed(const Duration(seconds: 1));
-
-      final mockUser = await _createMockUser(
-        provider: 'kakao',
-        email: 'mock.kakao.user@kakao.com',
-        name: 'Mock Kakao User',
-      );
-
-      debugPrint('✅ Kakao Mock 로그인 성공');
-      return AuthResult.success(mockUser);
-    } catch (e) {
-      debugPrint('❌ Kakao 로그인 오류: $e');
-      return AuthResult.failure('Kakao 로그인 중 오류가 발생했습니다: $e');
-    }
-  }
-
   // === Apple 로그인 ===
   Future<AuthResult> signInWithApple() async {
     try {
@@ -337,14 +317,6 @@ class SocialAuthService {
     }
   }
 
-  Future<void> signOutKakao() async {
-    try {
-      debugPrint('✅ Kakao 로그아웃 완료 (Mock)');
-    } catch (e) {
-      debugPrint('❌ Kakao 로그아웃 오류: $e');
-    }
-  }
-
   Future<void> signOutApple() async {
     try {
       // Apple 로그아웃은 클라이언트 측에서 처리할 수 없음
@@ -356,7 +328,7 @@ class SocialAuthService {
   }
 
   Future<void> signOutAll() async {
-    await Future.wait([signOutGoogle(), signOutKakao(), signOutApple()]);
+    await Future.wait([signOutGoogle(), signOutApple()]);
     debugPrint('✅ 모든 소셜 로그인 로그아웃 완료');
   }
 
@@ -381,7 +353,7 @@ class SocialAuthService {
   }
 
   Future<SocialUserInfo?> getKakaoUserInfo() async {
-    return null; // Mock에서는 null 반환
+    // 삭제
   }
 
   // === 가용성 확인 ===
@@ -392,10 +364,6 @@ class SocialAuthService {
       debugPrint('❌ Google 가용성 확인 오류: $e');
       return false;
     }
-  }
-
-  Future<bool> isKakaoAvailable() async {
-    return true; // Mock에서는 항상 true
   }
 }
 
