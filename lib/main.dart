@@ -9,6 +9,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'shared/models/ai_chat_models.dart';
 import 'providers/app_state_provider.dart';
+import 'firebase_options.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -17,7 +18,9 @@ void main() async {
   await dotenv.load();
 
   // 2. 그 다음 Firebase, Hive 등 초기화
-  await Firebase.initializeApp();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
   await Hive.initFlutter();
   Hive.registerAdapter(AIChatRoomAdapter());
   Hive.registerAdapter(AIChatMessageAdapter());
