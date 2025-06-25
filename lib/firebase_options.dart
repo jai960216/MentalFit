@@ -51,7 +51,7 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyDSzbe81ggGmgZoBzqRB_9WTTRdui0iwN4',
-    appId: '1:1063603907093:android:d461d027ce5c5d4e6dfc1c',
+    appId: '1:1063603907093:android:d76bbbc473d88ae26dfc1c',
     messagingSenderId: '1063603907093',
     projectId: 'mental-fit-78d5a',
     storageBucket: 'mental-fit-78d5a.firebasestorage.app',
@@ -59,13 +59,13 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyDCmyZ9LerrE3ZCZVgKmMEkbtqAI7sFdzM',
-    appId: '1:1063603907093:ios:b469bb76e085ffb26dfc1c',
+    appId: '1:1063603907093:ios:f4b90dcf0a9f0e866dfc1c',
     messagingSenderId: '1063603907093',
     projectId: 'mental-fit-78d5a',
     storageBucket: 'mental-fit-78d5a.firebasestorage.app',
     androidClientId: '1063603907093-5f3t8hnqttp6ek980iufp2phu4mqsfpt.apps.googleusercontent.com',
-    iosClientId: '1063603907093-jo0beci2d62htqn3474chdj55lp78u41.apps.googleusercontent.com',
-    iosBundleId: 'com.mentalfit.app',
+    iosClientId: '1063603907093-lis30ejh0heka8rfuk9lkoar69b803rc.apps.googleusercontent.com',
+    iosBundleId: 'com.mentalfit.sports',
   );
 
 }

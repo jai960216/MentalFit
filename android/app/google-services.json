@@ -7,17 +7,17 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:1063603907093:android:d461d027ce5c5d4e6dfc1c",
+        "mobilesdk_app_id": "1:1063603907093:android:d76bbbc473d88ae26dfc1c",
         "android_client_info": {
-          "package_name": "com.mentalfit.app"
+          "package_name": "com.mentalfit.sports"
         }
       },
       "oauth_client": [
         {
-          "client_id": "1063603907093-uin4iurat92hhrvkftm05lb5ui03u00n.apps.googleusercontent.com",
+          "client_id": "1063603907093-6u3piqjum1hf26ug9q1bgeuu1ecfld09.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
-            "package_name": "com.mentalfit.app",
+            "package_name": "com.mentalfit.sports",
             "certificate_hash": "cc67682c113c2c8317965dbdd034f918c6dcf0ec"
           }
         },
