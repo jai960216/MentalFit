@@ -40,33 +40,11 @@ class SelfCheckService {
 
   // 앱 내 고정 스포츠 심리 검사 리스트
   List<SelfCheckTest> get _availableTests => [
-    SelfCheckTest(
-      id: 'tops2',
-      type: SelfCheckTestType.tops2,
-      title: 'TOPS-2 (Test of Performance Strategies-2)',
-      description: '심리기술 사용(집중, 목표설정 등)을 경기 중/평상시로 나눠 측정. 엘리트 선수 대상 활용도 높음.',
-      category: SelfCheckCategory.performance,
-      questionCount: 2,
-      estimatedMinutes: 10,
-      questions: [
-        SelfCheckQuestion(
-          id: 'tops2_q1',
-          order: 1,
-          text: '경기 중 집중력을 유지하기 위해 어떤 전략을 사용합니까?',
-          answerType: AnswerType.likert5,
-          answers: likert5Answers,
-        ),
-        SelfCheckQuestion(
-          id: 'tops2_q2',
-          order: 2,
-          text: '평상시 목표를 설정하고 달성하기 위해 계획을 세웁니까?',
-          answerType: AnswerType.likert5,
-          answers: likert5Answers,
-        ),
-      ],
-      isActive: true,
-      createdAt: DateTime(2024, 1, 1),
-    ),
+    // TOPS-2 (준비중)
+    // SelfCheckTest(
+    //   id: 'tops2',
+    //   ...
+    // ),
     SelfCheckTest(
       id: 'csai2',
       type: SelfCheckTestType.csai2,
@@ -91,141 +69,31 @@ class SelfCheckService {
       isActive: true,
       createdAt: DateTime(2024, 1, 1),
     ),
-    SelfCheckTest(
-      id: 'poms',
-      type: SelfCheckTestType.psis, // 가장 유사한 것으로 매핑
-      title: 'POMS (Profile of Mood States)',
-      description: '분노, 피로, 긴장, 활력 등 6가지 기분 상태 측정. 훈련 및 경기 전후 심리 상태 분석에 유용.',
-      category: SelfCheckCategory.performance, // mood 없음, performance로 매핑
-      questionCount: 2,
-      estimatedMinutes: 8,
-      questions: [
-        SelfCheckQuestion(
-          id: 'poms_q1',
-          order: 1,
-          text: '최근 며칠간 피로감을 자주 느꼈습니까?',
-          answerType: AnswerType.likert5,
-          answers: likert5Answers,
-        ),
-        SelfCheckQuestion(
-          id: 'poms_q2',
-          order: 2,
-          text: '최근 며칠간 활력이 넘친다고 느꼈습니까?',
-          answerType: AnswerType.likert5,
-          answers: likert5Answers,
-        ),
-      ],
-      isActive: true,
-      createdAt: DateTime(2024, 1, 1),
-    ),
-    SelfCheckTest(
-      id: 'acsi28',
-      type: SelfCheckTestType.msci, // 가장 유사한 것으로 매핑
-      title: 'ACSI-28 (Athletic Coping Skills Inventory-28)',
-      description: '스트레스 대처능력 및 심리적 회복탄력성 측정. 스포츠 심리 상담 시 널리 사용.',
-      category: SelfCheckCategory.performance, // coping 없음, performance로 매핑
-      questionCount: 2,
-      estimatedMinutes: 10,
-      questions: [
-        SelfCheckQuestion(
-          id: 'acsi28_q1',
-          order: 1,
-          text: '스트레스를 효과적으로 관리할 수 있다고 느낍니까?',
-          answerType: AnswerType.likert5,
-          answers: likert5Answers,
-        ),
-        SelfCheckQuestion(
-          id: 'acsi28_q2',
-          order: 2,
-          text: '실패 후에도 빠르게 회복할 수 있습니까?',
-          answerType: AnswerType.likert5,
-          answers: likert5Answers,
-        ),
-      ],
-      isActive: true,
-      createdAt: DateTime(2024, 1, 1),
-    ),
-    SelfCheckTest(
-      id: 'scat',
-      type: SelfCheckTestType.csai2, // anxiety 관련으로 매핑
-      title: 'SCAT (Sport Competition Anxiety Test)',
-      description: '운동선수의 특성불안 수준 측정. CSAI-2보다 간단한 초기 도구.',
-      category: SelfCheckCategory.anxiety,
-      questionCount: 2,
-      estimatedMinutes: 5,
-      questions: [
-        SelfCheckQuestion(
-          id: 'scat_q1',
-          order: 1,
-          text: '경기 상황에서 긴장하거나 불안해합니까?',
-          answerType: AnswerType.likert5,
-          answers: likert5Answers,
-        ),
-        SelfCheckQuestion(
-          id: 'scat_q2',
-          order: 2,
-          text: '중요한 경기 전날 잠을 잘 이루지 못합니까?',
-          answerType: AnswerType.likert5,
-          answers: likert5Answers,
-        ),
-      ],
-      isActive: true,
-      createdAt: DateTime(2024, 1, 1),
-    ),
-    SelfCheckTest(
-      id: 'mtq48',
-      type: SelfCheckTestType.msci, // mental toughness 관련으로 매핑
-      title: 'MTQ48 (Mental Toughness Questionnaire)',
-      description: '자신감, 정서통제, 회복력 등 포함. 코칭, 멘탈 트레이닝에 활용.',
-      category: SelfCheckCategory.confidence, // confidence로 매핑
-      questionCount: 2,
-      estimatedMinutes: 8,
-      questions: [
-        SelfCheckQuestion(
-          id: 'mtq48_q1',
-          order: 1,
-          text: '압박 상황에서도 침착함을 유지할 수 있습니까?',
-          answerType: AnswerType.likert5,
-          answers: likert5Answers,
-        ),
-        SelfCheckQuestion(
-          id: 'mtq48_q2',
-          order: 2,
-          text: '실패 후에도 자신감을 잃지 않습니까?',
-          answerType: AnswerType.likert5,
-          answers: likert5Answers,
-        ),
-      ],
-      isActive: true,
-      createdAt: DateTime(2024, 1, 1),
-    ),
-    SelfCheckTest(
-      id: 'restq',
-      type: SelfCheckTestType.smq, // stress-recovery 관련으로 매핑
-      title: 'RESTQ-Sport (Recovery-Stress Questionnaire for Athletes)',
-      description: '스트레스-회복 균형 측정. 과훈련/번아웃 위험 사전 탐지에 유용.',
-      category: SelfCheckCategory.performance, // stress 없음, performance로 매핑
-      questionCount: 2,
-      estimatedMinutes: 9,
-      questions: [
-        SelfCheckQuestion(
-          id: 'restq_q1',
-          order: 1,
-          text: '최근 충분한 휴식을 취하고 있다고 느낍니까?',
-          answerType: AnswerType.likert5,
-          answers: likert5Answers,
-        ),
-        SelfCheckQuestion(
-          id: 'restq_q2',
-          order: 2,
-          text: '최근 스트레스를 많이 받고 있습니까?',
-          answerType: AnswerType.likert5,
-          answers: likert5Answers,
-        ),
-      ],
-      isActive: true,
-      createdAt: DateTime(2024, 1, 1),
-    ),
+    // POMS (준비중)
+    // SelfCheckTest(
+    //   id: 'poms',
+    //   ...
+    // ),
+    // ACSI-28 (준비중)
+    // SelfCheckTest(
+    //   id: 'acsi28',
+    //   ...
+    // ),
+    // SCAT (준비중)
+    // SelfCheckTest(
+    //   id: 'scat',
+    //   ...
+    // ),
+    // MTQ48 (준비중)
+    // SelfCheckTest(
+    //   id: 'mtq48',
+    //   ...
+    // ),
+    // RESTQ (준비중)
+    // SelfCheckTest(
+    //   id: 'restq',
+    //   ...
+    // ),
   ];
 
   List<SelfCheckTest> getAvailableTests() {
