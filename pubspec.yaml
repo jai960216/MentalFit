@@ -1,5 +1,5 @@
 name: flutter_mentalfit
-description: "A new Flutter project."
+description: "MentalFit - 스포츠 심리 상담 전문 앱. AI 기반 상담, 전문 상담사 매칭, 자가진단을 통해 운동선수와 스포츠인들의 정신건강을 지원합니다."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
