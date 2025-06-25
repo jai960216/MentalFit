@@ -1,6 +1,6 @@
-# MentalFit - 스포츠 심리 상담 전문 앱
+# Sports MentalFit - 스포츠 심리 상담 전문 앱
 
-MentalFit은 운동선수와 스포츠인들을 위한 전문적인 심리 상담 서비스를 제공하는 모바일 애플리케이션입니다.
+Sports MentalFit은 운동선수와 스포츠인들을 위한 전문적인 심리 상담 서비스를 제공하는 모바일 애플리케이션입니다.
 
 ## 주요 기능
 
@@ -26,7 +26,7 @@ MentalFit은 운동선수와 스포츠인들을 위한 전문적인 심리 상�
 
 ## 기술 스택
 
-- **Frontend**: Flutter 3.7.2
+- **Frontend**: Flutter 3.4.0+
 - **Backend**: Firebase (Firestore, Auth, Storage)
 - **AI**: OpenAI GPT API
 - **State Management**: Riverpod
@@ -36,7 +36,7 @@ MentalFit은 운동선수와 스포츠인들을 위한 전문적인 심리 상�
 ## 개발 환경 설정
 
 ### 필수 요구사항
-- Flutter SDK 3.7.2 이상
+- Flutter SDK 3.4.0 이상
 - Dart SDK 3.0.0 이상
 - Android Studio / VS Code
 - iOS 개발 시 Xcode 14.0 이상
@@ -54,10 +54,9 @@ cd MentalFit
 flutter pub get
 ```
 
-3. 환경 변수 설정
+3. Firebase 설정
 ```bash
-cp .env.example .env
-# .env 파일에 필요한 API 키들을 설정
+flutterfire configure
 ```
 
 4. 앱 실행
@@ -81,7 +80,7 @@ flutter build ipa
 
 ## 개인정보 보호
 
-MentalFit은 사용자의 개인정보 보호를 최우선으로 합니다.
+Sports MentalFit은 사용자의 개인정보 보호를 최우선으로 합니다.
 
 - **개인정보처리방침**: 앱 내 설정에서 확인 가능
 - **데이터 암호화**: 모든 민감한 데이터는 암호화되어 저장
@@ -97,6 +96,18 @@ MentalFit은 사용자의 개인정보 보호를 최우선으로 합니다.
 
 이 프로젝트는 MIT 라이선스 하에 배포됩니다.
 
+## 기여하기
+
+1. Fork the Project
+2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the Branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
+## 연락처
+
+프로젝트 관련 문의사항이 있으시면 이슈를 생성해주세요.
+
 ---
 
-© 2024 MentalFit. All rights reserved.
+© 2024 Sports MentalFit. All rights reserved.
