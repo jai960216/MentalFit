@@ -32,7 +32,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
   bool _marketingEnabled = false;
   bool _soundEnabled = true;
   bool _vibrationEnabled = true;
-  bool _isDeletingAccount = false;
 
   @override
   void initState() {
@@ -294,13 +293,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
           icon: Icons.edit_outlined,
           onTap: () => context.push(AppRoutes.editProfile),
         ),
-        _buildMenuTile(
-          title: '계정 삭제',
-          subtitle: '모든 데이터가 영구적으로 삭제됩니다',
-          icon: Icons.delete_outline,
-          isDestructive: true,
-          onTap: _isDeletingAccount ? null : _handleDeleteAccount,
-        ),
       ],
     );
   }
@@ -461,13 +453,5 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
     );
   }
 
-  Future<void> _handleDeleteAccount() async {
-    // 계정 삭제 로직은 기존과 동일하게 유지
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('계정 삭제 기능은 준비 중입니다'),
-        backgroundColor: AppColors.info,
-      ),
-    );
-  }
+
 }

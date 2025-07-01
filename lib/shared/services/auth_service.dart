@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import '../models/user_model.dart' as app_user;
+import 'ai_chat_local_service.dart';
 
 /// Firebase Auth 기반 인증 서비스
 /// 기존 REST API + TokenManager 방식을 Firebase Auth로 완전 교체
@@ -208,7 +209,22 @@ class AuthService {
   /// === 로그아웃 ===
   Future<bool> logout() async {
     try {
+      final currentUserId = _auth.currentUser?.uid;
+      
+      // Firebase Auth 로그아웃
       await _auth.signOut();
+      
+      // AI 채팅 기록 정리 (로그아웃하는 사용자의 데이터만)
+      if (currentUserId != null) {
+        try {
+          await AIChatLocalService.clearUserData(currentUserId);
+          debugPrint('✅ AI 채팅 데이터 정리 완료: $currentUserId');
+        } catch (e) {
+          debugPrint('⚠️ AI 채팅 데이터 정리 실패: $e');
+          // 로그아웃은 계속 진행
+        }
+      }
+      
       return true;
     } catch (e) {
       debugPrint('로그아웃 실패: $e');
@@ -321,30 +337,178 @@ class AuthService {
   Future<bool> deleteAccount(String password) async {
     try {
       final firebaseUser = _auth.currentUser;
-      if (firebaseUser == null) return false;
-
-      // 이메일 계정인 경우 재인증
-      if (firebaseUser.email != null) {
-        final credential = firebase_auth.EmailAuthProvider.credential(
-          email: firebaseUser.email!,
-          password: password,
-        );
-        await firebaseUser.reauthenticateWithCredential(credential);
+      if (firebaseUser == null) {
+        debugPrint('❌ 현재 로그인된 사용자가 없습니다.');
+        return false;
       }
 
-      // Firestore에서 사용자 데이터 삭제
-      await _firestore.collection('users').doc(firebaseUser.uid).delete();
+      // 사용자의 로그인 방법 확인
+      final providerData = firebaseUser.providerData;
+      bool hasEmailProvider = providerData.any((provider) => provider.providerId == 'password');
+      bool hasSocialProvider = providerData.any((provider) => 
+          provider.providerId == 'google.com' || 
+          provider.providerId == 'apple.com' ||
+          provider.providerId == 'kakao.com');
+
+      // 이메일/비밀번호 계정인 경우 재인증
+      if (hasEmailProvider && firebaseUser.email != null) {
+        debugPrint('🔐 이메일 계정 재인증 시도...');
+        try {
+          final credential = firebase_auth.EmailAuthProvider.credential(
+            email: firebaseUser.email!,
+            password: password,
+          );
+          await firebaseUser.reauthenticateWithCredential(credential);
+          debugPrint('✅ 재인증 성공');
+        } on firebase_auth.FirebaseAuthException catch (e) {
+          debugPrint('❌ 재인증 실패: ${e.code} - ${e.message}');
+          
+          // 구체적인 에러 메시지 반환
+          switch (e.code) {
+            case 'wrong-password':
+              throw Exception('입력하신 비밀번호가 올바르지 않습니다.');
+            case 'too-many-requests':
+              throw Exception('너무 많은 시도로 인해 일시적으로 차단되었습니다. 잠시 후 다시 시도해주세요.');
+            case 'user-mismatch':
+              throw Exception('현재 로그인된 계정과 입력된 정보가 일치하지 않습니다.');
+            case 'user-not-found':
+              throw Exception('사용자를 찾을 수 없습니다. 다시 로그인해주세요.');
+            case 'requires-recent-login':
+              throw Exception('보안을 위해 다시 로그인 후 계정 삭제를 시도해주세요.');
+            default:
+              throw Exception('비밀번호 인증에 실패했습니다: ${_getAuthErrorMessage(e)}');
+          }
+        }
+      } else if (hasSocialProvider) {
+        // 소셜 로그인 사용자의 경우
+        debugPrint('🔍 소셜 로그인 사용자 감지');
+        
+        // 최근 로그인 시간 확인 (5분 이내)
+        final lastSignInTime = firebaseUser.metadata.lastSignInTime;
+        if (lastSignInTime != null) {
+          final timeDiff = DateTime.now().difference(lastSignInTime);
+          if (timeDiff.inMinutes > 5) {
+            throw Exception('보안을 위해 다시 로그인 후 계정 삭제를 시도해주세요.');
+          }
+        }
+        
+        debugPrint('✅ 소셜 로그인 사용자 재인증 통과');
+      } else {
+        debugPrint('⚠️ 알 수 없는 로그인 방법');
+        throw Exception('계정 정보를 확인할 수 없습니다. 다시 로그인해주세요.');
+      }
+
+      // 사용자별 로컬 AI 채팅 데이터 삭제
+      try {
+        await AIChatLocalService.clearUserData(firebaseUser.uid);
+        debugPrint('✅ AI 채팅 로컬 데이터 삭제 완료');
+      } catch (e) {
+        debugPrint('⚠️ AI 채팅 로컬 데이터 삭제 실패: $e');
+        // AI 채팅 데이터 삭제 실패해도 계속 진행
+      }
+
+      // Firestore에서 사용자 관련 데이터 삭제
+      final batch = _firestore.batch();
+      
+      // 사용자 문서 삭제
+      batch.delete(_firestore.collection('users').doc(firebaseUser.uid));
+      
+      // 자가진단 결과 삭제
+      final selfCheckResults = await _firestore
+          .collection('self_check_results')
+          .where('userId', isEqualTo: firebaseUser.uid)
+          .get();
+      
+      for (final doc in selfCheckResults.docs) {
+        batch.delete(doc.reference);
+      }
+      
+      // 예약 데이터 삭제 (예약한 것들)
+      final bookings = await _firestore
+          .collection('bookings')
+          .where('userId', isEqualTo: firebaseUser.uid)
+          .get();
+      
+      for (final doc in bookings.docs) {
+        batch.delete(doc.reference);
+      }
+      
+      // 채팅방 데이터 처리 (상담사 기록 보호를 위해 수정됨)
+      final chatRooms = await _firestore
+          .collection('chat_rooms')
+          .where('participantIds', arrayContains: firebaseUser.uid)
+          .get();
+      
+      for (final doc in chatRooms.docs) {
+        final data = doc.data() as Map<String, dynamic>;
+        final participantIds = List<String>.from(data['participantIds'] ?? []);
+        
+        if (participantIds.length <= 2) {
+          // 1:1 채팅방 (사용자 + 상담사)인 경우
+          // 사용자의 메시지만 익명화하고 채팅방은 보존
+          final messages = await doc.reference.collection('messages').get();
+          for (final msgDoc in messages.docs) {
+            final msgData = msgDoc.data();
+            if (msgData['senderId'] == firebaseUser.uid) {
+              // 사용자가 보낸 메시지만 익명화
+              batch.update(msgDoc.reference, {
+                'senderName': '탈퇴한 사용자',
+                'senderId': 'deleted_user',
+                'content': '[탈퇴한 사용자의 메시지]',
+              });
+            }
+          }
+          
+          // 채팅방에서 사용자 제거 및 상태 변경
+          final updatedParticipants = participantIds.where((id) => id != firebaseUser.uid).toList();
+          batch.update(doc.reference, {
+            'participantIds': updatedParticipants,
+            'status': 'archived', // 보관 상태로 변경
+            'title': '${data['title'] ?? '상담방'} (사용자 탈퇴)',
+            'updatedAt': Timestamp.now(),
+          });
+        } else {
+          // 그룹 채팅방인 경우 - 사용자만 제거
+          final updatedParticipants = participantIds.where((id) => id != firebaseUser.uid).toList();
+          batch.update(doc.reference, {
+            'participantIds': updatedParticipants,
+            'updatedAt': Timestamp.now(),
+          });
+        }
+      }
+
+      // 배치 실행
+      debugPrint('🗑️ Firestore 데이터 삭제 실행 중...');
+      await batch.commit();
+      debugPrint('✅ Firestore 사용자 데이터 삭제 완료');
 
       // Firebase Auth에서 계정 삭제
+      debugPrint('🗑️ Firebase Auth 계정 삭제 실행 중...');
       await firebaseUser.delete();
+      debugPrint('✅ Firebase Auth 계정 삭제 완료');
 
       return true;
     } on firebase_auth.FirebaseAuthException catch (e) {
-      debugPrint('계정 삭제 실패: ${_getAuthErrorMessage(e)}');
-      return false;
+      debugPrint('❌ Firebase Auth 계정 삭제 실패: ${e.code} - ${e.message}');
+      
+      // 구체적인 에러 처리
+      switch (e.code) {
+        case 'requires-recent-login':
+          throw Exception('보안을 위해 다시 로그인 후 계정 삭제를 시도해주세요.');
+        case 'too-many-requests':
+          throw Exception('너무 많은 요청으로 인해 일시적으로 차단되었습니다. 잠시 후 다시 시도해주세요.');
+        default:
+          throw Exception('계정 삭제 중 오류가 발생했습니다: ${_getAuthErrorMessage(e)}');
+      }
     } catch (e) {
-      debugPrint('계정 삭제 실패: $e');
-      return false;
+      debugPrint('❌ 계정 삭제 중 예상치 못한 오류: $e');
+      
+      // Exception으로 래핑된 사용자 정의 메시지는 그대로 전달
+      if (e is Exception) {
+        rethrow;
+      }
+      
+      throw Exception('계정 삭제 중 오류가 발생했습니다: $e');
     }
   }
 

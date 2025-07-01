@@ -817,7 +817,7 @@ class _BookingCalendarScreenState extends ConsumerState<BookingCalendarScreen>
       ..selectTime(_selectedTime!)
       ..selectMethod(_selectedMethod);
 
-    // 예약확인/결제 화면으로 이동 (임시 예약 정보 전달)
+    // 예약확인 화면으로 이동 (임시 예약 정보 전달)
     final bookingState = ref.read(bookingProvider);
     context.push(
       '${AppRoutes.bookingConfirm}/${widget.counselorId}',

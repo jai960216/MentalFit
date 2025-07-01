@@ -510,6 +510,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     if (!_initialized) await _initializeServices();
 
     try {
+      debugPrint('🗑️ 계정 삭제 시작...');
       final success = await _authService.deleteAccount(password);
 
       if (success) {
@@ -522,15 +523,25 @@ class AuthNotifier extends StateNotifier<AuthState> {
         );
 
         debugPrint('✅ 계정 삭제 완료');
+        return true;
       } else {
-        state = state.copyWith(error: '계정 삭제에 실패했습니다.');
+        const errorMsg = '계정 삭제에 실패했습니다.';
+        state = state.copyWith(error: errorMsg);
         debugPrint('❌ 계정 삭제 실패');
+        return false;
       }
-
-      return success;
     } catch (e) {
       debugPrint('❌ 계정 삭제 중 오류: $e');
-      state = state.copyWith(error: '계정 삭제 중 오류가 발생했습니다: $e');
+      
+      // Exception에서 메시지 추출
+      String errorMessage;
+      if (e is Exception) {
+        errorMessage = e.toString().replaceFirst('Exception: ', '');
+      } else {
+        errorMessage = '계정 삭제 중 오류가 발생했습니다: $e';
+      }
+      
+      state = state.copyWith(error: errorMessage);
       return false;
     }
   }

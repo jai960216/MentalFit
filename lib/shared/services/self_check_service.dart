@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../models/self_check_models.dart';
 import 'firestore_service.dart';
 
@@ -146,8 +147,16 @@ class SelfCheckService {
   /// 최근 검사 결과 조회
   Future<List<SelfCheckResult>> getRecentResults({int limit = 10}) async {
     try {
+      // 현재 사용자 ID 가져오기
+      final currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser == null) {
+        debugPrint('로그인된 사용자가 없습니다.');
+        return [];
+      }
+
       final snapshot =
           await _selfCheckResultsCollection
+              .where('userId', isEqualTo: currentUser.uid)
               .orderBy('completedAt', descending: true)
               .limit(limit)
               .get();
@@ -171,8 +180,14 @@ class SelfCheckService {
     try {
       debugPrint('검사 제출 시작: $testId, 답변 수: ${answers.length}');
 
+      // 현재 사용자 ID 가져오기
+      final currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser == null) {
+        throw Exception('로그인이 필요합니다.');
+      }
+
       final test = await getTestById(testId);
-      final result = _calculateTestResult(test, answers);
+      final result = _calculateTestResult(test, answers, currentUser.uid);
 
       // Firestore에 결과 저장
       final resultData = result.toJson();
@@ -193,6 +208,7 @@ class SelfCheckService {
   SelfCheckResult _calculateTestResult(
     SelfCheckTest test,
     List<UserAnswer> answers,
+    String userId,
   ) {
     final totalScore = answers.fold<int>(
       0,
@@ -204,7 +220,7 @@ class SelfCheckService {
 
     return SelfCheckResult(
       id: 'result_${DateTime.now().millisecondsSinceEpoch}',
-      userId: 'current_user',
+      userId: userId,
       test: test,
       answers: answers,
       totalScore: totalScore,

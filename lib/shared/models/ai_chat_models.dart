@@ -14,6 +14,8 @@ class AIChatRoom extends HiveObject {
   String? lastMessage;
   @HiveField(4)
   DateTime? lastMessageAt;
+  @HiveField(5)
+  String? userId; // 사용자별 분리를 위한 사용자 ID
 
   AIChatRoom({
     required this.id,
@@ -21,6 +23,7 @@ class AIChatRoom extends HiveObject {
     required this.createdAt,
     this.lastMessage,
     this.lastMessageAt,
+    this.userId,
   });
 }
 
@@ -34,11 +37,14 @@ class AIChatMessage extends HiveObject {
   String text;
   @HiveField(3)
   DateTime createdAt;
+  @HiveField(4)
+  String? userId; // 사용자별 분리를 위한 사용자 ID
 
   AIChatMessage({
     required this.roomId,
     required this.role,
     required this.text,
     required this.createdAt,
+    this.userId,
   });
 }

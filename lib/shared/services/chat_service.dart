@@ -62,7 +62,7 @@ class ChatService {
     await _ensureInitialized();
 
     try {
-      return await _firebaseChatService.getChatRooms();
+      return await _firebaseChatService.getChatRoomsFilteredForUser();
     } catch (e) {
       debugPrint('채팅방 목록 조회 오류: $e');
       // 폴백으로 빈 목록 반환
@@ -79,7 +79,7 @@ class ChatService {
     await _ensureInitialized();
 
     try {
-      yield* _firebaseChatService.getChatRoomsStream();
+      yield* _firebaseChatService.getChatRoomsStreamFilteredForUser();
     } catch (e) {
       debugPrint('채팅방 스트림 오류: $e');
       yield [];
@@ -282,6 +282,18 @@ class ChatService {
       return await _firebaseChatService.markMessagesAsRead(chatRoomId);
     } catch (e) {
       debugPrint('읽음 처리 오류: $e');
+      return false;
+    }
+  }
+
+  /// 채팅방 숨기기/표시하기 토글
+  Future<bool> toggleChatRoomVisibility(String chatRoomId) async {
+    await _ensureInitialized();
+
+    try {
+      return await _firebaseChatService.toggleChatRoomVisibility(chatRoomId);
+    } catch (e) {
+      debugPrint('채팅방 표시 상태 변경 오류: $e');
       return false;
     }
   }

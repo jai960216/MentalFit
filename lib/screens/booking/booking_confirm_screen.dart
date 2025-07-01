@@ -99,7 +99,7 @@ class _BookingConfirmScreenState extends ConsumerState<BookingConfirmScreen>
                       else if (bookingInfo != null)
                         _buildBookingInfoCardFromMap(bookingInfo, counselor),
                       SizedBox(height: 24.h),
-                      _buildPaymentInfo(counselor),
+                      _buildPriceInfo(counselor),
                       SizedBox(height: 24.h),
                       _buildGuidelines(),
                     ],
@@ -266,7 +266,7 @@ class _BookingConfirmScreenState extends ConsumerState<BookingConfirmScreen>
     );
   }
 
-  Widget _buildPaymentInfo(Counselor counselor) {
+  Widget _buildPriceInfo(Counselor counselor) {
     return Container(
       padding: EdgeInsets.all(20.w),
       decoration: BoxDecoration(
@@ -284,7 +284,7 @@ class _BookingConfirmScreenState extends ConsumerState<BookingConfirmScreen>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '요금금 정보',
+            '요금 정보',
             style: TextStyle(
               fontSize: 18.sp,
               fontWeight: FontWeight.bold,
@@ -302,7 +302,7 @@ class _BookingConfirmScreenState extends ConsumerState<BookingConfirmScreen>
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                '총 결제금액',
+                '총 금액',
                 style: TextStyle(
                   fontSize: 16.sp,
                   fontWeight: FontWeight.bold,
@@ -426,10 +426,10 @@ class _BookingConfirmScreenState extends ConsumerState<BookingConfirmScreen>
           mainAxisSize: MainAxisSize.min,
           children: [
             CustomButton(
-              text: _isProcessing ? '결제 처리 중...' : '결제하기',
-              onPressed: _isProcessing ? null : _handlePayment,
+              text: _isProcessing ? '예약 처리 중...' : '예약하기',
+              onPressed: _isProcessing ? null : _handleBooking,
               isLoading: _isProcessing,
-              icon: _isProcessing ? null : Icons.payment,
+              icon: _isProcessing ? null : Icons.calendar_today,
               gradient: const LinearGradient(
                 colors: [AppColors.primary, AppColors.secondary],
               ),
@@ -440,7 +440,7 @@ class _BookingConfirmScreenState extends ConsumerState<BookingConfirmScreen>
     );
   }
 
-  Future<void> _handlePayment() async {
+  Future<void> _handleBooking() async {
     setState(() => _isProcessing = true);
     try {
       // 예약 정보 세팅 (bookingInfo에서 전달받은 예약 정보 사용)
@@ -454,9 +454,9 @@ class _BookingConfirmScreenState extends ConsumerState<BookingConfirmScreen>
           ..setDuration(info['durationMinutes'] as int)
           ..setNotes(info['notes'] as String? ?? '');
       }
-      // 결제 시뮬레이션
+      // 예약 처리
       await Future.delayed(const Duration(seconds: 2));
-      // 결제 성공 시 예약 생성
+      // 예약 생성
       final success = await ref.read(bookingProvider.notifier).createBooking();
       if (success && mounted) {
         // 예약 목록(내 예약)으로 바로 이동 (GoRouter)

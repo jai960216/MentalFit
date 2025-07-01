@@ -97,8 +97,11 @@ class FirebaseChatService {
   Future<List<ChatRoom>> getChatRooms() async {
     try {
       if (_currentUserId == null) {
-        throw Exception('로그인이 필요합니다.');
+        debugPrint('⚠️ 로그인 상태가 아닙니다.');
+        return [];
       }
+
+      debugPrint('🔍 채팅방 목록 조회 시작 - 사용자: $_currentUserId');
 
       final snapshot =
           await _chatRoomsCollection
@@ -106,30 +109,61 @@ class FirebaseChatService {
               .orderBy('updatedAt', descending: true)
               .get();
 
-      return snapshot.docs.map((doc) {
+      debugPrint('🔍 조회된 채팅방 수: ${snapshot.docs.length}');
+
+      final chatRooms = <ChatRoom>[];
+      for (final doc in snapshot.docs) {
         try {
-          final data = doc.data() as Map<String, dynamic>;
+          final data = doc.data() as Map<String, dynamic>?;
+          if (data == null) {
+            debugPrint('⚠️ 채팅방 데이터가 null입니다: ${doc.id}');
+            continue;
+          }
+          
           data['id'] = doc.id;
-          return ChatRoom.fromJson(data);
+          debugPrint('🔍 채팅방 데이터 파싱 중: ${doc.id}');
+          final chatRoom = ChatRoom.fromJson(data);
+          chatRooms.add(chatRoom);
         } catch (e) {
-          debugPrint('채팅방 파싱 오류: $e');
-          return _createFallbackChatRoom(doc.id);
+          debugPrint('⚠️ 채팅방 파싱 오류 (${doc.id}): $e');
+          try {
+            final fallbackRoom = _createFallbackChatRoom(doc.id);
+            chatRooms.add(fallbackRoom);
+          } catch (e2) {
+            debugPrint('⚠️ 폴백 채팅방 생성 실패: $e2');
+          }
         }
-      }).toList();
+      }
+
+      debugPrint('✅ 채팅방 목록 조회 완료: ${chatRooms.length}개');
+      return chatRooms;
     } catch (e) {
-      debugPrint('채팅방 목록 조회 오류: $e');
+      debugPrint('❌ 채팅방 목록 조회 오류: $e');
       // 오류 시 빈 리스트 반환
       return [];
     }
   }
 
-  /// 특정 채팅방 정보 조회
+  /// 특정 채팅방 정보 조회 (참여자 검증 포함)
   Future<ChatRoom?> getChatRoom(String chatRoomId) async {
     try {
+      if (_currentUserId == null) {
+        debugPrint('⚠️ 로그인 상태가 아닙니다.');
+        return null;
+      }
+
       final doc = await _chatRoomsCollection.doc(chatRoomId).get();
 
       if (doc.exists && doc.data() != null) {
         final data = doc.data() as Map<String, dynamic>;
+        
+        // 보안 검증: 현재 사용자가 참여자인지 확인
+        final participantIds = List<String>.from(data['participantIds'] ?? []);
+        if (!participantIds.contains(_currentUserId)) {
+          debugPrint('🚨 보안 경고: 사용자 $_currentUserId가 채팅방 $chatRoomId에 접근 시도');
+          return null;
+        }
+        
         data['id'] = doc.id;
         return ChatRoom.fromJson(data);
       }
@@ -223,7 +257,7 @@ class FirebaseChatService {
 
   // === 메시지 관련 메서드 ===
 
-  /// 메시지 목록 실시간 스트림
+  /// 메시지 목록 실시간 스트림 (참여자 검증 포함)
   Stream<List<Message>> getMessagesStream(String chatRoomId) {
     // 기존 스트림이 있으면 재사용
     if (_messageStreamControllers.containsKey(chatRoomId)) {
@@ -234,8 +268,16 @@ class FirebaseChatService {
     final controller = StreamController<List<Message>>.broadcast();
     _messageStreamControllers[chatRoomId] = controller;
 
-    // Firestore 스트림 구독
-    final subscription = _messagesCollection(chatRoomId)
+    // 보안 검증: 채팅방 참여자인지 먼저 확인
+    _validateChatRoomAccess(chatRoomId).then((hasAccess) {
+      if (!hasAccess) {
+        debugPrint('🚨 보안 경고: 사용자 $_currentUserId가 채팅방 $chatRoomId 메시지에 무단 접근 시도');
+        controller.addError('채팅방에 접근할 권한이 없습니다.');
+        return;
+      }
+
+      // Firestore 스트림 구독 (참여자 검증 완료 후)
+      final subscription = _messagesCollection(chatRoomId)
         .orderBy('timestamp', descending: false)
         .snapshots()
         .listen(
@@ -260,14 +302,27 @@ class FirebaseChatService {
           },
         );
 
-    _streamSubscriptions['messages_$chatRoomId'] = subscription;
+      _streamSubscriptions['messages_$chatRoomId'] = subscription;
+    });
 
     return controller.stream;
   }
 
-  /// 메시지 목록 조회 (일회성)
+  /// 메시지 목록 조회 (일회성, 참여자 검증 포함)
   Future<List<Message>> getMessages(String chatRoomId) async {
     try {
+      if (_currentUserId == null) {
+        debugPrint('⚠️ 로그인 상태가 아닙니다.');
+        return [];
+      }
+
+      // 보안 검증: 채팅방 참여자인지 확인
+      final hasAccess = await _validateChatRoomAccess(chatRoomId);
+      if (!hasAccess) {
+        debugPrint('🚨 보안 경고: 사용자 $_currentUserId가 채팅방 $chatRoomId 메시지에 무단 접근 시도');
+        return [];
+      }
+
       final snapshot =
           await _messagesCollection(
             chatRoomId,
@@ -426,6 +481,28 @@ class FirebaseChatService {
 
   // === Private Helper Methods ===
 
+  /// 채팅방 접근 권한 검증 (보안 강화)
+  Future<bool> _validateChatRoomAccess(String chatRoomId) async {
+    try {
+      if (_currentUserId == null) {
+        return false;
+      }
+
+      final doc = await _chatRoomsCollection.doc(chatRoomId).get();
+      if (!doc.exists || doc.data() == null) {
+        return false;
+      }
+
+      final data = doc.data() as Map<String, dynamic>;
+      final participantIds = List<String>.from(data['participantIds'] ?? []);
+      
+      return participantIds.contains(_currentUserId);
+    } catch (e) {
+      debugPrint('채팅방 접근 권한 검증 오류: $e');
+      return false;
+    }
+  }
+
   /// Firebase Storage에 이미지 업로드
   Future<String> _uploadImageToStorage(
     String chatRoomId,
@@ -556,14 +633,32 @@ class FirebaseChatService {
       // 새 채팅방 생성
       final otherUserDoc =
           await _firestore.collection('users').doc(otherUserId).get();
-      final otherUserName = otherUserDoc.data()?['name'] ?? '상대방';
+      final otherUserData = otherUserDoc.data();
+      final otherUserName = otherUserData?['name'] ?? '상대방';
+      final otherUserType = otherUserData?['userType'] ?? 'general';
+
+      // 현재 사용자 정보도 가져오기
+      final currentUserDoc =
+          await _firestore.collection('users').doc(_currentUserId!).get();
+      final currentUserData = currentUserDoc.data();
+      final currentUserName = currentUserData?['name'] ?? '사용자';
 
       final now = DateTime.now();
       final newChatRoom = ChatRoom(
         id: chatRoomId,
-        title: otherUserName,
+        title: 'Private Chat', // 기본 제목 (동적으로 계산됨)
         type: ChatRoomType.counselor,
         participantIds: ids,
+        // 상담사 정보 설정 (어느 쪽이 상담사인지 확인)
+        counselorId: otherUserType == 'counselor' ? otherUserId : 
+                    (currentUserData?['userType'] == 'counselor' ? _currentUserId : null),
+        counselorName: otherUserType == 'counselor' ? otherUserName :
+                      (currentUserData?['userType'] == 'counselor' ? currentUserName : null),
+        // 참여자 이름 매핑 저장
+        participantNames: {
+          _currentUserId!: currentUserName,
+          otherUserId: otherUserName,
+        },
         status: ChatRoomStatus.active,
         lastMessage: null,
         unreadCount: 0,
@@ -573,6 +668,70 @@ class FirebaseChatService {
 
       await chatRoomRef.set(newChatRoom.toFirestore());
       return newChatRoom;
+    }
+  }
+
+  /// 채팅방을 사용자의 목록에서 숨기기/표시하기
+  Future<bool> toggleChatRoomVisibility(String chatRoomId) async {
+    try {
+      if (_currentUserId == null) {
+        throw Exception('로그인이 필요합니다.');
+      }
+
+      final chatRoomRef = _chatRoomsCollection.doc(chatRoomId);
+      final doc = await chatRoomRef.get();
+
+      if (!doc.exists) {
+        throw Exception('채팅방을 찾을 수 없습니다.');
+      }
+
+      final data = doc.data() as Map<String, dynamic>;
+      data['id'] = doc.id;
+      final chatRoom = ChatRoom.fromJson(data);
+
+      // 숨김 상태 토글
+      final updatedChatRoom = chatRoom.toggleHiddenForUser(_currentUserId!);
+
+      // Firestore 업데이트
+      await chatRoomRef.update({
+        'hiddenForUsers': updatedChatRoom.hiddenForUsers,
+        'updatedAt': Timestamp.now(),
+      });
+
+      debugPrint('✅ 채팅방 표시 상태 변경: ${chatRoomId}, 숨김: ${updatedChatRoom.isHiddenForUser(_currentUserId!)}');
+      return true;
+    } catch (e) {
+      debugPrint('❌ 채팅방 표시 상태 변경 실패: $e');
+      return false;
+    }
+  }
+
+  /// 채팅방 목록 조회 시 숨겨진 채팅방 필터링
+  Future<List<ChatRoom>> getChatRoomsFilteredForUser() async {
+    try {
+      if (_currentUserId == null) return [];
+
+      final allChatRooms = await getChatRooms();
+      
+      // 현재 사용자에게 숨겨지지 않은 채팅방만 반환
+      return allChatRooms.where((room) => !room.isHiddenForUser(_currentUserId!)).toList();
+    } catch (e) {
+      debugPrint('❌ 채팅방 목록 필터링 실패: $e');
+      return [];
+    }
+  }
+
+  /// 채팅방 목록 스트림 (숨겨진 채팅방 필터링 적용)
+  Stream<List<ChatRoom>> getChatRoomsStreamFilteredForUser() async* {
+    if (_currentUserId == null) {
+      yield [];
+      return;
+    }
+
+    await for (final allChatRooms in getChatRoomsStream()) {
+      // 현재 사용자에게 숨겨지지 않은 채팅방만 반환
+      final filteredRooms = allChatRooms.where((room) => !room.isHiddenForUser(_currentUserId!)).toList();
+      yield filteredRooms;
     }
   }
 }

@@ -113,6 +113,208 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
         false;
   }
 
+  // === 회원탈퇴 처리 ===
+  Future<void> _handleDeleteAccount() async {
+    // 1단계: 삭제 경고 다이얼로그
+    final shouldContinue = await _showDeleteWarningDialog();
+    if (!shouldContinue) return;
+
+    // 2단계: 비밀번호 입력 다이얼로그
+    final password = await _showPasswordDialog();
+    if (password == null || password.isEmpty) return;
+
+    // 3단계: 최종 확인 다이얼로그
+    final finalConfirm = await _showFinalConfirmDialog();
+    if (!finalConfirm) return;
+
+    // 4단계: 계정 삭제 실행
+    try {
+      final authNotifier = ref.read(authProvider.notifier);
+      final success = await authNotifier.deleteAccount(password);
+      
+      if (success && mounted) {
+        // 삭제 성공 - 로그인 화면으로 이동
+        context.go(AppRoutes.login);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('계정이 성공적으로 삭제되었습니다.'),
+            backgroundColor: AppColors.success,
+          ),
+        );
+      } else if (mounted) {
+        // 삭제 실패 - provider의 에러 메시지 확인
+        final authState = ref.read(authProvider);
+        final errorMessage = authState.error ?? '계정 삭제에 실패했습니다. 비밀번호를 확인해주세요.';
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMessage),
+            backgroundColor: AppColors.error,
+            duration: const Duration(seconds: 5), // 긴 메시지를 위해 시간 연장
+          ),
+        );
+        
+        // 특정 에러의 경우 추가 안내
+        if (errorMessage.contains('다시 로그인')) {
+          // 다시 로그인이 필요한 경우 로그인 페이지로 이동
+          Future.delayed(const Duration(seconds: 2), () {
+            if (mounted) {
+              context.go(AppRoutes.login);
+            }
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('계정 삭제 중 오류가 발생했습니다: $e'),
+            backgroundColor: AppColors.error,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<bool> _showDeleteWarningDialog() async {
+    return await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16.r),
+            ),
+            title: Row(
+              children: [
+                Icon(Icons.warning, color: AppColors.error, size: 24.sp),
+                SizedBox(width: 8.w),
+                const Text('회원탈퇴'),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('회원탈퇴 시 다음 데이터가 영구 삭제됩니다:'),
+                SizedBox(height: 12.h),
+                _buildDeleteItem('• 프로필 정보'),
+                _buildDeleteItem('• 상담 기록'),
+                _buildDeleteItem('• 자가진단 결과'),
+                _buildDeleteItem('• 예약 내역'),
+                SizedBox(height: 12.h),
+                Text(
+                  '삭제된 데이터는 복구할 수 없습니다.',
+                  style: TextStyle(
+                    color: AppColors.error,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('취소'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                style: TextButton.styleFrom(foregroundColor: AppColors.error),
+                child: const Text('계속'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+  }
+
+  Future<String?> _showPasswordDialog() async {
+    final controller = TextEditingController();
+    
+    return await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16.r),
+        ),
+        title: const Text('비밀번호 확인'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('회원탈퇴를 위해 현재 비밀번호를 입력해주세요.'),
+            SizedBox(height: 16.h),
+            TextField(
+              controller: controller,
+              obscureText: true,
+              decoration: const InputDecoration(
+                labelText: '비밀번호',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('취소'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(controller.text),
+            child: const Text('확인'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<bool> _showFinalConfirmDialog() async {
+    return await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16.r),
+            ),
+            title: Row(
+              children: [
+                Icon(Icons.delete_forever, color: AppColors.error, size: 24.sp),
+                SizedBox(width: 8.w),
+                const Text('최종 확인'),
+              ],
+            ),
+            content: const Text(
+              '정말로 계정을 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('취소'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                style: TextButton.styleFrom(
+                  foregroundColor: Colors.white,
+                  backgroundColor: AppColors.error,
+                ),
+                child: const Text('삭제'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+  }
+
+  Widget _buildDeleteItem(String text) {
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: 2.h),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 14.sp,
+          color: AppColors.textSecondary,
+        ),
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _fadeController.dispose();
@@ -184,7 +386,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                   text: '회원탈퇴',
                   icon: Icons.delete_outline,
                   type: ButtonType.outline,
-                  onPressed: () => context.push(AppRoutes.settings),
+                  onPressed: _handleDeleteAccount,
                 ),
               ),
 
@@ -338,8 +540,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
         _ProfileMenuItem(
           icon: Icons.chat_outlined,
           title: '상담 기록',
-          subtitle: 'AI 및 전문가 상담 내역',
-          onTap: () => context.push(AppRoutes.recordsList),
+          subtitle: '상담 내역',
+          onTap: () => context.push(AppRoutes.bookingList),
         ),
       ],
     );

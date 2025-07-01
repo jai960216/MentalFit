@@ -221,73 +221,7 @@ class AiCounselingScreen extends StatelessWidget {
                       );
                     },
                   ),
-                  SizedBox(height: 32.h),
-                  ThemedText(
-                    text: 'AI 상담 기록',
-                    style: TextStyle(
-                      fontSize: 16.sp,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  SizedBox(height: 12.h),
-                  FutureBuilder<List<AIChatRoom>>(
-                    future: () async {
-                      await AIChatLocalService.migrateRoomIds();
-                      return AIChatLocalService.getRooms();
-                    }(),
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return Center(child: CircularProgressIndicator());
-                      }
-                      final aiRooms = snapshot.data ?? [];
-                      // 메시지가 1개 이상인 방만 필터링
-                      return FutureBuilder<List<AIChatRoom>>(
-                        future: () async {
-                          final filtered = <AIChatRoom>[];
-                          for (final room in aiRooms) {
-                            if (!room.id.startsWith('ai-'))
-                              continue; // ai-로 시작하지 않는 방은 제외
-                            final msgs = await AIChatLocalService.getMessages(
-                              room.id,
-                            );
-                            if (msgs.isNotEmpty) filtered.add(room);
-                          }
-                          return filtered;
-                        }(),
-                        builder: (context, filteredSnapshot) {
-                          if (filteredSnapshot.connectionState ==
-                              ConnectionState.waiting) {
-                            return Center(child: CircularProgressIndicator());
-                          }
-                          final filteredRooms = filteredSnapshot.data ?? [];
-                          return AiCounselingHistoryList(
-                            aiRooms: filteredRooms,
-                            topics: topics,
-                            getTopicTitle: getTopicTitle,
-                            onEnterRoom: (room) {
-                              // room.id가 'ai-'로 시작하지 않으면 prefix를 붙여서 이동
-                              String roomId = room.id;
-                              if (!roomId.startsWith('ai-')) {
-                                roomId = 'ai-$roomId';
-                              }
-                              context.push(
-                                '${AppRoutes.aiChatRoom}/$roomId',
-                                extra: {
-                                  'type': 'ai',
-                                  'topicId': room.topic,
-                                  'title': getTopicTitle(room.topic),
-                                },
-                              );
-                            },
-                            onRoomDeleted: () {
-                              // 삭제 후 FutureBuilder 갱신
-                              (context as Element).markNeedsBuild();
-                            },
-                          );
-                        },
-                      );
-                    },
-                  ),
+                  // AI 상담 기록 섹션 제거 - 홈의 채팅 탭에서 확인하도록 변경
                 ],
               ),
             ),

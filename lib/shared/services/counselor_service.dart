@@ -186,28 +186,53 @@ class CounselorService {
 
       // 2. 해당 날짜의 요일 확인
       final weekday = _getKoreanWeekday(date.weekday);
-      final availableTime =
-          counselor.availableTimes
-              .where((time) => time.day == weekday)
-              .firstOrNull;
-
-      if (availableTime == null) {
+      debugPrint('🔍 날짜: $date, 요일: $weekday');
+      debugPrint('🔍 상담사 가능 시간: ${counselor.availableTimes.map((t) => '${t.day}: ${t.startTime}-${t.endTime}').join(', ')}');
+      
+      final availableTimes = counselor.availableTimes.where((time) => time.day == weekday).toList();
+      
+      if (availableTimes.isEmpty) {
         debugPrint('⚠️ 해당 요일($weekday)에는 상담 불가');
         return [];
       }
+      
+      final availableTime = availableTimes.first;
 
       // 3. 기본 시간 슬롯 생성 (1시간 단위)
       final availableSlots = <DateTime>[];
       final startTime = _parseTime(availableTime.startTime);
       final endTime = _parseTime(availableTime.endTime);
+      
+      debugPrint('🔍 시간 범위: ${startTime}시 ~ ${endTime}시');
+
+      // 선택한 날짜가 오늘인지 확인
+      final now = DateTime.now();
+      final selectedDate = DateTime(date.year, date.month, date.day);
+      final today = DateTime(now.year, now.month, now.day);
+      final isToday = selectedDate.isAtSameMomentAs(today);
+      final isPastDate = selectedDate.isBefore(today);
+
+      // 과거 날짜는 예약 불가
+      if (isPastDate) {
+        debugPrint('⚠️ 과거 날짜는 예약할 수 없습니다: $date');
+        return [];
+      }
 
       for (int hour = startTime; hour < endTime; hour++) {
         final slot = DateTime(date.year, date.month, date.day, hour, 0);
-        // 현재 시간 이후의 슬롯만 추가
-        if (slot.isAfter(DateTime.now())) {
+        
+        // 오늘 날짜인 경우: 현재 시간 이후만 추가
+        // 미래 날짜인 경우: 모든 시간 추가
+        if (isToday) {
+          if (slot.isAfter(now.add(Duration(hours: 1)))) { // 1시간 여유 두기
+            availableSlots.add(slot);
+          }
+        } else {
           availableSlots.add(slot);
         }
       }
+      
+      debugPrint('🔍 생성된 기본 슬롯: ${availableSlots.length}개');
 
       // 4. 이미 예약된 시간 제외
       final startOfDay = DateTime(date.year, date.month, date.day);
@@ -232,6 +257,11 @@ class CounselorService {
               .map((doc) => (doc.data()['scheduledDate'] as Timestamp).toDate())
               .toSet();
 
+      debugPrint('🔍 기존 예약 수: ${existingAppointments.docs.length}개');
+      for (final bookedTime in bookedTimes) {
+        debugPrint('🔍 기존 예약 시간: $bookedTime');
+      }
+
       final finalSlots =
           availableSlots
               .where(
@@ -246,7 +276,19 @@ class CounselorService {
               )
               .toList();
 
+      debugPrint('🔍 최종 예약 가능 시간: ${finalSlots.map((s) => '${s.hour}:00').join(', ')}');
       debugPrint('✅ 예약 가능한 시간 ${finalSlots.length}개 조회 완료');
+      
+      if (finalSlots.isEmpty) {
+        debugPrint('❌ 예약 가능한 시간이 없는 이유 분석:');
+        debugPrint('   - 상담사: ${counselor.name}');
+        debugPrint('   - 요일: $weekday');
+        debugPrint('   - 가능 시간: ${availableTime.startTime} ~ ${availableTime.endTime}');
+        debugPrint('   - 파싱된 시간: ${startTime}시 ~ ${endTime}시');
+        debugPrint('   - 생성된 슬롯: ${availableSlots.length}개');
+        debugPrint('   - 기존 예약: ${bookedTimes.length}개');
+      }
+      
       return finalSlots;
     } catch (e) {
       debugPrint('❌ 예약 가능 시간 조회 오류: $e');
@@ -614,8 +656,39 @@ class CounselorService {
   }
 
   int _parseTime(String timeStr) {
-    final parts = timeStr.split(':');
-    return int.parse(parts[0]);
+    try {
+      debugPrint('🔍 시간 파싱: $timeStr');
+      
+      // "오전 9:00", "오후 6:00" 형식 처리
+      if (timeStr.contains('오전') || timeStr.contains('오후')) {
+        final isAfternoon = timeStr.contains('오후');
+        // "오전 9:00" → "9:00", "오후 6:00" → "6:00"
+        final timeOnly = timeStr.replaceAll(RegExp(r'오전\s*|오후\s*'), '').trim();
+        final parts = timeOnly.split(':');
+        int hour = int.parse(parts[0]);
+        
+        // 오후인 경우 12시간 추가 (12시는 제외)
+        if (isAfternoon && hour != 12) {
+          hour += 12;
+        }
+        // 오전 12시는 0시로 변환
+        else if (!isAfternoon && hour == 12) {
+          hour = 0;
+        }
+        
+        debugPrint('🔍 파싱 결과: $timeStr → ${hour}시');
+        return hour;
+      }
+      
+      // 기존 "9:00" 형식 처리
+      final parts = timeStr.split(':');
+      final hour = int.parse(parts[0]);
+      debugPrint('🔍 파싱 결과: $timeStr → ${hour}시');
+      return hour;
+    } catch (e) {
+      debugPrint('❌ 시간 파싱 오류: $timeStr → $e');
+      return 9; // 기본값: 오전 9시
+    }
   }
 
   // === 상담사 수정 ===

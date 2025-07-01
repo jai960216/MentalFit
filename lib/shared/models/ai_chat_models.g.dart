@@ -22,13 +22,14 @@ class AIChatRoomAdapter extends TypeAdapter<AIChatRoom> {
       createdAt: fields[2] as DateTime,
       lastMessage: fields[3] as String?,
       lastMessageAt: fields[4] as DateTime?,
+      userId: fields[5] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, AIChatRoom obj) {
     writer
-      ..writeByte(5)
+      ..writeByte(6)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -38,7 +39,9 @@ class AIChatRoomAdapter extends TypeAdapter<AIChatRoom> {
       ..writeByte(3)
       ..write(obj.lastMessage)
       ..writeByte(4)
-      ..write(obj.lastMessageAt);
+      ..write(obj.lastMessageAt)
+      ..writeByte(5)
+      ..write(obj.userId);
   }
 
   @override
@@ -67,13 +70,14 @@ class AIChatMessageAdapter extends TypeAdapter<AIChatMessage> {
       role: fields[1] as String,
       text: fields[2] as String,
       createdAt: fields[3] as DateTime,
+      userId: fields[4] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, AIChatMessage obj) {
     writer
-      ..writeByte(4)
+      ..writeByte(5)
       ..writeByte(0)
       ..write(obj.roomId)
       ..writeByte(1)
@@ -81,7 +85,9 @@ class AIChatMessageAdapter extends TypeAdapter<AIChatMessage> {
       ..writeByte(2)
       ..write(obj.text)
       ..writeByte(3)
-      ..write(obj.createdAt);
+      ..write(obj.createdAt)
+      ..writeByte(4)
+      ..write(obj.userId);
   }
 
   @override

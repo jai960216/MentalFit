@@ -59,6 +59,8 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen>
   Future<void> _refresh() async {
     try {
       await ref.read(chatListProvider.notifier).refreshChatRooms();
+      // AI 채팅방도 수동으로 새로고침
+      await ref.read(chatListProvider.notifier).refreshAIChatRooms();
     } catch (e) {
       if (mounted) GlobalErrorHandler.showErrorSnackBar(context, e);
     }
@@ -306,102 +308,184 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen>
   }
 
   Widget _buildChatRoomCard(dynamic chatRoom, User? user) {
-    return ThemedCard(
-      margin: EdgeInsets.only(bottom: 12.h),
-      onTap: () => context.push('${AppRoutes.chatRoom}/${chatRoom.id}'),
-      child: Padding(
-        padding: EdgeInsets.all(16.w),
-        child: Row(
+    return Dismissible(
+      key: Key(chatRoom.id),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        margin: EdgeInsets.only(bottom: 12.h),
+        alignment: Alignment.centerRight,
+        padding: EdgeInsets.only(right: 20.w),
+        decoration: BoxDecoration(
+          color: AppColors.error.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(12.r),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // 채팅방 아이콘
-            Container(
-              width: 48.w,
-              height: 48.w,
-              decoration: BoxDecoration(
-                color:
-                    chatRoom.type.toString().contains('ai')
-                        ? AppColors.primary.withOpacity(0.1)
-                        : AppColors.secondary.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(24.r),
-              ),
-              child: Icon(
-                chatRoom.type.toString().contains('ai')
-                    ? Icons.psychology
-                    : Icons.person,
-                color:
-                    chatRoom.type.toString().contains('ai')
-                        ? AppColors.primary
-                        : AppColors.secondary,
-                size: 24.sp,
+            Icon(
+              Icons.visibility_off,
+              color: AppColors.error,
+              size: 24.sp,
+            ),
+            SizedBox(height: 4.h),
+            Text(
+              '숨기기',
+              style: TextStyle(
+                color: AppColors.error,
+                fontSize: 12.sp,
+                fontWeight: FontWeight.w600,
               ),
             ),
+          ],
+        ),
+      ),
+      confirmDismiss: (direction) async {
+        // 확인 다이얼로그 표시
+        return await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('채팅방 숨기기'),
+            content: Text(
+              '이 채팅방을 목록에서 숨기시겠습니까?\n채팅 기록은 유지되며, 새 메시지가 오면 다시 표시됩니다.',
+              style: TextStyle(fontSize: 14.sp),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('취소'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                style: TextButton.styleFrom(foregroundColor: AppColors.error),
+                child: const Text('숨기기'),
+              ),
+            ],
+          ),
+        ) ?? false;
+      },
+      onDismissed: (direction) {
+        // 채팅방 숨기기 실행
+        ref.read(chatListProvider.notifier).toggleChatRoomVisibility(chatRoom.id);
+        
+        // 스낵바 표시
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('채팅방이 숨겨졌습니다'),
+            backgroundColor: AppColors.primary,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      },
+      child: ThemedCard(
+        margin: EdgeInsets.only(bottom: 12.h),
+        onTap: () {
+          // AI 채팅방인 경우 AI 채팅 화면으로 이동
+          if (chatRoom.type.toString().contains('ai')) {
+            debugPrint('[ChatList] AI 채팅방 클릭: ${chatRoom.id}');
+            context.push('${AppRoutes.aiChatRoom}/${chatRoom.id}');
+          } else {
+            // 상담사 채팅방인 경우 일반 채팅 화면으로 이동
+            debugPrint('[ChatList] 상담사 채팅방 클릭: ${chatRoom.id}');
+            context.push('${AppRoutes.chatRoom}/${chatRoom.id}');
+          }
+        },
+        child: Padding(
+          padding: EdgeInsets.all(16.w),
+          child: Row(
+            children: [
+              // 채팅방 아이콘
+              Container(
+                width: 48.w,
+                height: 48.w,
+                decoration: BoxDecoration(
+                  color:
+                      chatRoom.type.toString().contains('ai')
+                          ? AppColors.primary.withOpacity(0.1)
+                          : AppColors.secondary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(24.r),
+                ),
+                child: Icon(
+                  chatRoom.type.toString().contains('ai')
+                      ? Icons.psychology
+                      : Icons.person,
+                  color:
+                      chatRoom.type.toString().contains('ai')
+                          ? AppColors.primary
+                          : AppColors.secondary,
+                  size: 24.sp,
+                ),
+              ),
 
-            SizedBox(width: 12.w),
+              SizedBox(width: 12.w),
 
-            // 채팅방 정보
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: ThemedText(
-                          text: chatRoom.title ?? '채팅방',
-                          style: TextStyle(
-                            fontSize: 16.sp,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                      ThemedText(
-                        text: _formatTime(chatRoom.updatedAt),
-                        isPrimary: false,
-                        style: TextStyle(fontSize: 12.sp),
-                      ),
-                    ],
-                  ),
-
-                  SizedBox(height: 4.h),
-
-                  Row(
-                    children: [
-                      Expanded(
-                        child: ThemedText(
-                          text: chatRoom.lastMessage?.content ?? '대화를 시작해보세요',
-                          isPrimary: false,
-                          style: TextStyle(fontSize: 14.sp),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      if (chatRoom.unreadCount > 0) ...[
-                        SizedBox(width: 8.w),
-                        Container(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: 6.w,
-                            vertical: 2.h,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppColors.primary,
-                            borderRadius: BorderRadius.circular(10.r),
-                          ),
-                          child: Text(
-                            chatRoom.unreadCount.toString(),
+              // 채팅방 정보
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ThemedText(
+                            text: chatRoom.getDisplayTitle(
+                              user?.id ?? '',
+                              user?.name,
+                            ),
                             style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 12.sp,
+                              fontSize: 16.sp,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
                         ),
+                        ThemedText(
+                          text: _formatTime(chatRoom.updatedAt),
+                          isPrimary: false,
+                          style: TextStyle(fontSize: 12.sp),
+                        ),
                       ],
-                    ],
-                  ),
-                ],
+                    ),
+
+                    SizedBox(height: 4.h),
+
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ThemedText(
+                            text: chatRoom.lastMessage?.content ?? '대화를 시작해보세요',
+                            isPrimary: false,
+                            style: TextStyle(fontSize: 14.sp),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (chatRoom.unreadCount > 0) ...[
+                          SizedBox(width: 8.w),
+                          Container(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: 6.w,
+                              vertical: 2.h,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.primary,
+                              borderRadius: BorderRadius.circular(10.r),
+                            ),
+                            child: Text(
+                              chatRoom.unreadCount.toString(),
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 12.sp,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

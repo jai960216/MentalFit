@@ -1,20 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import '../../core/config/app_colors.dart';
 import '../../shared/services/ai_chat_local_service.dart';
 import '../../shared/services/openai_service.dart';
 import '../../shared/models/ai_chat_models.dart';
+import '../../providers/chat_provider.dart';
 import 'package:go_router/go_router.dart';
 
-class AiChatRoomScreen extends StatefulWidget {
+class AiChatRoomScreen extends ConsumerStatefulWidget {
   final String roomId;
   const AiChatRoomScreen({required this.roomId, Key? key}) : super(key: key);
 
   @override
-  State<AiChatRoomScreen> createState() => _AiChatRoomScreenState();
+  ConsumerState<AiChatRoomScreen> createState() => _AiChatRoomScreenState();
 }
 
-class _AiChatRoomScreenState extends State<AiChatRoomScreen> {
+class _AiChatRoomScreenState extends ConsumerState<AiChatRoomScreen> {
   List<AIChatMessage> messages = [];
   String? topic;
   String? realRoomId;
@@ -25,19 +27,29 @@ class _AiChatRoomScreenState extends State<AiChatRoomScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (realRoomId != null) return;
+    if (realRoomId != null) {
+      debugPrint('[AIChat] realRoomId가 이미 설정됨: $realRoomId');
+      return;
+    }
+    
     if (widget.roomId != 'new') {
       realRoomId = widget.roomId;
+      debugPrint('[AIChat] 기존 방으로 설정: $realRoomId');
       _loadRoomAndMessages();
     } else {
       // GoRouter의 extra에서 topic 추출
       final state = GoRouterState.of(context);
       if (state.extra is Map && (state.extra as Map).containsKey('topic')) {
         topic = (state.extra as Map)['topic'] as String?;
+        debugPrint('[AIChat] extra에서 topic 추출: $topic');
       }
-      debugPrint('[AIChat] extra topic: $topic');
-      // 방이 new일 때도 무조건 메시지 로딩 시도
-      _loadRoomAndMessages();
+      
+      // topic이 있으면 방 생성 준비
+      if (topic != null && topic!.isNotEmpty) {
+        debugPrint('[AIChat] 새로운 방 생성을 위한 topic 설정: $topic');
+      } else {
+        debugPrint('[AIChat] 경고: topic이 설정되지 않음');
+      }
     }
   }
 
@@ -56,68 +68,83 @@ class _AiChatRoomScreenState extends State<AiChatRoomScreen> {
         topic = (state.extra as Map)['topic'] as String?;
       }
     }
-    if (realRoomId == null && topic == null) return;
-    if (realRoomId == null || realRoomId!.isEmpty) return; // roomId 안전 체크
+    
+    // realRoomId가 없으면 메시지를 불러올 수 없음
+    if (realRoomId == null || realRoomId!.isEmpty) {
+      debugPrint('[AIChat] roomId가 없어서 메시지를 불러올 수 없음');
+      return;
+    }
+    
     try {
       debugPrint('[AIChat] 메시지 불러오기: roomId=$realRoomId');
       final msgs = await AIChatLocalService.getMessages(realRoomId!);
-      debugPrint('[AIChat] 불러온 메시지 수: \\${msgs.length}');
+      debugPrint('[AIChat] 불러온 메시지 수: ${msgs.length}');
+      
+      // 방 정보 확인
       final rooms = await AIChatLocalService.getRooms();
-      for (final r in rooms) {
-        debugPrint('[AIChat] 방 id: \\${r.id}, topic: \\${r.topic}');
-      }
       final room = rooms.firstWhere(
         (r) => r.id == realRoomId,
-        orElse:
-            () => AIChatRoom(
-              id: '',
-              topic: topic ?? '',
-              createdAt: DateTime.now(),
-            ),
+        orElse: () => AIChatRoom(
+          id: '',
+          topic: topic ?? '',
+          createdAt: DateTime.now(),
+        ),
       );
+      
       setState(() {
         messages = msgs;
         // room.id가 비어있으면 기존 topic 유지
-        topic =
-            (room.id.isNotEmpty && room.topic.isNotEmpty) ? room.topic : topic;
+        topic = (room.id.isNotEmpty && room.topic.isNotEmpty) ? room.topic : topic;
       });
 
-      // ★ 메시지가 0개면 AI의 topicStartMessages를 첫 메시지로 자동 추가
-      if (msgs.isEmpty &&
-          topic != null &&
-          topic!.isNotEmpty &&
-          realRoomId != null &&
-          realRoomId!.isNotEmpty) {
-        final startMsg =
-            OpenAIService().topicStartMessages[topic!] ?? '안녕하세요. 편하게 말씀해 주세요.';
+      // 메시지가 0개이고 topic이 있으면 AI 인사 메시지 추가
+      if (msgs.isEmpty && topic != null && topic!.isNotEmpty) {
+        final startMsg = OpenAIService().topicStartMessages[topic!] ?? '안녕하세요. 편하게 말씀해 주세요.';
         await AIChatLocalService.addMessage(realRoomId!, 'assistant', startMsg);
         // 메시지 추가 후 다시 불러오기
         final newMsgs = await AIChatLocalService.getMessages(realRoomId!);
         setState(() {
           messages = newMsgs;
         });
+        debugPrint('[AIChat] AI 인사 메시지 추가 완료');
       }
+      
       _scrollToBottom();
     } catch (e) {
       debugPrint('[AIChat] 메시지 불러오기 오류: $e');
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('메시지 로딩 중 오류가 발생했습니다: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('메시지 로딩 중 오류가 발생했습니다: $e'))
+      );
     }
   }
 
   Future<void> _ensureRoomAndWelcomeMessage() async {
-    if (realRoomId != null) return;
-    if (topic == null) return;
-    // 방 생성
-    final mappedTopic = OpenAIService.mapTopicForPrompt(topic ?? 'general');
-    final room = await AIChatLocalService.createRoom(mappedTopic);
-    realRoomId = room.id;
-    // AI 인사 메시지 추가
-    final startMsg =
-        OpenAIService().topicStartMessages[topic!] ?? '안녕하세요. 편하게 말씀해 주세요.';
-    await AIChatLocalService.addMessage(realRoomId!, 'assistant', startMsg);
-    await _loadRoomAndMessages();
+    if (realRoomId != null) {
+      debugPrint('[AIChat] 방이 이미 존재함: $realRoomId');
+      return;
+    }
+    if (topic == null) {
+      debugPrint('[AIChat] topic이 없어서 방을 생성할 수 없음');
+      return;
+    }
+    
+    try {
+      // 방 생성
+      final mappedTopic = OpenAIService.mapTopicForPrompt(topic ?? 'general');
+      debugPrint('[AIChat] 방 생성 시작: topic=$topic, mapped=$mappedTopic');
+      final room = await AIChatLocalService.createRoom(mappedTopic);
+      realRoomId = room.id;
+      debugPrint('[AIChat] 방 생성 완료: $realRoomId');
+      
+      // AI 인사 메시지 추가
+      final startMsg = OpenAIService().topicStartMessages[topic!] ?? '안녕하세요. 편하게 말씀해 주세요.';
+      await AIChatLocalService.addMessage(realRoomId!, 'assistant', startMsg);
+      debugPrint('[AIChat] AI 인사 메시지 추가 완료');
+      
+      await _loadRoomAndMessages();
+    } catch (e) {
+      debugPrint('[AIChat] 방 생성 및 인사 메시지 추가 오류: $e');
+    }
   }
 
   void _scrollToBottom() {
@@ -139,34 +166,38 @@ class _AiChatRoomScreenState extends State<AiChatRoomScreen> {
     controller.clear();
 
     try {
+      // 방이 없으면 먼저 생성
       if (realRoomId == null) {
-        // 첫 메시지 전송 시 방 생성
         final mappedTopic = OpenAIService.mapTopicForPrompt(topic ?? 'general');
         debugPrint('[AIChat] 방 생성 시 topic: $topic, mapped: $mappedTopic');
         final room = await AIChatLocalService.createRoom(mappedTopic);
         realRoomId = room.id;
+        debugPrint('[AIChat] 방 생성 완료: $realRoomId');
       }
+
+      // 사용자 메시지 저장
       debugPrint('[AIChat] 사용자 메시지 저장: $text');
       await AIChatLocalService.addMessage(realRoomId!, 'user', text);
+      
+      // 메시지 목록 새로고침
       await _loadRoomAndMessages();
 
-      // OpenAI API 호출을 위한 메시지 히스토리 구성
-      final history =
-          messages
-              .map(
-                (m) => {
-                  'role': m.role == 'user' ? 'user' : 'assistant',
-                  'content': m.text,
-                },
-              )
-              .toList();
-
-      // 현재 메시지 추가
-      history.add({'role': 'user', 'content': text});
+      // 최신 메시지 목록으로 히스토리 구성
+      final currentMessages = await AIChatLocalService.getMessages(realRoomId!);
+      final history = currentMessages
+          .map(
+            (m) => {
+              'role': m.role == 'user' ? 'user' : 'assistant',
+              'content': m.text,
+            },
+          )
+          .toList();
 
       debugPrint(
-        '[AIChat] OpenAIService 호출: history=[38;5;2m${history.length}[0m, topic=$topic',
+        '[AIChat] OpenAIService 호출: history=${history.length}, topic=$topic',
       );
+      
+      // AI 응답 요청
       final aiResponse = await OpenAIService.sendMessage(history, topic: topic);
       debugPrint('[AIChat] OpenAIService 응답: $aiResponse');
 
@@ -174,10 +205,17 @@ class _AiChatRoomScreenState extends State<AiChatRoomScreen> {
         throw Exception('AI 응답을 받지 못했습니다.');
       }
 
+      // AI 응답 저장
       debugPrint('[AIChat] AI 응답 저장: $aiResponse');
       await AIChatLocalService.addMessage(realRoomId!, 'assistant', aiResponse);
 
+      // 최종 메시지 목록 새로고침
       await _loadRoomAndMessages();
+      _scrollToBottom();
+      
+      // 채팅 목록 업데이트
+      ref.read(chatListProvider.notifier).refreshAIChatRooms();
+      
     } catch (e) {
       debugPrint('[AIChat] GPT 호출 오류: $e');
       // 오류 메시지 저장
@@ -188,6 +226,7 @@ class _AiChatRoomScreenState extends State<AiChatRoomScreen> {
           '죄송합니다. AI 답변 생성에 문제가 발생했습니다.\n(오류: $e)',
         );
         await _loadRoomAndMessages();
+        _scrollToBottom();
       }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -202,13 +241,13 @@ class _AiChatRoomScreenState extends State<AiChatRoomScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (widget.roomId == 'new' &&
-        (messages.isEmpty || realRoomId == null) &&
-        topic != null) {
+    // 새로운 방이고 아직 방이 생성되지 않았으며 topic이 있으면 방 생성
+    if (widget.roomId == 'new' && realRoomId == null && topic != null && topic!.isNotEmpty) {
+      debugPrint('[AIChat] 새로운 방 생성 시작: topic=$topic');
       Future.microtask(() => _ensureRoomAndWelcomeMessage());
     }
-    print('[AIChat] build 호출됨');
-    debugPrint('[AIChat] build 호출됨');
+    
+    debugPrint('[AIChat] build 호출됨 - realRoomId: $realRoomId, messages: ${messages.length}개');
     return Scaffold(
       appBar: AppBar(
         title: Text('AI 상담'),
@@ -218,6 +257,8 @@ class _AiChatRoomScreenState extends State<AiChatRoomScreen> {
             onSelected: (value) async {
               if (value == 'delete') {
                 await AIChatLocalService.deleteRoom(widget.roomId);
+                // 채팅 목록 업데이트
+                ref.read(chatListProvider.notifier).refreshAIChatRooms();
                 if (mounted) Navigator.of(context).pop();
               }
             },
