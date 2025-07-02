@@ -307,6 +307,12 @@ class SelfCheckNotifier extends StateNotifier<SelfCheckState> {
 
   /// 검사 제출
   Future<SelfCheckResult> submitTest() async {
+    // 중복 제출 방지
+    if (state.isLoading) {
+      debugPrint('SelfCheckNotifier: 이미 제출 중입니다. 중복 제출 방지');
+      throw Exception('이미 제출 중입니다. 잠시만 기다려주세요.');
+    }
+
     if (state.currentTest == null) {
       throw Exception('현재 진행 중인 검사가 없습니다');
     }
@@ -315,14 +321,24 @@ class SelfCheckNotifier extends StateNotifier<SelfCheckState> {
       throw Exception('모든 질문에 답변해주세요');
     }
 
-    debugPrint('SelfCheckNotifier: 검사 제출 시작');
+    debugPrint('SelfCheckNotifier: 검사 제출 시작 (답변 수: ${state.currentAnswers.length})');
     state = state.copyWith(isLoading: true, error: null);
 
     try {
       final service = await _getService();
+      
+      // 답변 검증
+      final validAnswers = state.currentAnswers.where((answer) => 
+        answer.questionId.isNotEmpty && answer.answerId.isNotEmpty
+      ).toList();
+      
+      if (validAnswers.length != state.currentTest!.questions.length) {
+        throw Exception('일부 답변이 유효하지 않습니다. 다시 시도해주세요.');
+      }
+
       final result = await service.submitTest(
         testId: state.currentTest!.id,
-        answers: state.currentAnswers,
+        answers: validAnswers,
       );
 
       debugPrint('SelfCheckNotifier: 검사 제출 완료 - ${result.id}');

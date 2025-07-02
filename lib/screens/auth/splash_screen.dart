@@ -54,7 +54,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     _animationController.forward();
 
     // AuthProvider 초기화 및 자동 로그인 체크
-    await Future.delayed(const Duration(milliseconds: 1500));
+    await Future.delayed(const Duration(milliseconds: 800));
 
     if (mounted) {
       // AuthProvider의 자동 로그인 체크 트리거

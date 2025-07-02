@@ -31,6 +31,8 @@ class _SelfCheckTestScreenState extends ConsumerState<SelfCheckTestScreen>
 
   String? _selectedAnswerId;
   bool _isInitialized = false;
+  bool _isAnswerProcessing = false; // 답변 처리 중 상태
+  DateTime? _lastAnswerTime; // 마지막 답변 시간
 
   @override
   void initState() {
@@ -146,18 +148,52 @@ class _SelfCheckTestScreenState extends ConsumerState<SelfCheckTestScreen>
   }
 
   Future<void> _selectAnswer(SelfCheckAnswer answer) async {
+    // 연속 클릭 방지: 답변 처리 중이거나 최근에 답변한 경우 무시
+    if (_isAnswerProcessing) {
+      debugPrint('answers are being processed, ignoring click');
+      return;
+    }
+
+    // 마지막 답변 후 최소 400ms는 기다려야 함 (너무 빠른 클릭 방지)
+    if (_lastAnswerTime != null) {
+      final timeSinceLastAnswer = DateTime.now().difference(_lastAnswerTime!);
+      if (timeSinceLastAnswer.inMilliseconds < 400) {
+        debugPrint('Too fast click detected, ignoring (${timeSinceLastAnswer.inMilliseconds}ms since last answer)');
+        return;
+      }
+    }
+
+    // 답변 처리 시작
     setState(() {
       _selectedAnswerId = answer.id;
+      _isAnswerProcessing = true;
     });
 
-    // 답변 선택
-    ref.read(selfCheckProvider.notifier).selectAnswer(answer);
+    try {
+      debugPrint('Processing answer: ${answer.id} (score: ${answer.score})');
+      
+      // 답변 선택
+      ref.read(selfCheckProvider.notifier).selectAnswer(answer);
 
-    // 잠시 대기 후 다음 질문으로 이동
-    await Future.delayed(const Duration(milliseconds: 300));
+      // 최소 400ms 대기하여 사용자가 답변을 확인할 수 있게 하고
+      // 너무 빠른 전환 방지
+      await Future.delayed(const Duration(milliseconds: 400));
 
-    if (mounted) {
-      _goToNextQuestion();
+      // 마지막 답변 시간 기록
+      _lastAnswerTime = DateTime.now();
+
+      if (mounted) {
+        _goToNextQuestion();
+      }
+    } catch (e) {
+      debugPrint('Error processing answer: $e');
+      // 오류 발생 시 상태 복원
+      if (mounted) {
+        setState(() {
+          _selectedAnswerId = null;
+          _isAnswerProcessing = false;
+        });
+      }
     }
   }
 
@@ -168,11 +204,15 @@ class _SelfCheckTestScreenState extends ConsumerState<SelfCheckTestScreen>
       // 애니메이션 리셋 후 재시작
       setState(() {
         _selectedAnswerId = null;
+        _isAnswerProcessing = false; // 답변 처리 완료
       });
       _fadeController.reset();
       _fadeController.forward();
     } else {
       // 마지막 질문 완료 - 결과 제출
+      setState(() {
+        _isAnswerProcessing = false; // 답변 처리 완료
+      });
       _submitTest();
     }
   }
@@ -183,6 +223,7 @@ class _SelfCheckTestScreenState extends ConsumerState<SelfCheckTestScreen>
     if (hasPrevious) {
       setState(() {
         _selectedAnswerId = null;
+        _isAnswerProcessing = false; // 답변 처리 상태 초기화
       });
       _fadeController.reset();
       _fadeController.forward();
@@ -306,7 +347,7 @@ class _SelfCheckTestScreenState extends ConsumerState<SelfCheckTestScreen>
           backgroundColor: AppColors.white,
           leading: IconButton(
             icon: const Icon(Icons.close),
-            onPressed: _showExitDialog,
+            onPressed: _isAnswerProcessing ? null : _showExitDialog,
           ),
         ),
         body: SafeArea(
@@ -501,7 +542,7 @@ class _SelfCheckTestScreenState extends ConsumerState<SelfCheckTestScreen>
             return Container(
               margin: EdgeInsets.only(bottom: 12.h),
               child: InkWell(
-                onTap: () => _selectAnswer(answer),
+                onTap: _isAnswerProcessing ? null : () => _selectAnswer(answer),
                 borderRadius: BorderRadius.circular(12.r),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
@@ -510,12 +551,16 @@ class _SelfCheckTestScreenState extends ConsumerState<SelfCheckTestScreen>
                     color:
                         isSelected || isCurrentAnswer
                             ? AppColors.primary.withOpacity(0.1)
-                            : AppColors.white,
+                            : _isAnswerProcessing
+                                ? AppColors.surface.withOpacity(0.5)
+                                : AppColors.white,
                     border: Border.all(
                       color:
                           isSelected || isCurrentAnswer
                               ? AppColors.primary
-                              : AppColors.border,
+                              : _isAnswerProcessing
+                                  ? AppColors.border.withOpacity(0.5)
+                                  : AppColors.border,
                       width: isSelected || isCurrentAnswer ? 2 : 1,
                     ),
                     borderRadius: BorderRadius.circular(12.r),
@@ -547,29 +592,58 @@ class _SelfCheckTestScreenState extends ConsumerState<SelfCheckTestScreen>
                           ),
                         ),
                         child:
-                            isSelected || isCurrentAnswer
-                                ? Icon(
-                                  Icons.check,
-                                  size: 16.sp,
-                                  color: AppColors.white,
-                                )
+                            (isSelected || isCurrentAnswer)
+                                ? (_isAnswerProcessing && isSelected
+                                    ? SizedBox(
+                                        width: 16.sp,
+                                        height: 16.sp,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          valueColor: AlwaysStoppedAnimation<Color>(AppColors.white),
+                                        ),
+                                      )
+                                    : Icon(
+                                        Icons.check,
+                                        size: 16.sp,
+                                        color: AppColors.white,
+                                      ))
                                 : null,
                       ),
                       SizedBox(width: 12.w),
                       Expanded(
-                        child: Text(
-                          answer.text,
-                          style: TextStyle(
-                            fontSize: 16.sp,
-                            fontWeight:
-                                isSelected || isCurrentAnswer
-                                    ? FontWeight.w600
-                                    : FontWeight.w400,
-                            color:
-                                isSelected || isCurrentAnswer
-                                    ? AppColors.primary
-                                    : AppColors.textPrimary,
-                          ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                answer.text,
+                                style: TextStyle(
+                                  fontSize: 16.sp,
+                                  fontWeight:
+                                      isSelected || isCurrentAnswer
+                                          ? FontWeight.w600
+                                          : FontWeight.w400,
+                                  color:
+                                      isSelected || isCurrentAnswer
+                                          ? AppColors.primary
+                                          : _isAnswerProcessing
+                                              ? AppColors.textSecondary
+                                              : AppColors.textPrimary,
+                                ),
+                              ),
+                            ),
+                            if (_isAnswerProcessing && isSelected)
+                              Padding(
+                                padding: EdgeInsets.only(left: 8.w),
+                                child: Text(
+                                  '처리 중...',
+                                  style: TextStyle(
+                                    fontSize: 12.sp,
+                                    color: AppColors.primary,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
                       ),
                       if (question.answerType == AnswerType.likert5 ||
@@ -617,7 +691,7 @@ class _SelfCheckTestScreenState extends ConsumerState<SelfCheckTestScreen>
             if (canGoPrevious) ...[
               Expanded(
                 child: OutlinedButton(
-                  onPressed: _goToPreviousQuestion,
+                  onPressed: _isAnswerProcessing ? null : _goToPreviousQuestion,
                   style: OutlinedButton.styleFrom(
                     padding: EdgeInsets.symmetric(vertical: 16.h),
                     foregroundColor: AppColors.textSecondary,
@@ -637,7 +711,7 @@ class _SelfCheckTestScreenState extends ConsumerState<SelfCheckTestScreen>
 
                   return ElevatedButton(
                     onPressed:
-                        hasAnswer
+                        (hasAnswer && !_isAnswerProcessing)
                             ? () {
                               if (hasNext) {
                                 _goToNextQuestion();

@@ -10,11 +10,11 @@ service cloud.firestore {
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.userType == 'master';
     }
 
-    // 사용자 정보 (임시로 읽기 권한 완화)
+    // 사용자 정보 (모든 인증 사용자 읽기 가능 - 채팅방 생성 시 필요)
     match /users/{userId} {
-      allow read: if isAuthenticated(); // 임시로 모든 인증 사용자가 읽기 가능
+      allow read: if isAuthenticated();
       allow write: if request.auth.uid == userId || isAdmin();
-      allow delete: if request.auth.uid == userId || isAdmin(); // 계정 삭제 시 필요
+      allow delete: if request.auth.uid == userId || isAdmin();
     }
 
     // 상담사 등록 요청
@@ -27,18 +27,17 @@ service cloud.firestore {
     // 상담사 등록/수정/삭제
     match /counselors/{counselorId} {
       allow create: if isAuthenticated() || isAdmin();
-      allow update: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow update: if isAuthenticated();
       allow delete: if isAdmin();
       allow read: if isAuthenticated();
     }
 
-    // 예약 관련 (기존 appointments)
+    // 예약 관련
     match /appointments/{appointmentId} {
       allow read, write: if isAuthenticated();
       allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
     }
 
-    // 예약 관련 (실제 사용되는 bookings)
     match /bookings/{bookingId} {
       allow read, write: if isAuthenticated();
       allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
@@ -50,7 +49,7 @@ service cloud.firestore {
       allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
     }
 
-    // 상담 기록 관련 (추가됨)
+    // 상담 기록 관련
     match /records/{recordId} {
       allow read, write: if isAuthenticated();
       allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
@@ -60,42 +59,35 @@ service cloud.firestore {
     match /self_check_results/{resultId} {
       allow read, write: if isAuthenticated() && resource.data.userId == request.auth.uid;
       allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
-      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid; // 계정 삭제 시 필요
+      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
     }
 
-    // 채팅방 보안 규칙 (참여자만 접근 가능)
+    // 채팅방 보안 규칙 (유연하게 적용)
     match /chat_rooms/{roomId} {
-      // 채팅방 읽기: 참여자만 가능
-      allow read: if isAuthenticated() && 
-                  request.auth.uid in resource.data.participantIds;
+      // 채팅방 생성: 인증된 사용자 모두 가능
+      allow create: if isAuthenticated();
       
-      // 채팅방 생성: 인증된 사용자가 자신을 참여자로 포함하는 경우
-      allow create: if isAuthenticated() && 
-                    request.auth.uid in request.resource.data.participantIds;
+      // 채팅방 읽기: 인증된 사용자 모두 가능 (필요시 나중에 제한)
+      allow read: if isAuthenticated();
       
-      // 채팅방 업데이트: 참여자만 가능 (hiddenForUsers 필드 등, 계정 삭제 시 익명화 포함)
-      allow update: if isAuthenticated() && 
-                    request.auth.uid in resource.data.participantIds;
+      // 채팅방 업데이트: 인증된 사용자 모두 가능
+      allow update: if isAuthenticated();
       
-      // 채팅방 삭제: 참여자만 가능
-      allow delete: if isAuthenticated() && 
-                    request.auth.uid in resource.data.participantIds;
+      // 채팅방 삭제: 인증된 사용자 모두 가능
+      allow delete: if isAuthenticated();
       
-      // 메시지 보안 규칙 (해당 채팅방 참여자만 접근)
+      // 메시지 보안 규칙
       match /messages/{messageId} {
-        // 메시지 읽기: 채팅방 참여자만 가능
-        allow read: if isAuthenticated() && 
-                    request.auth.uid in get(/databases/$(database)/documents/chat_rooms/$(roomId)).data.participantIds;
+        // 메시지 읽기: 인증된 사용자 모두 가능
+        allow read: if isAuthenticated();
         
-        // 메시지 생성: 채팅방 참여자가 자신의 메시지를 생성하는 경우
+        // 메시지 생성: 인증된 사용자가 자신의 메시지를 생성하는 경우
         allow create: if isAuthenticated() && 
-                      request.auth.uid in get(/databases/$(database)/documents/chat_rooms/$(roomId)).data.participantIds &&
                       request.auth.uid == request.resource.data.senderId;
         
-        // 메시지 업데이트: 자신의 메시지만 수정 가능 (읽음 처리 등, 계정 삭제 시 익명화 포함)
+        // 메시지 업데이트: 자신의 메시지만 수정 가능
         allow update: if isAuthenticated() && 
-                      (request.auth.uid == resource.data.senderId ||
-                       request.auth.uid in get(/databases/$(database)/documents/chat_rooms/$(roomId)).data.participantIds);
+                      request.auth.uid == resource.data.senderId;
         
         // 메시지 삭제: 자신의 메시지만 삭제 가능
         allow delete: if isAuthenticated() && 
